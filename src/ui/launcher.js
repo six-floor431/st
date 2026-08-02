@@ -121,10 +121,9 @@
       btnEl.onclick = openPanel;
       container.appendChild(btnEl);
     } else {
-      // 重试几次，仍找不到就降级为悬浮按钮，保证一定可见可点
-      injectButton._tries = (injectButton._tries || 0) + 1;
-      if (injectButton._tries > 12) { ensureFloatingButton(); return; }
-      setTimeout(injectButton, 800);
+      // 手机端/非常规皮肤下输入框容器选择器可能不匹配：直接降级为悬浮按钮，
+      // 不再无限重试，保证一定可见可点（避免按钮挂进隐藏容器导致"点了没反应"）。
+      ensureFloatingButton();
     }
   }
 

@@ -40,8 +40,12 @@
   align-items: center;
   justify-content: center;
   z-index: 99999;
+  /* 用 100% 而非 100dvh，确保遮罩始终等于真实视口，不被手机地址栏高度差裁切 */
+  width: 100%;
+  height: 100%;
   padding: 12px;                 /* 保留边距，避免手机端遮挡底层 */
   box-sizing: border-box;
+  overflow: auto;                /* 极端小屏可滚动，避免面板被完全裁掉 */
 }
 .wm-overlay.open { display: flex; }
 
@@ -65,7 +69,9 @@
 /* 最大化（手机全屏 / 手动全屏） */
 .wm-panel.wm-maximized {
   width: calc(100vw - 12px);
-  height: calc(100dvh - 12px);
+  /* 用 100% 而非 100dvh：避免手机地址栏收起时 dvh 跳动把面板顶出视口 */
+  height: calc(100% - 12px);
+  max-height: calc(100% - 12px);
 }
 
 /* 头部：触控友好 min-height 44px */
@@ -187,16 +193,16 @@
 /* 手机横屏 / 小平板 */
 @media (max-width: 768px) {
   .wm-overlay { padding: 12px; }
-  .wm-panel { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
-  .wm-panel.wm-maximized { width: calc(100vw - 12px); height: calc(100dvh - 12px); }
+  .wm-panel { width: calc(100vw - 24px); height: calc(100% - 24px); max-height: calc(100% - 24px); }
+  .wm-panel.wm-maximized { width: calc(100vw - 12px); height: calc(100% - 12px); max-height: calc(100% - 12px); }
   .wm-title { font-size: 14px; }
 }
 
 /* 手机竖屏 */
 @media (max-width: 480px) {
   .wm-overlay { padding: 8px; }
-  .wm-panel { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 12px; }
-  .wm-panel.wm-maximized { width: calc(100vw - 8px); height: calc(100dvh - 8px); }
+  .wm-panel { width: calc(100vw - 16px); height: calc(100% - 16px); max-height: calc(100% - 16px); border-radius: 12px; }
+  .wm-panel.wm-maximized { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
   .wm-header { padding: 6px 10px; }
   .wm-tabs button { padding: 6px 10px; }
   .wm-body { padding: 10px; }
@@ -204,7 +210,7 @@
 
 /* 极窄屏（小手机） */
 @media (max-width: 360px) {
-  .wm-panel { width: calc(100vw - 8px); height: calc(100dvh - 8px); }
+  .wm-panel { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
   .wm-title { font-size: 13px; }
   #warmmemo-btn { padding: 4px 8px; font-size: 13px; }
 }

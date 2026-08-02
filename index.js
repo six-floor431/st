@@ -1437,12 +1437,7 @@ ${it.desc || ""}` }));
         btnEl.onclick = openPanel;
         container.appendChild(btnEl);
       } else {
-        injectButton._tries = (injectButton._tries || 0) + 1;
-        if (injectButton._tries > 12) {
-          ensureFloatingButton();
-          return;
-        }
-        setTimeout(injectButton, 800);
+        ensureFloatingButton();
       }
     }
     function renderTab(tab) {
