@@ -1,0 +1,28 @@
+{
+  "name": "ContextPro",
+  "description": "总结楼层(隐藏不进上下文) + 独立向量系统 + 云端重排 + 关系力图。适配电脑与手机。",
+  "version": "1.0.0",
+  "author": "you",
+  "target": "ui",
+  "css": "style.css",
+  "settings": [
+    {
+      "key": "autoSummary",
+      "type": "checkbox",
+      "label": "自动总结旧楼层",
+      "default": false
+    },
+    {
+      "key": "summaryThreshold",
+      "type": "number",
+      "label": "自动总结触发楼层数",
+      "default": 30
+    },
+    {
+      "key": "sidePanelDefault",
+      "type": "checkbox",
+      "label": "默认展开侧边栏",
+      "default": true
+    }
+  ]
+}

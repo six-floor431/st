@@ -1,0 +1,18 @@
+{
+  "name": "ContextPro",
+  "description": "独立自写向量系统 + 总结楼层 + 重排序 + 关系力图。本地反代云端API，向量本地化，重排走云端。",
+  "version": "1.0.0",
+  "author": "you",
+  "target": "server",
+  "endpoints": [
+    "/api/plugins/context-pro/config",
+    "/api/plugins/context-pro/config/save",
+    "/api/plugins/context-pro/embed",
+    "/api/plugins/context-pro/vector/search",
+    "/api/plugins/context-pro/vector/add",
+    "/api/plugins/context-pro/summary",
+    "/api/plugins/context-pro/rerank",
+    "/api/plugins/context-pro/relations",
+    "/api/plugins/context-pro/proxy/*"
+  ]
+}
