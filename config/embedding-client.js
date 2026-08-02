@@ -27,11 +27,12 @@
   }
 
   async function embed(texts, settings) {
-    const s = settings || WM._embedSettings || {};
-    const provider = s.provider || 'siliconflow';
-    const base = normalizeBaseUrl(s.baseUrl) || PROVIDERS[provider].defBase;
-    const model = s.model || PROVIDERS[provider].defModel;
-    const key = s.apiKey || '';
+    const s = settings || {};
+    // 兼容新 settings 字段
+    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || 'https://api.siliconflow.cn/v1';
+    const model = s.embeddingModel || s.model || 'BAAI/bge-m3';
+    const key = s.embeddingApiKey || s.apiKey || '';
+    // 若 URL 含 openai 字样则按 OpenAI 兼容处理，否则按硅基流动（OpenAI 兼容）协议
     const input = Array.isArray(texts) ? texts : [texts];
 
     if (provider === 'gemini') {

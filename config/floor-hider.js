@@ -27,5 +27,11 @@
     return 'hidden';
   }
 
-  WM.FloorHider = { applySummaryPointerHiding };
+  // 隐藏直到指定楼层（含）：总结后调用，hideUntil(lastIndex)
+  async function hideUntil(lastIndex, settings) {
+    if (lastIndex == null || lastIndex < 0) return 'invalid';
+    return applySummaryPointerHiding(lastIndex + 1, settings);
+  }
+
+  WM.FloorHider = { applySummaryPointerHiding, hideUntil };
 })();

@@ -1,58 +1,32 @@
-// WarmMemo 温度记忆 —— 引导加载器（仅负责按顺序加载模块，逻辑在各模块内）
-(function () {
-  'use strict';
-  if (window.WarmMemo && window.WarmMemo.loaded) {
-    console.warn('[WarmMemo] 已加载，跳过重复初始化');
-    return;
-  }
-  const WM = (window.WarmMemo = window.WarmMemo || {});
-  WM.loaded = false;
-  WM.version = '1.0.0';
-  WM.baseUrl = new URL('./', import.meta.url).href;
-
-  // 依赖顺序：底层工具 -> 业务服务 -> UI
-  const modules = [
-    'config/storage.js',
+console.log('[WarmMemo] 加载中…');
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('加载失败 ' + src));
+    document.head.appendChild(s);
+  });
+}
+(async () => {
+  const base = document.currentScript.src.replace(/index\.js$/, '');
+  const files = [
     'config/settings.js',
+    'config/storage.js',        // 兼容旧引用（向量缓存仍用）
+    'config/memory-store.js',   // 核心：chat_metadata 结构化记忆（仿万楼不忘记）
+    'config/llm-client.js',
+    'config/vector-store.js',
     'config/embedding-client.js',
     'config/rerank-client.js',
-    'config/vector-store.js',
+    'config/worldbook.js',      // 角色卡/用户卡/世界书/世界观
+    'config/plot.js',           // 剧情线
+    'config/summary.js',        // 真实 LLM 总结（分派子任务）
+    'config/relations.js',      // 动态力导向关系图
+    'config/injection.js',      // 真实注入上下文
     'config/floor-hider.js',
-    'config/summary.js',
-    'config/injection.js',
-    'config/relations.js',
-    'ui/sidebar.js',
+    'ui/launcher.js',           // 输入框旁按钮 + 面板
   ];
-
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = WM.baseUrl + src + '?v=' + WM.version;
-      s.async = false;
-      s.onload = () => resolve();
-      s.onerror = (e) => reject(new Error('加载失败: ' + src + ' ' + e));
-      document.head.appendChild(s);
-    });
+  for (const f of files) {
+    try { await loadScript(base + f); } catch (e) { console.error(e); }
   }
-
-  async function boot() {
-    for (const m of modules) {
-      try {
-        await loadScript(m);
-      } catch (err) {
-        console.error('[WarmMemo] 模块加载错误', err);
-      }
-    }
-    WM.loaded = true;
-    if (WM.Sidebar && typeof WM.Sidebar.mount === 'function') {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => WM.Sidebar.mount());
-      } else {
-        WM.Sidebar.mount();
-      }
-    }
-    console.log('[WarmMemo] 初始化完成 v' + WM.version);
-  }
-
-  boot();
+  if (window.WarmMemo && window.WarmMemo.Launcher) window.WarmMemo.Launcher.init();
+  console.log('[WarmMemo] 就绪');
 })();

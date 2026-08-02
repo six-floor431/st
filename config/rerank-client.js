@@ -9,11 +9,11 @@
   }
 
   async function rerank(query, documents, rawSettings, options) {
-    const s = rawSettings || WM._rerankSettings || {};
-    if (!s.enabled) return null;
-    const url = normalize(s.baseUrl) || 'https://api.siliconflow.cn/v1/rerank';
-    const model = s.model || 'BAAI/bge-reranker-v2-m3';
-    const key = s.apiKey || '';
+    const s = rawSettings || {};
+    if (!s.rerankEnabled) return null; // 与 settings.rerankEnabled 对齐
+    const url = normalize(s.rerankBaseUrl) || 'https://api.siliconflow.cn/v1/rerank';
+    const model = s.rerankModel || 'BAAI/bge-reranker-v2-m3';
+    const key = s.rerankApiKey || '';
     const docs = (documents || []).filter((d) => d && String(d).trim());
     if (!docs.length) return [];
 
