@@ -1,0 +1,13 @@
+{
+  "manifest_version": 1,
+  "id": "warm_memo",
+  "display_name": "温度记忆 WarmMemo",
+  "version": "1.1.0",
+  "description": "让角色有记忆、有温度的记忆扩展：记忆存对话元数据（万楼不丢、不占上下文）、真实LLM总结并调用角色卡/用户卡/世界书推断世界观、动态力导向关系图、剧情时间线、物品追踪、可自定义自动总结楼层。真实注入上下文，按钮在输入框旁，水墨可爱风，适配手机。",
+  "author": "ContextPro",
+  "homepage": "https://github.com/six-floor431/st",
+  "auto_update": true,
+  "requires": [],
+  "js": "index.js",
+  "css": "styles.css"
+}
