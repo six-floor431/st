@@ -1948,7 +1948,7 @@ ${it.desc || ""}` }));
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = { init, renderTab, renderCfg, renderWorld };
+    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto };
   })();
 
   // src/index.js
