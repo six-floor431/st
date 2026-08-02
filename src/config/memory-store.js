@@ -126,7 +126,7 @@
       if (!it.name) continue;
       await WM.Worldbook.writeEntry({
         kind: 'item',
-        sourceId: 'item::' + it.id,
+        sourceId: 'item::' + it.name,
         title: '物品·' + it.name,
         content: `物品：${it.name}${it.owner ? '（持有者：' + it.owner + '）' : ''}\n${it.desc || ''}`.trim(),
         keys: [it.name],
@@ -225,10 +225,11 @@
     FIELD, emptyStore, load, save,
     addMemory, getMemories,
     addSummary, removeSummary, getSummaries,
-    dispatchLorebook,
+    addItem, removeItem, getItems, updateItem,
     addPlot, updatePlot, removePlot, getPlots,
     setWorld, getWorld,
     setRelations, getRelations,
+    dispatchLorebook,
     setSummaryPointer, getSummaryPointer,
     exportJSON, importJSON,
   };

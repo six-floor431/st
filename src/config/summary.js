@@ -63,7 +63,7 @@
     // 客观读取角色卡/用户卡/世界书（用户需求 3）
     const char = (WM.Worldbook.getCharacterCard && WM.Worldbook.getCharacterCard()) || {};
     const user = (WM.Worldbook.getUserCard && WM.Worldbook.getUserCard()) || {};
-    const lore = (WM.Worldbook.getLorebookEntries && WM.Worldbook.getLorebookEntries()) || [];
+    const lore = (WM.Worldbook.getLorebookEntries && await WM.Worldbook.getLorebookEntries()) || [];
     const loreTxt = lore.length ? lore.map((l) => `· ${l.key}: ${l.content.slice(0, 160)}`).join('\n') : '（无）';
 
     const sys = `你是有温度的记忆整理者。请基于【角色设定】【用户设定】【世界书】【已有记忆】与【新对话】，提炼「有温度记忆」。

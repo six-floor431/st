@@ -101,7 +101,8 @@
     };
     for (const p of relations.pairs) {
       if (!p.from || !p.to) continue;
-      pushRel(p.from, p.to, p.label);
+      const relText = p.label || p.relation || p.rel || '关联';
+      pushRel(p.from, p.to, relText);
       pushRel(p.to, p.from, p.label); // 双向：两人各自条目都记录这段关系
     }
     return Object.keys(map).map((person) => {

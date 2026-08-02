@@ -241,7 +241,7 @@
         if (!it.name) continue;
         await WM.Worldbook.writeEntry({
           kind: "item",
-          sourceId: "item::" + it.id,
+          sourceId: "item::" + it.name,
           title: "\u7269\u54C1\xB7" + it.name,
           content: `\u7269\u54C1\uFF1A${it.name}${it.owner ? "\uFF08\u6301\u6709\u8005\uFF1A" + it.owner + "\uFF09" : ""}
 ${it.desc || ""}`.trim(),
@@ -354,7 +354,10 @@ ${it.desc || ""}`.trim(),
       addSummary,
       removeSummary,
       getSummaries,
-      dispatchLorebook,
+      addItem,
+      removeItem,
+      getItems,
+      updateItem,
       addPlot,
       updatePlot,
       removePlot,
@@ -363,6 +366,7 @@ ${it.desc || ""}`.trim(),
       getWorld,
       setRelations,
       getRelations,
+      dispatchLorebook,
       setSummaryPointer,
       getSummaryPointer,
       exportJSON,
@@ -702,7 +706,8 @@ ${it.desc || ""}`.trim(),
       return window.TavernHelper;
     }
     function available() {
-      return typeof helper() !== "undefined";
+      const h = helper();
+      return !!h && typeof h.getWorldbookNames === "function" && typeof h.getWorldbook === "function";
     }
     function targetName() {
       const s = WM.Settings && WM.Settings.load ? WM.Settings.load() : {};
@@ -716,10 +721,12 @@ ${it.desc || ""}`.trim(),
         if (!names.includes(name)) {
           await helper().createWorldbook(name, []);
         }
-        if (helper().rebindCharWorldbooks) {
+        if (typeof helper().rebindCharWorldbooks === "function") {
           const cur = await helper().getCharWorldbookNames("current");
-          if (!cur.includes(name)) {
-            await helper().rebindCharWorldbooks([...cur, name], "current");
+          const additional = Array.isArray(cur.additional) ? cur.additional.slice() : [];
+          if (!additional.includes(name)) {
+            additional.push(name);
+            await helper().rebindCharWorldbooks("current", { primary: cur.primary || null, additional });
           }
         }
         return true;
@@ -735,11 +742,38 @@ ${it.desc || ""}`.trim(),
       if (!available()) return [];
       const name = targetName();
       try {
-        const entries = await helper().getWorldbookEntries(name);
+        const entries = await helper().getWorldbook(name);
         return (entries || []).map((e, i) => ({ uid: String(e.uid != null ? e.uid : i), entry: e }));
       } catch (e) {
         return [];
       }
+    }
+    function buildEntry(opts) {
+      const isSelective = opts.strategy === "selective";
+      return {
+        name: opts.title || "",
+        enabled: true,
+        content: opts.content,
+        // 激活策略（真实结构：type / keys / keys_secondary / scan_depth）
+        strategy: {
+          type: isSelective ? "selective" : "constant",
+          keys: opts.keys && opts.keys.length ? opts.keys : [],
+          keys_secondary: { logic: "and_any", keys: [] },
+          scan_depth: "same_as_global"
+        },
+        position: {
+          type: "after_author_note",
+          // 真实枚举：作者注释之后
+          role: "system",
+          depth: 1,
+          order: 100
+        },
+        probability: 100,
+        // 递归：禁止条目互相递归激活，避免爆量
+        recursion: { prevent_incoming: true, prevent_outgoing: true, delay_until: null },
+        effect: { sticky: null, cooldown: null, delay: null },
+        extra: extraOf(opts.sourceId)
+      };
     }
     async function writeEntry(opts) {
       if (!opts || !opts.content || !opts.content.trim()) return null;
@@ -747,39 +781,20 @@ ${it.desc || ""}`.trim(),
       if (!ok) return null;
       const name = targetName();
       const sourceId = opts.sourceId || [opts.kind, opts.title].join("::");
-      const entry = {
-        content: opts.content,
-        comment: opts.title || opts.kind,
-        name: opts.title || "",
-        enabled: true,
-        position: opts.position || "before_prompt",
-        // 默认在提示词之前
-        // 触发策略
-        strategy: {
-          type: opts.strategy === "selective" ? "selective" : "constant",
-          depth: 1,
-          useExcept: false,
-          tokens: 512,
-          keys: opts.keys && opts.keys.length ? opts.keys : [],
-          order: 100
-        },
-        excludeRecursion: false,
-        preventRecursion: false,
-        delayUntilRecursion: false,
-        probability: 100,
-        useProbability: false,
-        extra: extraOf(sourceId)
-      };
+      const entry = buildEntry(Object.assign({ sourceId }, opts));
       try {
         const existing = await listEntries();
         const hit = existing.find((x) => x.entry.extra && x.entry.extra.warmMemo && x.entry.extra.sourceId === sourceId);
         if (hit) {
-          const merged = Object.assign({}, x_merge(hit.entry), entry);
-          await helper().updateWorldbookEntry(name, hit.uid, merged);
+          const uid = Number(hit.uid);
+          await helper().updateWorldbookWith(name, (wb) => {
+            return wb.map((e) => String(e.uid) === hit.uid ? Object.assign({}, e, entry, { uid: e.uid }) : e);
+          });
           return hit.uid;
         } else {
-          const created = await helper().createWorldbookEntries(name, [entry]);
-          if (Array.isArray(created) && created.length) return String(created[0].uid != null ? created[0].uid : created[0].id);
+          const res = await helper().createWorldbookEntries(name, [entry]);
+          const created = res && res.new_entries ? res.new_entries : [];
+          if (created.length) return String(created[0].uid != null ? created[0].uid : created[0].id);
           return "new";
         }
       } catch (e) {
@@ -787,16 +802,11 @@ ${it.desc || ""}`.trim(),
         return null;
       }
     }
-    function x_merge(base) {
-      return Object.assign({}, base);
-    }
     async function removeEntry(sourceId) {
       if (!available() || !sourceId) return;
       const name = targetName();
       try {
-        const existing = await listEntries();
-        const hit = existing.find((x) => x.entry.extra && x.entry.extra.warmMemo && x.entry.extra.sourceId === sourceId);
-        if (hit) await helper().deleteWorldbookEntry(name, hit.uid);
+        await helper().deleteWorldbookEntries(name, (e) => !!(e.extra && e.extra.warmMemo && e.extra.sourceId === sourceId));
       } catch (e) {
         console.warn("[WarmMemo] removeEntry \u5931\u8D25:", e);
       }
@@ -805,25 +815,22 @@ ${it.desc || ""}`.trim(),
       if (!available()) return;
       const name = targetName();
       try {
-        const existing = await listEntries();
-        for (const x of existing) {
-          if (x.entry.extra && x.entry.extra.warmMemo) await helper().deleteWorldbookEntry(name, x.uid);
-        }
+        await helper().deleteWorldbookEntries(name, (e) => !!(e.extra && e.extra.warmMemo));
       } catch (e) {
         console.warn("[WarmMemo] clearAll \u5931\u8D25:", e);
       }
     }
     async function writeSummary(dateLabel, content) {
-      return writeEntry({ kind: "summary", title: "\u603B\u7ED3\xB7" + dateLabel, content, strategy: "constant" });
+      return writeEntry({ kind: "summary", sourceId: "summary::" + dateLabel, title: "\u603B\u7ED3\xB7" + dateLabel, content, strategy: "constant" });
     }
     async function writeItem(itemName, content) {
-      return writeEntry({ kind: "item", title: "\u7269\u54C1\xB7" + itemName, content, keys: [itemName], strategy: "selective" });
+      return writeEntry({ kind: "item", sourceId: "item::" + itemName, title: "\u7269\u54C1\xB7" + itemName, content, keys: [itemName], strategy: "selective" });
     }
     async function writeRelation(person, content, keys) {
-      return writeEntry({ kind: "relation", title: "\u5173\u7CFB\xB7" + person, content, keys: keys && keys.length ? keys : [person], strategy: "constant" });
+      return writeEntry({ kind: "relation", sourceId: "relation::" + person, title: "\u5173\u7CFB\xB7" + person, content, keys: keys && keys.length ? keys : [person], strategy: "constant" });
     }
     async function writeWorld(content) {
-      return writeEntry({ kind: "world", title: "\u4E16\u754C\u89C2\u8BBE\u5B9A", content, strategy: "constant" });
+      return writeEntry({ kind: "world", sourceId: "world::main", title: "\u4E16\u754C\u89C2\u8BBE\u5B9A", content, strategy: "constant" });
     }
     function getCtx() {
       return window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
@@ -974,7 +981,7 @@ ${recent}
       const prevMem = WM.MemoryStore.getMemories().slice(-20).map((m) => m.text).join("\n");
       const char = WM.Worldbook.getCharacterCard && WM.Worldbook.getCharacterCard() || {};
       const user = WM.Worldbook.getUserCard && WM.Worldbook.getUserCard() || {};
-      const lore = WM.Worldbook.getLorebookEntries && WM.Worldbook.getLorebookEntries() || [];
+      const lore = WM.Worldbook.getLorebookEntries && await WM.Worldbook.getLorebookEntries() || [];
       const loreTxt = lore.length ? lore.map((l) => `\xB7 ${l.key}: ${l.content.slice(0, 160)}`).join("\n") : "\uFF08\u65E0\uFF09";
       const sys = `\u4F60\u662F\u6709\u6E29\u5EA6\u7684\u8BB0\u5FC6\u6574\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u7528\u6237\u8BBE\u5B9A\u3011\u3010\u4E16\u754C\u4E66\u3011\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011\u4E0E\u3010\u65B0\u5BF9\u8BDD\u3011\uFF0C\u63D0\u70BC\u300C\u6709\u6E29\u5EA6\u8BB0\u5FC6\u300D\u3002
 \u8981\u6C42\uFF1A
@@ -1169,7 +1176,8 @@ ${text}
       };
       for (const p of relations.pairs) {
         if (!p.from || !p.to) continue;
-        pushRel(p.from, p.to, p.label);
+        const relText = p.label || p.relation || p.rel || "\u5173\u8054";
+        pushRel(p.from, p.to, relText);
         pushRel(p.to, p.from, p.label);
       }
       return Object.keys(map).map((person) => {
@@ -1233,11 +1241,11 @@ ${it.desc || ""}` }));
         }
         return parts2.filter(Boolean).join("\n\n");
       }
-      if (wbOk) {
+      if (wbOk && settings.worldToLorebook !== false) {
         return memBlock;
       }
       const parts = [memBlock];
-      if (settings.injectMemories !== false && settings.injectWorld !== false && candidates.length) {
+      if (settings.injectWorld !== false && candidates.length) {
         parts.push("\u3010\u6E29\u8BB0\u5185\u5BB9\uFF08\u4E16\u754C\u4E66\u4E0D\u53EF\u7528\uFF0C\u5DF2\u515C\u5E95\u6CE8\u5165\uFF09\u3011\n" + candidates.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
       }
       return parts.filter(Boolean).join("\n\n");
@@ -1660,10 +1668,15 @@ ${it.desc || ""}` }));
         renderItem(body);
       });
     }
-    function renderWorld(body) {
+    async function renderWorld(body) {
       const s = WM.Settings.load();
       const world = WM.MemoryStore.getWorld();
-      const loreCount = WM.Worldbook.listEntries ? WM.Worldbook.listEntries().length : 0;
+      let loreCount = 0;
+      try {
+        loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0;
+      } catch (e) {
+        loreCount = 0;
+      }
       body.innerHTML = `<div class="wm-card"><div class="wm-h">\u4E16\u754C\u8BBE\u5B9A</div>
       <div class="wm-hint">\u57FA\u4E8E\u89D2\u8272\u5361/\u7528\u6237\u5361/\u4E16\u754C\u4E66(${loreCount}\u6761)/\u5DF2\u6709\u8BB0\u5FC6\u63A8\u65AD\uFF0C\u5199\u5165\u5E76\u6CE8\u5165\u4E0A\u4E0B\u6587</div>
       <textarea id="world-ta" class="wm-ta" placeholder="\u4E16\u754C\u89C2\u8BBE\u5B9A\u2026">${escapeHtml(world)}</textarea>

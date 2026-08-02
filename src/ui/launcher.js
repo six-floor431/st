@@ -350,10 +350,11 @@
     body.querySelectorAll('.wm-del').forEach((d) => d.onclick = async () => { await WM.MemoryStore.removeItem(d.dataset.id); renderItem(body); });
   }
 
-  function renderWorld(body) {
+  async function renderWorld(body) {
     const s = WM.Settings.load();
     const world = WM.MemoryStore.getWorld();
-    const loreCount = WM.Worldbook.listEntries ? WM.Worldbook.listEntries().length : 0;
+    let loreCount = 0;
+    try { loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0; } catch (e) { loreCount = 0; }
     body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定</div>
       <div class="wm-hint">基于角色卡/用户卡/世界书(${loreCount}条)/已有记忆推断，写入并注入上下文</div>
       <textarea id="world-ta" class="wm-ta" placeholder="世界观设定…">${escapeHtml(world)}</textarea>

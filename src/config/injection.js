@@ -66,14 +66,17 @@
       return parts.filter(Boolean).join('\n\n');
     }
 
-    // 情况 B：世界书可用且未接管 → 让世界书条目由酒馆原生激活注入，本模块只注入楼层记忆兜底
-    if (wbOk) {
-      return memBlock; // 世界书条目（constant/selective）由酒馆自己注入
+    // 情况 B：世界书可用「且」用户开启了拆分写入世界书 → 条目由酒馆原生按 constant/keys 激活注入，
+    // 本模块只兜底注入楼层记忆块。注意：wbOk 仅代表 API 可用，不代表有条目，必须看 worldToLorebook 开关。
+    if (wbOk && settings.worldToLorebook !== false) {
+      return memBlock; // 世界书条目由酒馆自己注入
     }
 
-    // 情况 C：世界书不可用（纯兜底）→ 拼接全部候选到 prompt，保证内容不丢
+    // 情况 C：世界书不可用（纯兜底）→ 拼接全部候选到 prompt，保证内容不丢。
+    // 注意：候选拼接只受 injectWorld 控制（结构化内容含总结/物品/关系/世界观），
+    // 与 injectMemories 无关（memBlock 已单独处理），避免某个开关关掉就整段丢失。
     const parts = [memBlock];
-    if (settings.injectMemories !== false && settings.injectWorld !== false && candidates.length) {
+    if (settings.injectWorld !== false && candidates.length) {
       parts.push('【温记内容（世界书不可用，已兜底注入）】\n' + candidates.map((c) => '· [' + c.type + '] ' + c.text).join('\n'));
     }
     return parts.filter(Boolean).join('\n\n');
