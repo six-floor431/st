@@ -108,10 +108,21 @@
     renderTab(currentTab);
   }
 
+  // 元素是否实际可见（在视口内、非隐藏、有尺寸）。用于手机端判断挂入的容器是否真的能显示按钮。
+  function isVisible(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    const r = el.getBoundingClientRect();
+    // 有尺寸且至少有一边在视口内
+    if (r.width < 4 && r.height < 4) return false;
+    return r.bottom > 0 && r.top < (window.innerHeight || 9999);
+  }
+
   function injectButton() {
     if (document.getElementById('warmmemo-btn')) return;
     const container = findInputContainer();
-    if (container) {
+    if (container && isVisible(container)) {
       btnEl = document.createElement('button');
       btnEl.id = 'warmmemo-btn';
       btnEl.className = 'wm-input-btn menu_button';
@@ -120,9 +131,15 @@
       btnEl.textContent = '🌿 记忆';
       btnEl.onclick = openPanel;
       container.appendChild(btnEl);
+      // 挂上后再校验一次：若按钮本身仍不可见（容器溢出/负边距遮挡），降级为悬浮按钮
+      if (!isVisible(btnEl)) {
+        btnEl.remove();
+        btnEl = null;
+        ensureFloatingButton();
+      }
     } else {
-      // 手机端/非常规皮肤下输入框容器选择器可能不匹配：直接降级为悬浮按钮，
-      // 不再无限重试，保证一定可见可点（避免按钮挂进隐藏容器导致"点了没反应"）。
+      // 手机端/非常规皮肤下输入框容器选择器可能不匹配或不可见：直接降级为悬浮按钮，
+      // 保证一定可见可点（避免按钮挂进隐藏容器导致"点了没反应/看不见面板"）。
       ensureFloatingButton();
     }
   }
@@ -440,9 +457,43 @@
     };
   }
 
+  // 各功能的独立 LLM 配置（不挤在一起）
+  const LLM_FUNCS = [
+    { key: 'summary', name: '总结记忆' },
+    { key: 'relations', name: '关系图' },
+    { key: 'plot', name: '剧情线' },
+    { key: 'world', name: '世界观' },
+    { key: 'items', name: '物品追踪' },
+  ];
+
+  function renderLlmProfiles(s) {
+    return LLM_FUNCS.map((f) => {
+      const p = (s.llmProfiles && s.llmProfiles[f.key]) || { source: 'local', baseUrl: '', apiKey: '', model: '' };
+      return `
+      <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span class="wm-h" style="margin:0">${f.name}</span>
+          <select class="p-src" title="调用来源">
+            <option value="local" ${p.source === 'local' ? 'selected' : ''}>本地酒馆(shared-api)</option>
+            <option value="custom" ${p.source === 'custom' ? 'selected' : ''}>自定义配置</option>
+          </select>
+        </div>
+        <div class="p-custom" style="${p.source === 'custom' ? '' : 'display:none'};margin-top:6px">
+          <label class="wm-row">Base URL<input class="p-base" value="${escapeHtml(p.baseUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
+          <label class="wm-row">模型名<input class="p-model" value="${escapeHtml(p.model)}" placeholder="如 gpt-4o-mini"/></label>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   function renderCfg(body) {
     const s = WM.Settings.load();
-    body.innerHTML = `<div class="wm-card"><div class="wm-h">设置 · 总结模型（真实 LLM 调用）</div>
+    body.innerHTML = `<div class="wm-card"><div class="wm-h">设置 · 各功能独立 LLM 调用</div>
+      <div class="wm-hint">每个功能可单独选择调用来源：<b>本地酒馆</b>（用酒馆自带 shared-api，无需额外配置）或 <b>自定义配置</b>（独立 BaseURL/Key/模型直连）。各功能互不干扰，不会挤在一起。</div>
+      <div id="llm-profiles">${renderLlmProfiles(s)}</div>
+      <div class="wm-divider"></div>
+      <div class="wm-h">默认自定义配置（用于「自定义」模式的初始值，可逐功能覆盖）</div>
       <label class="wm-row">Base URL<input id="c-base" value="${s.summaryBaseUrl}"/></label>
       <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
       <label class="wm-row">模型名<input id="c-model" value="${s.summaryModel}" placeholder="如 gpt-4o-mini"/></label>
@@ -473,10 +524,27 @@
         <button id="c-save" class="wm-btn primary">保存设置</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">不填模型即回退酒馆自带 shared-api（textgeneration）。本地反代填 127.0.0.1。</div></div>`;
+      <div class="wm-hint">默认选「本地酒馆」即回退酒馆自带 shared-api（textgeneration）。自定义模式本地反代填 127.0.0.1。</div></div>`;
+
+    // 各功能 source 切换时显示/隐藏自定义字段
+    body.querySelectorAll('#llm-profiles .wm-llm-func').forEach((card) => {
+      const src = card.querySelector('.p-src');
+      const custom = card.querySelector('.p-custom');
+      src.onchange = () => { custom.style.display = src.value === 'custom' ? '' : 'none'; };
+    });
 
     // 保存
     body.querySelector('#c-save').onclick = () => {
+      s.llmProfiles = s.llmProfiles || {};
+      body.querySelectorAll('#llm-profiles .wm-llm-func').forEach((card) => {
+        const key = card.dataset.func;
+        s.llmProfiles[key] = {
+          source: card.querySelector('.p-src').value,
+          baseUrl: card.querySelector('.p-base').value.trim(),
+          apiKey: card.querySelector('.p-key').value.trim(),
+          model: card.querySelector('.p-model').value.trim(),
+        };
+      });
       s.summaryBaseUrl = body.querySelector('#c-base').value;
       s.summaryApiKey = body.querySelector('#c-key').value;
       s.summaryModel = body.querySelector('#c-model').value;
@@ -526,9 +594,14 @@
         if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
         else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
       } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
-      // 2) 总结模型（LLM）
-      try { add('总结模型(LLM)', await WM.LLMClient.testConnection(tmp), ''); }
-      catch (e) { add('总结模型(LLM)', { success: false }, String(e.message || e)); }
+      // 2) 各功能独立 LLM（按各自的 profile 分别测试）
+      for (const f of LLM_FUNCS) {
+        const profile = (tmp.llmProfiles && tmp.llmProfiles[f.key]) || null;
+        try {
+          const r = await WM.LLMClient.testConnection({ settings: tmp, profile });
+          add(f.name + '(LLM)', r, '');
+        } catch (e) { add(f.name + '(LLM)', { success: false }, String(e.message || e)); }
+      }
       // 3) Embedding（仅在启用时测）
       try {
         if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)

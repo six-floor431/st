@@ -300,23 +300,45 @@
   .wm-panel { width: min(500px, calc(100vw - 24px)); }
 }
 @media (max-width: 768px) {
-  .wm-overlay { padding: 12px; }
-  .wm-panel { width: calc(100vw - 24px); height: calc(100% - 24px); max-height: calc(100% - 24px); }
-  .wm-panel.wm-maximized { width: calc(100vw - 12px); height: calc(100% - 12px); max-height: calc(100% - 12px); }
+  /* 手机端：遮罩顶部对齐并留安全区，避免被浏览器地址栏/底部导航遮挡 */
+  .wm-overlay {
+    padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+    align-items: flex-start;
+  }
+  .wm-panel,
+  .wm-panel.wm-maximized {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    margin-top: env(safe-area-inset-top);
+  }
   .wm-title { font-size: 15px; }
 }
 @media (max-width: 480px) {
-  .wm-overlay { padding: 8px; }
-  .wm-panel { width: calc(100vw - 16px); height: calc(100% - 16px); max-height: calc(100% - 16px); border-radius: 12px 4px 12px 4px; }
-  .wm-panel.wm-maximized { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
+  .wm-overlay { padding-left: 8px; padding-right: 8px; }
+  .wm-panel,
+  .wm-panel.wm-maximized {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 12px 4px 12px 4px;
+  }
   .wm-header { padding: 6px 10px; }
   .wm-tabs button { padding: 6px 10px; }
   .wm-body { padding: 10px; }
 }
 @media (max-width: 360px) {
-  .wm-panel { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
+  .wm-panel,
+  .wm-panel.wm-maximized {
+    width: calc(100vw - 8px);
+    height: calc(100dvh - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
   .wm-title { font-size: 14px; }
-  #warmmemo-btn { padding: 4px 9px; font-size: 13px; }
+  /* 悬浮按钮在极小屏更明显 */
+  #warmmemo-btn { padding: 6px 12px; font-size: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
 }
 
 /* 触控设备：加大可点区域 */

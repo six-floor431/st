@@ -65,38 +65,40 @@
     return await callShared(messages);
   }
 
-  // complete：summary 等子模块用；基于新 settings 字段（summaryModel/summaryBaseUrl/summaryApiKey）
-  // 行为：若配了 key 或 model → 真实直连 /chat/completions；否则真实回退酒馆 shared-api。
+  // complete：支持按 profile 独立调用（各功能不挤在一起）
+  // profile: { source:'local'|'custom', baseUrl, apiKey, model }
+  //   source==='local'  => 走酒馆 shared-api（textgeneration），无需额外配置
+  //   source==='custom' => 直连独立 API（baseUrl/apiKey/model）
+  // opts: { settings, temperature, max_tokens, model }
   // 关键：失败时**明确抛错**（不返回空字符串伪装成功），让上层 UI 显示真实原因。
   async function complete(messages, opts) {
     opts = opts || {};
     const s = opts.settings || (await WM.Settings.load());
-    const baseUrl = s.summaryBaseUrl || 'https://api.openai.com/v1';
-    const apiKey = s.summaryApiKey || '';
-    const model = opts.model || s.summaryModel || '';
+    const profile = opts.profile || null;
 
-    if (apiKey || model) {
+    // 无 profile 或 source 为 local/未配置 → 走酒馆 shared-api
+    const useCustom = profile && profile.source === 'custom' && (profile.apiKey || profile.model || profile.baseUrl);
+    if (!useCustom) {
       try {
-        return await callIndependent(messages, {
-          baseUrl, apiKey, model: model || 'gpt-4o-mini',
-          temperature: opts.temperature != null ? opts.temperature : 0.7,
-          max_tokens: opts.max_tokens,
-        });
+        return await callShared(messages);
       } catch (e) {
-        // 仅在确实配了独立 API 但失败时才回退；回退失败则抛明确错误
-        console.warn('[WarmMemo] 独立API失败，尝试回退 shared-api:', e.message);
-        try {
-          return await callShared(messages);
-        } catch (e2) {
-          throw new Error('LLM 调用失败：独立API(' + e.message + ') 且 shared-api(' + e2.message + ')。请在设置中填写有效的总结模型 API。');
-        }
+        throw new Error('酒馆 shared-api 不可用：' + e.message + '。如需独立模型请在对应功能的 LLM 配置选「自定义」并填写 BaseURL/Key/模型名。');
       }
     }
-    // 未配置独立 API：直接走 shared-api，失败抛明确错误（不静默）
+
+    // 自定义独立 API
+    const baseUrl = profile.baseUrl || s.summaryBaseUrl || 'https://api.openai.com/v1';
+    const apiKey = profile.apiKey || '';
+    const model = opts.model || profile.model || s.summaryModel || 'gpt-4o-mini';
     try {
-      return await callShared(messages);
+      return await callIndependent(messages, {
+        baseUrl, apiKey, model,
+        temperature: opts.temperature != null ? opts.temperature : 0.7,
+        max_tokens: opts.max_tokens,
+      });
     } catch (e) {
-      throw new Error('未配置总结模型且酒馆 shared-api 不可用：' + e.message + '。请在设置中填写 BaseURL/Key/模型名。');
+      // 自定义失败不静默回退（用户明确选了 custom），直接抛明确错误
+      throw new Error('自定义 API 调用失败（' + (profile.model || model) + '）：' + e.message);
     }
   }
 

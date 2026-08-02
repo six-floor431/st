@@ -38,6 +38,18 @@
       { name: 'think', open: '<think>', close: '</think>', wrap: true, singleBefore: true, singleAfter: false, enabled: true },
     ],
     worldToLorebook: true,        // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
+    // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
+    //   source: 'local'  => 调用酒馆本地 shared-api（textgeneration，无需额外 key）
+    //   source: 'custom' => 用下方自定义 baseUrl/apiKey/model 直连
+    // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
+    // 用户可在设置里为每个功能单独覆盖。
+    llmProfiles: {
+      summary:   { source: 'local', baseUrl: '', apiKey: '', model: '' },
+      relations: { source: 'local', baseUrl: '', apiKey: '', model: '' },
+      plot:      { source: 'local', baseUrl: '', apiKey: '', model: '' },
+      world:     { source: 'local', baseUrl: '', apiKey: '', model: '' },
+      items:     { source: 'local', baseUrl: '', apiKey: '', model: '' },
+    },
     lorebookName: 'WarmMemo',     // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
     // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
     takeoverEmbedding: false,     // 接管向量检索：开启后注入用我们自己的 embedding 相似度召回

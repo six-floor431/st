@@ -45,6 +45,18 @@
       ],
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
+      // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
+      //   source: 'local'  => 调用酒馆本地 shared-api（textgeneration，无需额外 key）
+      //   source: 'custom' => 用下方自定义 baseUrl/apiKey/model 直连
+      // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
+      // 用户可在设置里为每个功能单独覆盖。
+      llmProfiles: {
+        summary: { source: "local", baseUrl: "", apiKey: "", model: "" },
+        relations: { source: "local", baseUrl: "", apiKey: "", model: "" },
+        plot: { source: "local", baseUrl: "", apiKey: "", model: "" },
+        world: { source: "local", baseUrl: "", apiKey: "", model: "" },
+        items: { source: "local", baseUrl: "", apiKey: "", model: "" }
+      },
       lorebookName: "WarmMemo",
       // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
       // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
@@ -441,31 +453,28 @@ ${it.desc || ""}`.trim(),
     async function complete(messages, opts) {
       opts = opts || {};
       const s = opts.settings || await WM.Settings.load();
-      const baseUrl = s.summaryBaseUrl || "https://api.openai.com/v1";
-      const apiKey = s.summaryApiKey || "";
-      const model = opts.model || s.summaryModel || "";
-      if (apiKey || model) {
+      const profile = opts.profile || null;
+      const useCustom = profile && profile.source === "custom" && (profile.apiKey || profile.model || profile.baseUrl);
+      if (!useCustom) {
         try {
-          return await callIndependent(messages, {
-            baseUrl,
-            apiKey,
-            model: model || "gpt-4o-mini",
-            temperature: opts.temperature != null ? opts.temperature : 0.7,
-            max_tokens: opts.max_tokens
-          });
+          return await callShared(messages);
         } catch (e) {
-          console.warn("[WarmMemo] \u72EC\u7ACBAPI\u5931\u8D25\uFF0C\u5C1D\u8BD5\u56DE\u9000 shared-api:", e.message);
-          try {
-            return await callShared(messages);
-          } catch (e2) {
-            throw new Error("LLM \u8C03\u7528\u5931\u8D25\uFF1A\u72EC\u7ACBAPI(" + e.message + ") \u4E14 shared-api(" + e2.message + ")\u3002\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199\u6709\u6548\u7684\u603B\u7ED3\u6A21\u578B API\u3002");
-          }
+          throw new Error("\u9152\u9986 shared-api \u4E0D\u53EF\u7528\uFF1A" + e.message + "\u3002\u5982\u9700\u72EC\u7ACB\u6A21\u578B\u8BF7\u5728\u5BF9\u5E94\u529F\u80FD\u7684 LLM \u914D\u7F6E\u9009\u300C\u81EA\u5B9A\u4E49\u300D\u5E76\u586B\u5199 BaseURL/Key/\u6A21\u578B\u540D\u3002");
         }
       }
+      const baseUrl = profile.baseUrl || s.summaryBaseUrl || "https://api.openai.com/v1";
+      const apiKey = profile.apiKey || "";
+      const model = opts.model || profile.model || s.summaryModel || "gpt-4o-mini";
       try {
-        return await callShared(messages);
+        return await callIndependent(messages, {
+          baseUrl,
+          apiKey,
+          model,
+          temperature: opts.temperature != null ? opts.temperature : 0.7,
+          max_tokens: opts.max_tokens
+        });
       } catch (e) {
-        throw new Error("\u672A\u914D\u7F6E\u603B\u7ED3\u6A21\u578B\u4E14\u9152\u9986 shared-api \u4E0D\u53EF\u7528\uFF1A" + e.message + "\u3002\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 BaseURL/Key/\u6A21\u578B\u540D\u3002");
+        throw new Error("\u81EA\u5B9A\u4E49 API \u8C03\u7528\u5931\u8D25\uFF08" + (profile.model || model) + "\uFF09\uFF1A" + e.message);
       }
     }
     async function testConnection(settings) {
@@ -893,7 +902,7 @@ ${opts && opts.extraInstruction ? "\u989D\u5916\u6307\u4EE4\uFF1A" + opts.extraI
 \u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011${prev || "\uFF08\u65E0\uFF09"}
 \u8BF7\u8F93\u51FA\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
-      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4 });
+      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4, profileKey: "world" });
       return out && out.trim() ? out.trim() : prev;
     }
     WM.Worldbook = {
@@ -936,7 +945,7 @@ ${recent}
 
 \u8BF7\u8F93\u51FA\u66F4\u65B0\u540E\u7684\u5267\u60C5\u7EBF\uFF1A`;
       try {
-        const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });
+        const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900, profileKey: "plot" });
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const [title, summary, status] = l.split("|").map((x) => x.trim());
@@ -956,11 +965,14 @@ ${recent}
     async function callLLM(system, user, settings, opts) {
       settings = settings || WM.Settings.load();
       opts = opts || {};
+      const profileKey = opts.profileKey || "summary";
+      const profile = settings.llmProfiles && settings.llmProfiles[profileKey] || null;
       const prompt = [{ role: "system", content: system }, { role: "user", content: user }];
       const out = await WM.LLMClient.complete(prompt, {
         temperature: opts.temperature != null ? opts.temperature : 0.3,
         max_tokens: opts.maxTokens || 700,
-        model: settings.summaryModel || "",
+        model: opts.model || profile && profile.model || "",
+        profile,
         settings
       });
       return out || "";
@@ -1057,7 +1069,7 @@ ${prevMem || "\uFF08\u65E0\uFF09"}
 ${slice}
 
 \u8BF7\u8F93\u51FA\u672C\u6B21\u63D0\u70BC\u7684\u8BB0\u5FC6\uFF1A`;
-      const out = await callLLM(sys, userMsg, settings, { maxTokens: 1e3, temperature: 0.35 });
+      const out = await callLLM(sys, userMsg, settings, { maxTokens: 1e3, temperature: 0.35, profileKey: "summary" });
       if (!out || !out.trim()) return { ok: false, reason: "llm_empty_or_failed" };
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
       for (const line of lines) await dedupeMemory(line, [start, end]);
@@ -1124,7 +1136,7 @@ ${recent}
 \u3010\u672C\u6279\u8BB0\u5FC6\u3011
 ${text}
 
-\u8BF7\u5217\u51FA\u7269\u54C1\uFF1A`, settings, { maxTokens: 500 });
+\u8BF7\u5217\u51FA\u7269\u54C1\uFF1A`, settings, { maxTokens: 500, profileKey: "items" });
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const [name, desc, owner] = l.split("|").map((x) => x.trim());
@@ -1147,7 +1159,7 @@ ${text}
 \u8981\u6C42\uFF1A\u6BCF\u884C\u4E00\u4E2A\u4E09\u5143\u7EC4\uFF0C\u683C\u5F0F\u4E25\u683C\u4E3A \u5B9E\u4F53A|\u5173\u7CFB|\u5B9E\u4F53B|\u6743\u91CD(1-5)\u3002
 \u6743\u91CD\u8868\u793A\u5173\u7CFB\u5F3A\u5EA6/\u4E92\u52A8\u9891\u7387\u3002\u53EA\u62BD\u53D6\u660E\u786E\u63D0\u5230\u6216\u660E\u663E\u6697\u793A\u7684\u5173\u7CFB\u3002\u6700\u591A 18 \u6761\u3002`;
       try {
-        const raw = await WM.Summary.callLLM(sys, memoryText, settings);
+        const raw = await WM.Summary.callLLM(sys, memoryText, settings, { profileKey: "relations" });
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const parts = l.split("|").map((x) => x.trim());
@@ -1466,10 +1478,18 @@ ${it.desc || ""}` }));
       if (isNarrowScreen()) panelEl.classList.add("wm-maximized");
       renderTab(currentTab);
     }
+    function isVisible(el) {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 && r.height < 4) return false;
+      return r.bottom > 0 && r.top < (window.innerHeight || 9999);
+    }
     function injectButton() {
       if (document.getElementById("warmmemo-btn")) return;
       const container = findInputContainer();
-      if (container) {
+      if (container && isVisible(container)) {
         btnEl = document.createElement("button");
         btnEl.id = "warmmemo-btn";
         btnEl.className = "wm-input-btn menu_button";
@@ -1478,6 +1498,11 @@ ${it.desc || ""}` }));
         btnEl.textContent = "\u{1F33F} \u8BB0\u5FC6";
         btnEl.onclick = openPanel;
         container.appendChild(btnEl);
+        if (!isVisible(btnEl)) {
+          btnEl.remove();
+          btnEl = null;
+          ensureFloatingButton();
+        }
       } else {
         ensureFloatingButton();
       }
@@ -1807,9 +1832,40 @@ ${it.desc || ""}` }));
         }
       };
     }
+    const LLM_FUNCS = [
+      { key: "summary", name: "\u603B\u7ED3\u8BB0\u5FC6" },
+      { key: "relations", name: "\u5173\u7CFB\u56FE" },
+      { key: "plot", name: "\u5267\u60C5\u7EBF" },
+      { key: "world", name: "\u4E16\u754C\u89C2" },
+      { key: "items", name: "\u7269\u54C1\u8FFD\u8E2A" }
+    ];
+    function renderLlmProfiles(s) {
+      return LLM_FUNCS.map((f) => {
+        const p = s.llmProfiles && s.llmProfiles[f.key] || { source: "local", baseUrl: "", apiKey: "", model: "" };
+        return `
+      <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span class="wm-h" style="margin:0">${f.name}</span>
+          <select class="p-src" title="\u8C03\u7528\u6765\u6E90">
+            <option value="local" ${p.source === "local" ? "selected" : ""}>\u672C\u5730\u9152\u9986(shared-api)</option>
+            <option value="custom" ${p.source === "custom" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u914D\u7F6E</option>
+          </select>
+        </div>
+        <div class="p-custom" style="${p.source === "custom" ? "" : "display:none"};margin-top:6px">
+          <label class="wm-row">Base URL<input class="p-base" value="${escapeHtml(p.baseUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
+          <label class="wm-row">\u6A21\u578B\u540D<input class="p-model" value="${escapeHtml(p.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
+        </div>
+      </div>`;
+      }).join("");
+    }
     function renderCfg(body) {
       const s = WM.Settings.load();
-      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u8BBE\u7F6E \xB7 \u603B\u7ED3\u6A21\u578B\uFF08\u771F\u5B9E LLM \u8C03\u7528\uFF09</div>
+      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u8BBE\u7F6E \xB7 \u5404\u529F\u80FD\u72EC\u7ACB LLM \u8C03\u7528</div>
+      <div class="wm-hint">\u6BCF\u4E2A\u529F\u80FD\u53EF\u5355\u72EC\u9009\u62E9\u8C03\u7528\u6765\u6E90\uFF1A<b>\u672C\u5730\u9152\u9986</b>\uFF08\u7528\u9152\u9986\u81EA\u5E26 shared-api\uFF0C\u65E0\u9700\u989D\u5916\u914D\u7F6E\uFF09\u6216 <b>\u81EA\u5B9A\u4E49\u914D\u7F6E</b>\uFF08\u72EC\u7ACB BaseURL/Key/\u6A21\u578B\u76F4\u8FDE\uFF09\u3002\u5404\u529F\u80FD\u4E92\u4E0D\u5E72\u6270\uFF0C\u4E0D\u4F1A\u6324\u5728\u4E00\u8D77\u3002</div>
+      <div id="llm-profiles">${renderLlmProfiles(s)}</div>
+      <div class="wm-divider"></div>
+      <div class="wm-h">\u9ED8\u8BA4\u81EA\u5B9A\u4E49\u914D\u7F6E\uFF08\u7528\u4E8E\u300C\u81EA\u5B9A\u4E49\u300D\u6A21\u5F0F\u7684\u521D\u59CB\u503C\uFF0C\u53EF\u9010\u529F\u80FD\u8986\u76D6\uFF09</div>
       <label class="wm-row">Base URL<input id="c-base" value="${s.summaryBaseUrl}"/></label>
       <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
       <label class="wm-row">\u6A21\u578B\u540D<input id="c-model" value="${s.summaryModel}" placeholder="\u5982 gpt-4o-mini"/></label>
@@ -1840,8 +1896,25 @@ ${it.desc || ""}` }));
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">\u4E0D\u586B\u6A21\u578B\u5373\u56DE\u9000\u9152\u9986\u81EA\u5E26 shared-api\uFF08textgeneration\uFF09\u3002\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
+      <div class="wm-hint">\u9ED8\u8BA4\u9009\u300C\u672C\u5730\u9152\u9986\u300D\u5373\u56DE\u9000\u9152\u9986\u81EA\u5E26 shared-api\uFF08textgeneration\uFF09\u3002\u81EA\u5B9A\u4E49\u6A21\u5F0F\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
+      body.querySelectorAll("#llm-profiles .wm-llm-func").forEach((card) => {
+        const src = card.querySelector(".p-src");
+        const custom = card.querySelector(".p-custom");
+        src.onchange = () => {
+          custom.style.display = src.value === "custom" ? "" : "none";
+        };
+      });
       body.querySelector("#c-save").onclick = () => {
+        s.llmProfiles = s.llmProfiles || {};
+        body.querySelectorAll("#llm-profiles .wm-llm-func").forEach((card) => {
+          const key = card.dataset.func;
+          s.llmProfiles[key] = {
+            source: card.querySelector(".p-src").value,
+            baseUrl: card.querySelector(".p-base").value.trim(),
+            apiKey: card.querySelector(".p-key").value.trim(),
+            model: card.querySelector(".p-model").value.trim()
+          };
+        });
         s.summaryBaseUrl = body.querySelector("#c-base").value;
         s.summaryApiKey = body.querySelector("#c-key").value;
         s.summaryModel = body.querySelector("#c-model").value;
@@ -1891,10 +1964,14 @@ ${it.desc || ""}` }));
         } catch (e) {
           add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
         }
-        try {
-          add("\u603B\u7ED3\u6A21\u578B(LLM)", await WM.LLMClient.testConnection(tmp), "");
-        } catch (e) {
-          add("\u603B\u7ED3\u6A21\u578B(LLM)", { success: false }, String(e.message || e));
+        for (const f of LLM_FUNCS) {
+          const profile = tmp.llmProfiles && tmp.llmProfiles[f.key] || null;
+          try {
+            const r = await WM.LLMClient.testConnection({ settings: tmp, profile });
+            add(f.name + "(LLM)", r, "");
+          } catch (e) {
+            add(f.name + "(LLM)", { success: false }, String(e.message || e));
+          }
         }
         try {
           if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)

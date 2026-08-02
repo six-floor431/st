@@ -8,15 +8,20 @@
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
   // 统一的 LLM 调用入口（供 relations/plot/worldbook/items 复用）
+  // profileKey：对应 settings.llmProfiles 中的功能键（summary/relations/plot/world/items），
+  //   实现各功能独立 LLM 配置，不挤在一起。未传则用 summary profile。
   // 真实调用：直接 await LLMClient.complete，失败则抛出明确错误（不伪装成功）。
   async function callLLM(system, user, settings, opts) {
     settings = settings || WM.Settings.load();
     opts = opts || {};
+    const profileKey = opts.profileKey || 'summary';
+    const profile = (settings.llmProfiles && settings.llmProfiles[profileKey]) || null;
     const prompt = [{ role: 'system', content: system }, { role: 'user', content: user }];
     const out = await WM.LLMClient.complete(prompt, {
       temperature: opts.temperature != null ? opts.temperature : 0.3,
       max_tokens: opts.maxTokens || 700,
-      model: settings.summaryModel || '',
+      model: opts.model || (profile && profile.model) || '',
+      profile,
       settings,
     });
     return out || '';
@@ -126,7 +131,7 @@
     userMsg += `【已有记忆】\n${prevMem || '（无）'}\n\n`;
     userMsg += `【新对话（楼层 ${start}-${end}）】\n${slice}\n\n请输出本次提炼的记忆：`;
 
-    const out = await callLLM(sys, userMsg, settings, { maxTokens: 1000, temperature: 0.35 });
+    const out = await callLLM(sys, userMsg, settings, { maxTokens: 1000, temperature: 0.35, profileKey: 'summary' });
     if (!out || !out.trim()) return { ok: false, reason: 'llm_empty_or_failed' };
 
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -185,7 +190,7 @@
     const sys = `从对话中识别【物品/道具/持有物】的新增或状态变化。每行一条，格式：物品名|描述|持有者/所属。
 只列明确提到的；无则输出空。最多 12 条。`;
     try {
-      const raw = await callLLM(sys, `【近期对话】\n${recent}\n【本批记忆】\n${text}\n\n请列出物品：`, settings, { maxTokens: 500 });
+      const raw = await callLLM(sys, `【近期对话】\n${recent}\n【本批记忆】\n${text}\n\n请列出物品：`, settings, { maxTokens: 500, profileKey: 'items' });
       if (!raw) return [];
       return raw.split('\n').map((l) => l.trim()).filter((l) => l.includes('|')).map((l) => {
         const [name, desc, owner] = l.split('|').map((x) => x.trim());
