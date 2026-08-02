@@ -6,10 +6,33 @@
 
   let panelEl = null, btnEl = null, graphSvg = null, graphTimer = null;
 
+  // 输入框旁的挂载点：优先输入框选项区（桌面/新版通用），逐级回退。
   function findInputContainer() {
-    const sel = ['#send_form .input-options', '#rightSendContainer .input-options', '#send_form', '#input-options', '.input-options'];
-    for (const s of sel) { const el = document.querySelector(s); if (el) return el; }
+    const sel = [
+      '#send_form .input-options',
+      '#rightSendContainer .input-options',
+      '.input-options',
+      '#send_form',
+      '#input-options',
+    ];
+    for (const s of sel) {
+      const el = document.querySelector(s);
+      if (el) return el;
+    }
     return null;
+  }
+
+  // 保底：若找不到输入框容器（某些皮肤/移动端），挂固定悬浮按钮，保证一定可见可点。
+  function ensureFloatingButton() {
+    if (document.getElementById('warmmemo-btn')) return;
+    btnEl = document.createElement('button');
+    btnEl.id = 'warmmemo-btn';
+    btnEl.className = 'wm-input-btn menu_button wm-float';
+    btnEl.type = 'button';
+    btnEl.title = '温记 · 记忆与世界观';
+    btnEl.textContent = '🌿 记忆';
+    btnEl.onclick = () => { ensurePanel(); panelEl.classList.toggle('open'); if (panelEl.classList.contains('open')) renderTab('auto'); };
+    document.body.appendChild(btnEl);
   }
 
   function ensurePanel() {
@@ -45,17 +68,23 @@
   }
 
   function injectButton() {
-    const container = findInputContainer();
-    if (!container) { setTimeout(injectButton, 800); return; }
     if (document.getElementById('warmmemo-btn')) return;
-    btnEl = document.createElement('button');
-    btnEl.id = 'warmmemo-btn';
-    btnEl.className = 'wm-input-btn menu_button';
-    btnEl.type = 'button';
-    btnEl.title = '温记 · 记忆与世界观';
-    btnEl.textContent = '🌿 记忆';
-    btnEl.onclick = () => { ensurePanel(); panelEl.classList.toggle('open'); if (panelEl.classList.contains('open')) renderTab('auto'); };
-    container.appendChild(btnEl);
+    const container = findInputContainer();
+    if (container) {
+      btnEl = document.createElement('button');
+      btnEl.id = 'warmmemo-btn';
+      btnEl.className = 'wm-input-btn menu_button';
+      btnEl.type = 'button';
+      btnEl.title = '温记 · 记忆与世界观';
+      btnEl.textContent = '🌿 记忆';
+      btnEl.onclick = () => { ensurePanel(); panelEl.classList.toggle('open'); if (panelEl.classList.contains('open')) renderTab('auto'); };
+      container.appendChild(btnEl);
+    } else {
+      // 重试几次，仍找不到就降级为悬浮按钮，保证一定可见可点
+      injectButton._tries = (injectButton._tries || 0) + 1;
+      if (injectButton._tries > 12) { ensureFloatingButton(); return; }
+      setTimeout(injectButton, 800);
+    }
   }
 
   // ── 各 Tab 渲染 ──

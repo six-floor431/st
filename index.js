@@ -1,4 +1,16 @@
+// 入口：SillyTavern 以动态 <script src> 加载本文件，且不保证是 module，
+// 因此 document.currentScript / import.meta 都可能不可用。
+// 用「遍历 document.scripts 找自身 URL」的方式定位扩展根目录，兼容所有加载方式。
 console.log('[WarmMemo] 加载中…');
+function getBaseUrl() {
+  const cand = [];
+  for (const s of document.scripts) {
+    if (s.src && /warm_memo\/index\.js(\?.*)?$/.test(s.src)) cand.push(s.src);
+  }
+  if (cand.length) return cand[cand.length - 1].replace(/index\.js(\?.*)?$/, '');
+  // 回退到酒馆第三方扩展约定路径
+  return '/scripts/extensions/third-party/warm_memo/';
+}
 function loadScript(src) {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
@@ -7,7 +19,7 @@ function loadScript(src) {
   });
 }
 (async () => {
-  const base = document.currentScript.src.replace(/index\.js$/, '');
+  const base = getBaseUrl();
   const files = [
     'config/settings.js',
     'config/storage.js',        // 兼容旧引用（向量缓存仍用）

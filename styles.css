@@ -8,9 +8,13 @@
   background:linear-gradient(180deg,#fff,#f3ede0);
   border:1px solid var(--wm-line); color:var(--wm-dai);
   border-radius:14px; padding:4px 10px; font-size:13px; cursor:pointer;
-  box-shadow:0 1px 3px rgba(0,0,0,.08); white-space:nowrap;
+  box-shadow:0 1px 3px rgba(0,0,0,.08); white-space:nowrap; z-index:9999;
 }
 #warmmemo-btn:hover{ color:var(--wm-zhu); border-color:var(--wm-dai2); }
+/* 找不到输入框容器时的保底悬浮按钮 */
+#warmmemo-btn.wm-float{
+  position:fixed; left:14px; bottom:14px;
+}
 
 .wm-panel{
   position:fixed; right:14px; bottom:74px; width:340px; max-width:94vw;
