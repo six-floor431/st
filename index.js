@@ -1517,11 +1517,11 @@ ${it.desc || ""}` }));
     function renderMem(body) {
       const mem = WM.MemoryStore.getMemories();
       let html = `<div class="wm-card"><div class="wm-h">\u6709\u6E29\u5EA6\u8BB0\u5FC6\uFF08${mem.length}\uFF09</div>
+      <div class="wm-hint">\u5168\u90E8\u8BB0\u5FC6\u6309\u65F6\u95F4\u5012\u5E8F\u76F4\u63A5\u5217\u51FA\uFF0C\u6EDA\u8F6E / \u624B\u6307\u5373\u53EF\u5212\u52A8\u6D4F\u89C8</div>
       <div class="wm-actions">
         <button id="mem-export" class="wm-btn">\u5BFC\u51FA</button>
         <button id="mem-import" class="wm-btn">\u5BFC\u5165</button>
       </div>
-      <input class="wm-search" id="mem-search" placeholder="\u68C0\u7D22\u8BB0\u5FC6\u2026"/>
       <div class="wm-list" id="mem-list">`;
       html += mem.slice().reverse().map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u8BB0\u5FC6\uFF0C\u5148\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u751F\u6210</div>';
       html += `</div></div>`;
@@ -1548,17 +1548,6 @@ ${it.desc || ""}` }));
           }
         };
         inp.click();
-      };
-      body.querySelector("#mem-search").oninput = async (e) => {
-        const q = e.target.value.trim();
-        let list = mem;
-        if (q && WM.VectorStore) {
-          WM.VectorStore.lastQuery = q;
-          if (WM.VectorStore.enabled) {
-            list = await WM.VectorStore.search(mem, q, 15);
-          } else list = mem.filter((m) => m.text.includes(q));
-        }
-        body.querySelector("#mem-list").innerHTML = (list.length ? list.slice().reverse() : list).map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join("") || '<div class="wm-empty">\u65E0\u5339\u914D</div>';
       };
     }
     function renderRel(body) {
@@ -1676,45 +1665,52 @@ ${it.desc || ""}` }));
       });
     }
     async function renderWorld(body) {
-      const s = WM.Settings.load();
+      const settings = WM.Settings.load();
       const world = WM.MemoryStore.getWorld();
+      let charName = "";
+      try {
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext() || null;
+        charName = ctx && (ctx.name1 || ctx.characters && ctx.character_card && ctx.character_card.data && ctx.character_card.data.name) || "";
+      } catch (e) {
+        charName = "";
+      }
       let loreCount = 0;
       try {
         loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0;
       } catch (e) {
         loreCount = 0;
       }
-      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u4E16\u754C\u8BBE\u5B9A</div>
-      <div class="wm-hint">\u57FA\u4E8E\u89D2\u8272\u5361/\u7528\u6237\u5361/\u4E16\u754C\u4E66(${loreCount}\u6761)/\u5DF2\u6709\u8BB0\u5FC6\u63A8\u65AD\uFF0C\u5199\u5165\u5E76\u6CE8\u5165\u4E0A\u4E0B\u6587</div>
-      <textarea id="world-ta" class="wm-ta" placeholder="\u4E16\u754C\u89C2\u8BBE\u5B9A\u2026">${escapeHtml(world)}</textarea>
-      <div class="wm-row"><input id="world-extra" placeholder="\u81EA\u5B9A\u4E49\u66F4\u65B0\u6307\u4EE4\uFF08\u53EF\u9009\uFF09" style="flex:1"/></div>
-      <div class="wm-row"><input id="world-lorename" placeholder="\u4E16\u754C\u4E66\u540D\uFF08\u540C\u6B65\u4E16\u754C\u4E66\u7528\uFF0C\u5982 lorebook\uFF09" value="${s.lorebookName || ""}" style="flex:1"/></div>
-      <label class="wm-row"><input type="checkbox" id="world-lore" ${s.worldToLorebook ? "checked" : ""}/> \u540C\u6B65\u5199\u5165\u4E16\u754C\u4E66\uFF08\u6240\u6709\u5BF9\u8BDD\u5171\u4EAB\uFF09</label>
+      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u4E16\u754C\u8BBE\u5B9A \xB7 ${escapeHtml(charName || "\u5F53\u524D\u89D2\u8272\u5361")}</div>
+      <div class="wm-hint">\u8FD9\u662F\u672C\u5F20\u89D2\u8272\u5361\u7684\u4E16\u754C\u8BBE\u5B9A\uFF0C\u76F4\u63A5\u4E66\u5199\u5E76\u4FDD\u5B58\uFF0C\u4F1A\u81EA\u52A8\u6CE8\u5165\u4E0A\u4E0B\u6587${loreCount ? `\uFF08\u5DF2\u540C\u6B65\u4E16\u754C\u4E66 ${loreCount} \u6761\uFF09` : ""}</div>
+      <textarea id="world-ta" class="wm-ta" placeholder="\u76F4\u63A5\u5199\u4E0B\u5F53\u524D\u89D2\u8272\u5361\u7684\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF0C\u4F8B\u5982\uFF1A\u5927\u9646\u540D\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u65F6\u95F4\u7EBF\u2026\u2026">${escapeHtml(world)}</textarea>
+      <div class="wm-row"><input id="world-extra" placeholder="\u8BA9 AI \u5E2E\u4F60\u6DA6\u8272/\u8865\u5168\u7684\u6307\u4EE4\uFF08\u53EF\u9009\uFF0C\u7559\u7A7A\u5219\u4E0D\u6539\u5199\uFF09" style="flex:1"/></div>
+      <div class="wm-row"><input id="world-lorename" placeholder="\u4E16\u754C\u4E66\u540D\uFF08\u540C\u6B65\u4E16\u754C\u4E66\u7528\uFF0C\u5982 lorebook\uFF09" value="${settings.lorebookName || ""}" style="flex:1"/></div>
+      <label class="wm-row"><input type="checkbox" id="world-lore" ${settings.worldToLorebook ? "checked" : ""}/> \u540C\u6B65\u5199\u5165\u4E16\u754C\u4E66\uFF08\u6240\u6709\u5BF9\u8BDD\u5171\u4EAB\uFF09</label>
       <div class="wm-actions">
-        <button id="world-save" class="wm-btn">\u4FDD\u5B58</button>
-        <button id="world-gen" class="wm-btn primary">\u7528 LLM \u63A8\u65AD/\u66F4\u65B0</button>
+        <button id="world-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u5B9A</button>
+        <button id="world-gen" class="wm-btn">AI \u6DA6\u8272\u8865\u5168</button>
       </div>
       <div class="wm-status" id="world-status"></div></div>`;
       body.querySelector("#world-save").onclick = async () => {
-        s.lorebookName = body.querySelector("#world-lorename").value.trim();
-        WM.Settings.save(s);
+        settings.lorebookName = body.querySelector("#world-lorename").value.trim();
+        WM.Settings.save(settings);
         await WM.MemoryStore.setWorld(body.querySelector("#world-ta").value);
-        body.querySelector("#world-status").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u8BB0\u5FC6+\u6CE8\u5165\uFF09";
+        body.querySelector("#world-status").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u6CE8\u5165\u5F53\u524D\u89D2\u8272\u5361\u4E0A\u4E0B\u6587\uFF09";
       };
       body.querySelector("#world-gen").onclick = async () => {
         const st = body.querySelector("#world-status");
-        st.textContent = "\u63A8\u65AD\u4E2D\u2026";
+        st.textContent = "\u6DA6\u8272\u4E2D\u2026";
         try {
-          s.lorebookName = body.querySelector("#world-lorename").value.trim();
-          WM.Settings.save(s);
-          const w = await WM.Worldbook.inferWorldview(s, { extraInstruction: body.querySelector("#world-extra").value });
+          settings.lorebookName = body.querySelector("#world-lorename").value.trim();
+          WM.Settings.save(settings);
+          const w = await WM.Worldbook.inferWorldview(settings, { extraInstruction: body.querySelector("#world-extra").value });
           body.querySelector("#world-ta").value = w;
           await WM.MemoryStore.setWorld(w);
           if (body.querySelector("#world-lore").checked) {
             await WM.Worldbook.writeWorld(w);
-            st.textContent = "\u2713 \u4E16\u754C\u89C2\u5DF2\u66F4\u65B0\u5E76\u5199\u5165\u4E16\u754C\u4E66\uFF08\u72EC\u7ACB\u6761\u76EE\uFF09";
+            st.textContent = "\u2713 \u5DF2\u6DA6\u8272\u5E76\u5199\u5165\u4E16\u754C\u4E66\uFF08\u72EC\u7ACB\u6761\u76EE\uFF09";
           } else {
-            st.textContent = "\u2713 \u4E16\u754C\u89C2\u5DF2\u66F4\u65B0\uFF08\u4EC5\u5BF9\u8BDD\u8BB0\u5FC6+\u6CE8\u5165\uFF09";
+            st.textContent = "\u2713 \u5DF2\u6DA6\u8272\uFF08\u4EC5\u5F53\u524D\u89D2\u8272\u5361\u8BB0\u5FC6+\u6CE8\u5165\uFF09";
           }
         } catch (e) {
           st.textContent = "\u2717 " + (e.message || e);

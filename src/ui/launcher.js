@@ -209,11 +209,11 @@
   function renderMem(body) {
     const mem = WM.MemoryStore.getMemories();
     let html = `<div class="wm-card"><div class="wm-h">有温度记忆（${mem.length}）</div>
+      <div class="wm-hint">全部记忆按时间倒序直接列出，滚轮 / 手指即可划动浏览</div>
       <div class="wm-actions">
         <button id="mem-export" class="wm-btn">导出</button>
         <button id="mem-import" class="wm-btn">导入</button>
       </div>
-      <input class="wm-search" id="mem-search" placeholder="检索记忆…"/>
       <div class="wm-list" id="mem-list">`;
     html += mem.slice().reverse().map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
     html += `</div></div>`;
@@ -236,16 +236,6 @@
         catch (e) { toast('🌿 导入失败：' + (e.message || e)); }
       };
       inp.click();
-    };
-    body.querySelector('#mem-search').oninput = async (e) => {
-      const q = e.target.value.trim();
-      let list = mem;
-      if (q && WM.VectorStore) {
-        WM.VectorStore.lastQuery = q;
-        if (WM.VectorStore.enabled) { list = await WM.VectorStore.search(mem, q, 15); }
-        else list = mem.filter((m) => m.text.includes(q));
-      }
-      body.querySelector('#mem-list').innerHTML = (list.length ? list.slice().reverse() : list).map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">无匹配</div>';
     };
   }
 
@@ -350,40 +340,46 @@
   }
 
   async function renderWorld(body) {
-    const s = WM.Settings.load();
+    const settings = WM.Settings.load();
     const world = WM.MemoryStore.getWorld();
+    // 取「当前角色卡」名称（SillyTavern 上下文），明确这是写当前卡的世界设定
+    let charName = '';
+    try {
+      const ctx = (window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext()) || null;
+      charName = (ctx && (ctx.name1 || (ctx.characters && ctx.character_card && ctx.character_card.data && ctx.character_card.data.name))) || '';
+    } catch (e) { charName = ''; }
     let loreCount = 0;
     try { loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0; } catch (e) { loreCount = 0; }
-    body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定</div>
-      <div class="wm-hint">基于角色卡/用户卡/世界书(${loreCount}条)/已有记忆推断，写入并注入上下文</div>
-      <textarea id="world-ta" class="wm-ta" placeholder="世界观设定…">${escapeHtml(world)}</textarea>
-      <div class="wm-row"><input id="world-extra" placeholder="自定义更新指令（可选）" style="flex:1"/></div>
-      <div class="wm-row"><input id="world-lorename" placeholder="世界书名（同步世界书用，如 lorebook）" value="${s.lorebookName || ''}" style="flex:1"/></div>
-      <label class="wm-row"><input type="checkbox" id="world-lore" ${s.worldToLorebook?'checked':''}/> 同步写入世界书（所有对话共享）</label>
+    body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定 · ${escapeHtml(charName || '当前角色卡')}</div>
+      <div class="wm-hint">这是本张角色卡的世界设定，直接书写并保存，会自动注入上下文${(loreCount ? `（已同步世界书 ${loreCount} 条）` : '')}</div>
+      <textarea id="world-ta" class="wm-ta" placeholder="直接写下当前角色卡的世界观设定，例如：大陆名、势力、规则、时间线……">${escapeHtml(world)}</textarea>
+      <div class="wm-row"><input id="world-extra" placeholder="让 AI 帮你润色/补全的指令（可选，留空则不改写）" style="flex:1"/></div>
+      <div class="wm-row"><input id="world-lorename" placeholder="世界书名（同步世界书用，如 lorebook）" value="${settings.lorebookName || ''}" style="flex:1"/></div>
+      <label class="wm-row"><input type="checkbox" id="world-lore" ${settings.worldToLorebook?'checked':''}/> 同步写入世界书（所有对话共享）</label>
       <div class="wm-actions">
-        <button id="world-save" class="wm-btn">保存</button>
-        <button id="world-gen" class="wm-btn primary">用 LLM 推断/更新</button>
+        <button id="world-save" class="wm-btn primary">保存设定</button>
+        <button id="world-gen" class="wm-btn">AI 润色补全</button>
       </div>
       <div class="wm-status" id="world-status"></div></div>`;
     body.querySelector('#world-save').onclick = async () => {
-      s.lorebookName = body.querySelector('#world-lorename').value.trim();
-      WM.Settings.save(s);
+      settings.lorebookName = body.querySelector('#world-lorename').value.trim();
+      WM.Settings.save(settings);
       await WM.MemoryStore.setWorld(body.querySelector('#world-ta').value);
-      body.querySelector('#world-status').textContent = '✓ 已保存（记忆+注入）';
+      body.querySelector('#world-status').textContent = '✓ 已保存（注入当前角色卡上下文）';
     };
     body.querySelector('#world-gen').onclick = async () => {
-      const st = body.querySelector('#world-status'); st.textContent = '推断中…';
+      const st = body.querySelector('#world-status'); st.textContent = '润色中…';
       try {
-        s.lorebookName = body.querySelector('#world-lorename').value.trim();
-        WM.Settings.save(s);
-        const w = await WM.Worldbook.inferWorldview(s, { extraInstruction: body.querySelector('#world-extra').value });
+        settings.lorebookName = body.querySelector('#world-lorename').value.trim();
+        WM.Settings.save(settings);
+        const w = await WM.Worldbook.inferWorldview(settings, { extraInstruction: body.querySelector('#world-extra').value });
         body.querySelector('#world-ta').value = w;
         await WM.MemoryStore.setWorld(w);
         if (body.querySelector('#world-lore').checked) {
           await WM.Worldbook.writeWorld(w);
-          st.textContent = '✓ 世界观已更新并写入世界书（独立条目）';
+          st.textContent = '✓ 已润色并写入世界书（独立条目）';
         } else {
-          st.textContent = '✓ 世界观已更新（仅对话记忆+注入）';
+          st.textContent = '✓ 已润色（仅当前角色卡记忆+注入）';
         }
       } catch (e) {
         st.textContent = '✗ ' + (e.message || e);

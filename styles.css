@@ -1,29 +1,42 @@
 /* ============================================================
- * WarmMemo (温记) 样式 —— 响应式适配（参考柚月记忆窗口规范）
- * 适配：桌面 / 平板 / 手机竖屏；深浅皮肤；触控友好
- * 布局引擎对齐参考范本：dvw/dvh 动态视口 + 多级 @media 断点
+ * WarmMemo (温记) 样式 —— 水墨风（宣纸 + 墨色 + 留白）
+ * 原则：
+ *   1. 不显示系统滚动条，但保留「鼠标滚轮划 / 手指触摸划」原生滚动能力
+ *   2. 物品 / 记忆 / 关系 / 剧情线 全部「直接列出」，不靠搜索框
+ *   3. 世界设定 = 直接写「当前角色卡」的世界设定
  * ============================================================ */
 
-/* 输入框旁按钮：始终可见、可点、不遮挡 */
+/* —— 水墨调色板 —— */
+:root {
+  --wm-ink: #2b2b28;          /* 浓墨 */
+  --wm-ink-soft: #4a4a44;     /* 淡墨 */
+  --wm-ink-faint: #8a8a80;    /* 飞白 */
+  --wm-paper: #f4f1ea;        /* 宣纸 */
+  --wm-paper-2: #ece7db;      /* 旧宣纸 */
+  --wm-seal: #9c3b2e;         /* 印泥红 */
+  --wm-line: rgba(43, 43, 40, 0.18);
+  --wm-line-strong: rgba(43, 43, 40, 0.34);
+}
+
 #warmmemo-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin: 0 4px;
-  padding: 4px 10px;
-  border: 1px solid rgba(46, 125, 50, 0.4);
-  border-radius: 8px;
-  background: linear-gradient(180deg, rgba(245, 248, 244, 0.95), rgba(232, 240, 233, 0.95));
-  color: #2e7d32;
+  padding: 4px 12px;
+  border: 1px solid var(--wm-line-strong);
+  border-radius: 14px 4px 14px 4px;   /* 水墨笔触感 */
+  background: linear-gradient(180deg, #fbf9f3, var(--wm-paper-2));
+  color: var(--wm-ink);
   cursor: pointer;
   font-size: 14px;
   line-height: 1.2;
   white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 1px 3px rgba(0,0,0,.12);
   z-index: 9999;
 }
-#warmmemo-btn:hover { background: rgba(232, 240, 233, 1); }
+#warmmemo-btn:hover { background: linear-gradient(180deg, #fffdf8, var(--wm-paper)); }
 
-/* 浮入保底按钮（找不到输入框时） */
 .wm-float {
   position: fixed;
   left: 14px;
@@ -31,188 +44,279 @@
   z-index: 9999;
 }
 
-/* ---------- 遮罩层（点击空白关闭，对齐柚月 .acu-window-overlay） ---------- */
+/* ---------- 遮罩层 ---------- */
 .wm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(40, 38, 33, 0.5);   /* 墨色半透 */
+  backdrop-filter: blur(2px);
   display: none;
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  /* 用 100% 而非 100dvh，确保遮罩始终等于真实视口，不被手机地址栏高度差裁切 */
   width: 100%;
   height: 100%;
-  padding: 12px;                 /* 保留边距，避免手机端遮挡底层 */
+  padding: 12px;
   box-sizing: border-box;
-  overflow: auto;                /* 极端小屏可滚动，避免面板被完全裁掉 */
+  /* 隐藏系统滚动条，但保留触摸/滚轮划动 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.wm-overlay::-webkit-scrollbar { display: none; }
 .wm-overlay.open { display: flex; }
 
-/* ---------- 面板（浮层窗口，对齐柚月 .acu-window 结构） ---------- */
+/* ---------- 面板（水墨卷轴窗） ---------- */
 .wm-panel {
   display: flex;
   flex-direction: column;
-  width: min(420px, calc(100vw - 24px));
-  height: min(80vh, calc(100dvh - 24px));
+  width: min(440px, calc(100vw - 24px));
+  height: min(82vh, calc(100% - 24px));
   max-width: 100%;
   max-height: 100%;
-  background: var(--wm-bg, #f5f8f4);
-  color: var(--wm-fg, #2b3a2e);
-  border: 1px solid rgba(46, 125, 50, 0.35);
-  border-radius: 14px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.28);
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.012) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #fbf9f3, var(--wm-paper));
+  color: var(--wm-ink);
+  border: 1px solid var(--wm-line-strong);
+  border-radius: 16px 6px 16px 6px;     /* 卷轴边角 */
+  box-shadow: 0 16px 60px rgba(20, 18, 14, 0.35);
   overflow: hidden;
   font-size: 14px;
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif; /* 衬线水墨感 */
 }
 
-/* 最大化（手机全屏 / 手动全屏） */
 .wm-panel.wm-maximized {
   width: calc(100vw - 12px);
-  /* 用 100% 而非 100dvh：避免手机地址栏收起时 dvh 跳动把面板顶出视口 */
   height: calc(100% - 12px);
   max-height: calc(100% - 12px);
 }
 
-/* 头部：触控友好 min-height 44px */
+/* 头部 */
 .wm-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(46, 125, 50, 0.12), rgba(46, 125, 50, 0.04));
-  border-bottom: 1px solid rgba(46, 125, 50, 0.2);
+  min-height: 46px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(43,43,40,.06), rgba(43,43,40,.02));
+  border-bottom: 1px solid var(--wm-line);
   flex: 0 0 auto;
+  position: relative;
 }
-.wm-title { font-weight: 600; font-size: 15px; }
+.wm-header::after {   /* 标题下一道淡墨横笔 */
+  content: "";
+  position: absolute;
+  left: 14px; right: 14px; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--wm-line-strong), transparent);
+}
+.wm-title {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--wm-ink);
+}
+.wm-title::before { content: "❀ "; color: var(--wm-seal); font-size: 13px; }
 .wm-controls { display: flex; gap: 6px; }
 .wm-ctrl {
   width: 32px; height: 32px;
-  border: none; border-radius: 8px;
-  background: rgba(46, 125, 50, 0.1);
-  color: #2e7d32; cursor: pointer; font-size: 18px; line-height: 1;
+  border: 1px solid var(--wm-line);
+  border-radius: 10px 4px 10px 4px;
+  background: transparent;
+  color: var(--wm-ink-soft);
+  cursor: pointer; font-size: 18px; line-height: 1;
 }
-.wm-ctrl:hover { background: rgba(46, 125, 50, 0.2); }
+.wm-ctrl:hover { background: rgba(43,43,40,.08); color: var(--wm-ink); }
 
-/* Tab 栏：窄屏横向滚动，防溢出 */
+/* Tab 栏：横向可划动但不显示滚动条 */
 .wm-tabs {
   display: flex;
   gap: 4px;
-  padding: 6px 8px;
+  padding: 6px 10px;
   overflow-x: auto;
-  border-bottom: 1px solid rgba(46, 125, 50, 0.15);
+  border-bottom: 1px solid var(--wm-line);
   flex: 0 0 auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.wm-tabs::-webkit-scrollbar { display: none; }
 .wm-tabs button {
   flex: 0 0 auto;
   padding: 6px 12px;
-  border: 1px solid rgba(46, 125, 50, 0.25);
-  border-radius: 8px;
+  border: 1px solid var(--wm-line);
+  border-radius: 12px 4px 12px 4px;
   background: transparent;
-  color: inherit;
+  color: var(--wm-ink-soft);
   cursor: pointer;
   white-space: nowrap;
   min-height: 36px;
+  font-family: inherit;
+  letter-spacing: 1px;
 }
 .wm-tabs button.active {
-  background: rgba(46, 125, 50, 0.85);
-  color: #fff;
-  border-color: rgba(46, 125, 50, 0.85);
+  background: var(--wm-ink);
+  color: #f6f3ec;
+  border-color: var(--wm-ink);
+  box-shadow: 0 2px 6px rgba(43,43,40,.3);
 }
 
-/* 内容区：可滚动 + flex 防溢出 */
+/* 内容区：可滚动、隐藏滚动条（鼠标划 / 触摸划 保留） */
 .wm-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;     /* iOS 惯性划动 */
 }
+.wm-body::-webkit-scrollbar { display: none; }
 
-/* 通用卡片 / 行 */
+/* 通用卡片 / 行 / 墨块 */
 .wm-card {
-  border: 1px solid rgba(46, 125, 50, 0.2);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--wm-line);
+  border-left: 3px solid var(--wm-ink-soft);  /* 立轴感 */
+  border-radius: 8px 2px 8px 2px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.38);
 }
-.wm-h { font-weight: 600; margin-bottom: 8px; }
-.wm-divider { height: 1px; background: rgba(46, 125, 50, 0.18); margin: 12px 0; }
-.wm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; min-width: 0; }
+.wm-h { font-weight: 600; margin-bottom: 10px; letter-spacing: 1px; color: var(--wm-ink); }
+.wm-hint { font-size: 12px; color: var(--wm-ink-faint); margin: 6px 0 2px; line-height: 1.5; }
+.wm-divider { height: 1px; background: var(--wm-line); margin: 12px 0; }
+.wm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; min-width: 0; }
 .wm-row label { display: flex; align-items: center; gap: 6px; }
 .wm-row input[type="text"], .wm-row input[type="number"], .wm-row select, .wm-row textarea {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  padding: 6px 8px;
-  border: 1px solid rgba(46, 125, 50, 0.3);
-  border-radius: 8px;
-  background: var(--wm-input-bg, #fff);
-  color: inherit;
+  padding: 7px 9px;
+  border: 1px solid var(--wm-line-strong);
+  border-radius: 8px 2px 8px 2px;
+  background: rgba(255,255,255,.6);
+  color: var(--wm-ink);
   font-size: 14px;
+  font-family: inherit;
 }
+.wm-row textarea { line-height: 1.6; }
+
+/* 按钮：墨色 + 印泥红点缀 */
 .wm-btn {
-  padding: 6px 12px;
-  border: 1px solid rgba(46, 125, 50, 0.4);
-  border-radius: 8px;
-  background: rgba(46, 125, 50, 0.85);
-  color: #fff;
+  padding: 7px 14px;
+  border: 1px solid var(--wm-ink-soft);
+  border-radius: 12px 4px 12px 4px;
+  background: rgba(255,255,255,.5);
+  color: var(--wm-ink);
   cursor: pointer;
   min-height: 36px;
+  font-family: inherit;
+  letter-spacing: 1px;
 }
-.wm-btn:hover { background: rgba(46, 125, 50, 0.95); }
-.wm-test-box { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
-.wm-test-item { font-size: 13px; padding: 6px 8px; border-radius: 6px; line-height: 1.4; word-break: break-word; }
-.wm-test-item.wm-ok { background: rgba(46, 125, 50, 0.12); border: 1px solid rgba(46, 125, 50, 0.35); color: #2e7d32; }
-.wm-test-item.wm-bad { background: rgba(211, 47, 47, 0.1); border: 1px solid rgba(211, 47, 47, 0.4); color: #c62828; }
+.wm-btn:hover { background: rgba(43,43,40,.08); }
+.wm-btn.primary {
+  background: var(--wm-ink);
+  color: #f6f3ec;
+  border-color: var(--wm-ink);
+}
+.wm-btn.primary:hover { background: var(--wm-ink-soft); }
+
+.wm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* 直接列出的列表（无搜索框） */
+.wm-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
+/* 记忆 / 物品 / 关系：水墨便签 */
 .wm-item {
-  border: 1px solid rgba(46, 125, 50, 0.18);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--wm-line);
+  border-left: 3px solid var(--wm-seal);   /* 印泥红立边 */
+  border-radius: 6px 2px 6px 2px;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.45);
+  line-height: 1.6;
+  word-break: break-word;
+  position: relative;
 }
-.wm-item .wm-name { font-weight: 600; }
-.wm-empty { color: #8a9a8d; font-style: italic; padding: 8px 0; }
-.wm-link { color: #2e7d32; cursor: pointer; text-decoration: underline; }
+.wm-item .wm-name { font-weight: 600; color: var(--wm-ink); }
+.wm-item .wm-muted { color: var(--wm-ink-faint); font-size: 12px; }
+.wm-empty { color: var(--wm-ink-faint); font-style: italic; padding: 10px 2px; line-height: 1.6; }
+.wm-link { color: var(--wm-seal); cursor: pointer; text-decoration: underline; }
+
+/* 删除叉：淡墨，hover 变印泥红 */
+.wm-del { cursor: pointer; color: var(--wm-ink-faint); margin-left: 8px; font-size: 12px; }
+.wm-del:hover { color: var(--wm-seal); }
+
+/* 测试连接结果 */
+.wm-test-box { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.wm-test-item { font-size: 13px; padding: 6px 9px; border-radius: 6px 2px 6px 2px; line-height: 1.4; word-break: break-word; }
+.wm-test-item.wm-ok { background: rgba(46,125,50,0.1); border: 1px solid rgba(46,125,50,0.3); color: #2e7d32; }
+.wm-test-item.wm-bad { background: rgba(156,59,46,0.1); border: 1px solid rgba(156,59,46,0.35); color: var(--wm-seal); }
+
+/* 关系图 */
+.wm-graph { width: 100%; height: auto; background: rgba(255,255,255,.3); border: 1px solid var(--wm-line); border-radius: 8px; }
+.wm-weight { color: var(--wm-seal); letter-spacing: -1px; }
+
+/* 剧情线时间卷 */
+.wm-timeline { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.wm-plot {
+  border: 1px solid var(--wm-line);
+  border-left: 3px solid var(--wm-ink-soft);
+  border-radius: 6px 2px 6px 2px;
+  padding: 8px 11px;
+  background: rgba(255,255,255,.4);
+}
+.wm-plot-done { opacity: .6; border-left-color: var(--wm-ink-faint); }
+.wm-plot-abandon { opacity: .45; border-left-style: dashed; }
+.wm-plot-title { font-weight: 600; margin-bottom: 4px; }
+.wm-plot-sum { font-size: 13px; color: var(--wm-ink-soft); line-height: 1.6; }
+.wm-badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 8px;
+  background: var(--wm-ink); color: #f6f3ec; letter-spacing: 1px;
+}
+
+/* 世界设定文本域：水墨稿纸 */
+.wm-ta {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--wm-line-strong);
+  border-radius: 8px 2px 8px 2px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, var(--wm-line) 27px 28px),
+    rgba(255,255,255,.55);
+  color: var(--wm-ink);
+  font-size: 14px;
+  line-height: 28px;       /* 与稿纸横格对齐 */
+  font-family: inherit;
+  box-sizing: border-box;
+}
 
 /* ============================================================
- * 响应式断点（对齐柚月记忆规范）
+ * 响应式（水墨风统一，仅尺寸变化；均隐藏滚动条）
  * ============================================================ */
-
-/* 平板竖屏及以下：面板更宽、更靠边 */
 @media (max-width: 1100px) {
-  .wm-panel {
-    width: min(480px, calc(100vw - 24px));
-  }
+  .wm-panel { width: min(500px, calc(100vw - 24px)); }
 }
-
-/* 手机横屏 / 小平板 */
 @media (max-width: 768px) {
   .wm-overlay { padding: 12px; }
   .wm-panel { width: calc(100vw - 24px); height: calc(100% - 24px); max-height: calc(100% - 24px); }
   .wm-panel.wm-maximized { width: calc(100vw - 12px); height: calc(100% - 12px); max-height: calc(100% - 12px); }
-  .wm-title { font-size: 14px; }
+  .wm-title { font-size: 15px; }
 }
-
-/* 手机竖屏 */
 @media (max-width: 480px) {
   .wm-overlay { padding: 8px; }
-  .wm-panel { width: calc(100vw - 16px); height: calc(100% - 16px); max-height: calc(100% - 16px); border-radius: 12px; }
+  .wm-panel { width: calc(100vw - 16px); height: calc(100% - 16px); max-height: calc(100% - 16px); border-radius: 12px 4px 12px 4px; }
   .wm-panel.wm-maximized { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
   .wm-header { padding: 6px 10px; }
   .wm-tabs button { padding: 6px 10px; }
   .wm-body { padding: 10px; }
 }
-
-/* 极窄屏（小手机） */
 @media (max-width: 360px) {
   .wm-panel { width: calc(100vw - 8px); height: calc(100% - 8px); max-height: calc(100% - 8px); }
-  .wm-title { font-size: 13px; }
-  #warmmemo-btn { padding: 4px 8px; font-size: 13px; }
+  .wm-title { font-size: 14px; }
+  #warmmemo-btn { padding: 4px 9px; font-size: 13px; }
 }
 
 /* 触控设备：加大可点区域 */
