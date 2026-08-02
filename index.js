@@ -36,11 +36,12 @@
       autoPlot: true,
       autoWorld: true,
       autoItems: true,
-      // 总结时剔除「标签包裹」的内容（如 <think>...</think>），规则可自定义
-      // open/close 不同 => 成对包裹（如 think//think）；open/close 相同 => 同标签包裹（如 <x>...</x>）；
-      // close 为空 => 单标签（从 open 删到行尾）。
+      // 总结时剔除「标签包裹」的内容，规则可自定义，每条规则可同时启用多重形态（多重存在）：
+      // wrap=true        => 成对/相同包裹删中间（需 close）
+      // singleBefore=true => 残缺单标签「删标签之前、留之后」
+      // singleAfter=true  => 残缺单标签「删标签之后、留之前」
       tagStripRules: [
-        { name: "think", open: "<think>", close: "</think>", enabled: true }
+        { name: "think", open: "<think>", close: "</think>", wrap: true, singleBefore: true, singleAfter: false, enabled: true }
       ],
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
@@ -986,20 +987,23 @@ ${recent}
       if (!list.length) return text;
       let out = text;
       for (const r of list) {
-        if (r.close && r.close !== r.open) {
-          out = out.replace(new RegExp(escapeRegExp(r.open) + "[\\s\\S]*?" + escapeRegExp(r.close), "g"), "");
-        } else if (r.close && r.close === r.open) {
-          const m = r.open.match(/<([^>\s/]+)/);
-          if (m) {
-            const name = escapeRegExp(m[1]);
-            out = out.replace(new RegExp("<" + name + "[\\s\\S]*?</" + name + ">", "g"), "");
-          }
-        } else {
-          if (r.keep === "before") {
-            out = out.replace(new RegExp(escapeRegExp(r.open) + "[\\s\\S]*", "g"), "");
+        const open = escapeRegExp(r.open);
+        if (r.wrap && r.close) {
+          if (r.close !== r.open) {
+            out = out.replace(new RegExp(open + "[\\s\\S]*?" + escapeRegExp(r.close), "g"), "");
           } else {
-            out = out.replace(new RegExp("[\\s\\S]*?" + escapeRegExp(r.open), "g"), "");
+            const m = r.open.match(/<([^>\s/]+)/);
+            if (m) {
+              const name = escapeRegExp(m[1]);
+              out = out.replace(new RegExp("<" + name + "[\\s\\S]*?</" + name + ">", "g"), "");
+            }
           }
+        }
+        if (r.singleBefore) {
+          out = out.replace(new RegExp("[\\s\\S]*?" + open, "g"), "");
+        }
+        if (r.singleAfter) {
+          out = out.replace(new RegExp(open + "[\\s\\S]*", "g"), "");
         }
       }
       return out.replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
@@ -1512,7 +1516,7 @@ ${it.desc || ""}` }));
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors ? "checked" : ""}/> \u603B\u7ED3\u540E\u9690\u85CF\u5DF2\u5904\u7406\u697C\u5C42</label>
         <div class="wm-h" style="margin-top:10px">\u6807\u7B7E\u8FC7\u6EE4\uFF08\u603B\u7ED3\u65F6\u5254\u9664\u6807\u7B7E\u5305\u88F9\u5185\u5BB9\uFF09</div>
-        <div class="wm-hint">\u52FE\u9009\u7684\u89C4\u5219\u4F1A\u5728\u603B\u7ED3\u65F6\u79FB\u9664\u76F8\u5E94\u6587\u5B57\u3002\u4E09\u79CD\u5F62\u6001\uFF1A\u2460\u6210\u5BF9\u5305\u88F9\uFF08\u5982 &lt;think&gt;\u2026&lt;/think&gt;\uFF0C\u5220\u4E2D\u95F4\uFF09\uFF1B\u2461\u76F8\u540C\u6807\u7B7E\u5305\u88F9\uFF08\u5982 &lt;x&gt;\u2026&lt;/x&gt;\uFF0C\u5220\u4E2D\u95F4\uFF09\uFF1B\u2462\u5355\u6807\u7B7E\uFF08\u53EA\u586B\u5F00\u6807\u7B7E\uFF0C\u5982 &lt;a&gt;\uFF09\uFF1A\u9ED8\u8BA4\u300C\u7559\u6807\u7B7E\u4E4B\u540E\u300D\u5373\u5220\u6389 &lt;a&gt; <b>\u53CA\u5176\u4E4B\u524D</b> \u7684\u6240\u6709\u5185\u5BB9\uFF08\u4F8B\uFF1A<code>xxxx &lt;a&gt; \u50CF\u8FD9\u79CD</code> \u2192 \u53EA\u7559 <code>\u50CF\u8FD9\u79CD</code>\uFF09\uFF0C\u53EF\u5728\u300C\u7559\u6807\u7B7E\u4E4B\u524D/\u4E4B\u540E\u300D\u5207\u6362\u3002</div>
+        <div class="wm-hint">\u53EF\u81EA\u5B9A\u4E49\u591A\u6761\u89C4\u5219\uFF0C\u540C\u4E00\u6807\u7B7E\u4E5F\u80FD\u300C\u591A\u91CD\u5B58\u5728\u300D\uFF1A\u52FE\u9009\u591A\u79CD\u5F62\u6001\u540C\u65F6\u751F\u6548\u3002\u2460<b>\u5305\u88F9</b>\uFF1A\u6210\u5BF9/\u76F8\u540C\u6807\u7B7E\u5220\u4E2D\u95F4\uFF08\u5982 &lt;think&gt;\u2026&lt;/think&gt;\uFF09\uFF1B\u2461<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u540E</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u524D</b>\uFF08\u5982 <code>xxxx &lt;a&gt; \u50CF\u8FD9\u79CD</code> \u2192 <code>\u50CF\u8FD9\u79CD</code>\uFF09\uFF1B\u2462<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u524D</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u540E</b>\uFF08\u5982 <code>\u53EF\u89C1&lt;a&gt;\u79D8\u5BC6</code> \u2192 <code>\u53EF\u89C1</code>\uFF09\u3002</div>
         <div id="tag-rules"></div>
         <div class="wm-row"><button id="tag-add" class="wm-btn">+ \u65B0\u589E\u6807\u7B7E\u89C4\u5219</button></div>
         <div class="wm-h" style="margin-top:10px">\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</div>
@@ -1534,23 +1538,21 @@ ${it.desc || ""}` }));
       function renderTagRules() {
         const box = body.querySelector("#tag-rules");
         const rules = s.tagStripRules || (s.tagStripRules = []);
-        box.innerHTML = rules.map((r, i) => {
-          const isSingle = !r.close;
-          const keep = r.keep || "after";
-          return `
-        <div class="wm-tag-rule" data-idx="${i}" style="display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap">
-          <input type="checkbox" class="t-on" ${r.enabled ? "checked" : ""} title="\u542F\u7528"/>
-          <input class="t-open" value="${escapeHtml(r.open || "")}" placeholder="\u6807\u7B7E\u5982 &lt;a&gt;" style="flex:1;min-width:80px"/>
-          <span>\u2026</span>
-          <input class="t-close" value="${escapeHtml(r.close || "")}" placeholder="\u95ED\u6807\u7B7E\uFF08\u7559\u7A7A=\u5355\u6807\u7B7E\uFF09" style="flex:1;min-width:80px"/>
-          ${isSingle ? `
-          <select class="t-keep" title="\u4FDD\u7559\u65B9\u5411">
-            <option value="after" ${keep === "after" ? "selected" : ""}>\u7559\u6807\u7B7E\u4E4B\u540E</option>
-            <option value="before" ${keep === "before" ? "selected" : ""}>\u7559\u6807\u7B7E\u4E4B\u524D</option>
-          </select>` : ""}
-          <button class="t-del wm-btn" style="padding:2px 8px">\u5220</button>
-        </div>`;
-        }).join("");
+        box.innerHTML = rules.map((r, i) => `
+        <div class="wm-tag-rule" data-idx="${i}" style="margin:8px 0;padding:6px;border:1px solid #d8cfbf;border-radius:6px">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="checkbox" class="t-on" ${r.enabled ? "checked" : ""} title="\u542F\u7528\u6574\u6761"/>
+            <input class="t-open" value="${escapeHtml(r.open || "")}" placeholder="\u5F00\u6807\u7B7E\u5982 &lt;think&gt;" style="flex:1;min-width:80px"/>
+            <span>\u2026</span>
+            <input class="t-close" value="${escapeHtml(r.close || "")}" placeholder="\u95ED\u6807\u7B7E\uFF08\u7559\u7A7A\u53EF\u4E0D\u586B\uFF09" style="flex:1;min-width:80px"/>
+            <button class="t-del wm-btn" style="padding:2px 8px">\u5220</button>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:6px;font-size:12px;flex-wrap:wrap">
+            <label><input type="checkbox" class="t-wrap" ${r.wrap ? "checked" : ""}/> \u5305\u88F9(\u5220\u4E2D\u95F4)</label>
+            <label><input type="checkbox" class="t-sb" ${r.singleBefore ? "checked" : ""}/> \u5355\u6807\u7B7E-\u7559\u4E4B\u540E(\u5220\u524D)</label>
+            <label><input type="checkbox" class="t-sa" ${r.singleAfter ? "checked" : ""}/> \u5355\u6807\u7B7E-\u7559\u4E4B\u524D(\u5220\u540E)</label>
+          </div>
+        </div>`).join("");
         box.querySelectorAll(".t-del").forEach((btn) => {
           btn.onclick = () => {
             const idx = parseInt(btn.closest(".wm-tag-rule").dataset.idx, 10);
@@ -1562,7 +1564,7 @@ ${it.desc || ""}` }));
       renderTagRules();
       body.querySelector("#tag-add").onclick = () => {
         s.tagStripRules = s.tagStripRules || [];
-        s.tagStripRules.push({ name: "new", open: "<new>", close: "", keep: "after", enabled: true });
+        s.tagStripRules.push({ name: "new", open: "<new>", close: "</new>", wrap: true, singleBefore: true, singleAfter: false, enabled: true });
         renderTagRules();
       };
       body.querySelector("#a-save").onclick = () => {
@@ -1578,14 +1580,15 @@ ${it.desc || ""}` }));
         s.autoItems = body.querySelector("#a-item").checked;
         s.tagStripRules = Array.from(body.querySelectorAll("#tag-rules .wm-tag-rule")).map((row) => {
           const close = row.querySelector(".t-close").value.trim();
-          const rule = {
+          return {
             name: (row.querySelector(".t-open").value.match(/<([^>\s/]+)/) || [, ""])[1] || "rule",
             open: row.querySelector(".t-open").value.trim(),
             close,
+            wrap: row.querySelector(".t-wrap") ? row.querySelector(".t-wrap").checked : false,
+            singleBefore: row.querySelector(".t-sb") ? row.querySelector(".t-sb").checked : false,
+            singleAfter: row.querySelector(".t-sa") ? row.querySelector(".t-sa").checked : false,
             enabled: row.querySelector(".t-on").checked
           };
-          if (!close) rule.keep = row.querySelector(".t-keep") ? row.querySelector(".t-keep").value : "after";
-          return rule;
         }).filter((r) => r.open);
         WM.Settings.save(s);
         body.querySelector("#auto-status").textContent = "\u2713 \u8BBE\u7F6E\u5DF2\u4FDD\u5B58";

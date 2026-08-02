@@ -30,11 +30,12 @@
     autoPlot: true,
     autoWorld: true,
     autoItems: true,
-    // 总结时剔除「标签包裹」的内容（如 <think>...</think>），规则可自定义
-    // open/close 不同 => 成对包裹（如 think//think）；open/close 相同 => 同标签包裹（如 <x>...</x>）；
-    // close 为空 => 单标签（从 open 删到行尾）。
+    // 总结时剔除「标签包裹」的内容，规则可自定义，每条规则可同时启用多重形态（多重存在）：
+    // wrap=true        => 成对/相同包裹删中间（需 close）
+    // singleBefore=true => 残缺单标签「删标签之前、留之后」
+    // singleAfter=true  => 残缺单标签「删标签之后、留之前」
     tagStripRules: [
-      { name: 'think', open: '<think>', close: '</think>', enabled: true },
+      { name: 'think', open: '<think>', close: '</think>', wrap: true, singleBefore: true, singleAfter: false, enabled: true },
     ],
     worldToLorebook: true,        // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
     lorebookName: 'WarmMemo',     // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）

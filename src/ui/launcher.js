@@ -163,7 +163,7 @@
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors?'checked':''}/> 总结后隐藏已处理楼层</label>
         <div class="wm-h" style="margin-top:10px">标签过滤（总结时剔除标签包裹内容）</div>
-        <div class="wm-hint">勾选的规则会在总结时移除相应文字。三种形态：①成对包裹（如 &lt;think&gt;…&lt;/think&gt;，删中间）；②相同标签包裹（如 &lt;x&gt;…&lt;/x&gt;，删中间）；③单标签（只填开标签，如 &lt;a&gt;）：默认「留标签之后」即删掉 &lt;a&gt; <b>及其之前</b> 的所有内容（例：<code>xxxx &lt;a&gt; 像这种</code> → 只留 <code>像这种</code>），可在「留标签之前/之后」切换。</div>
+        <div class="wm-hint">可自定义多条规则，同一标签也能「多重存在」：勾选多种形态同时生效。①<b>包裹</b>：成对/相同标签删中间（如 &lt;think&gt;…&lt;/think&gt;）；②<b>单标签-留之后</b>：只有开标签时删其<b>之前</b>（如 <code>xxxx &lt;a&gt; 像这种</code> → <code>像这种</code>）；③<b>单标签-留之前</b>：只有开标签时删其<b>之后</b>（如 <code>可见&lt;a&gt;秘密</code> → <code>可见</code>）。</div>
         <div id="tag-rules"></div>
         <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
         <div class="wm-h" style="margin-top:10px">自动抽取子任务</div>
@@ -183,27 +183,25 @@
       body.querySelector('#a-range-row').style.display = mode.value === 'range' ? '' : 'none';
     };
 
-    // 标签过滤规则渲染
+    // 标签过滤规则渲染（同一标签可多重形态并存）
     function renderTagRules() {
       const box = body.querySelector('#tag-rules');
       const rules = s.tagStripRules || (s.tagStripRules = []);
-      box.innerHTML = rules.map((r, i) => {
-        const isSingle = !r.close; // 单标签
-        const keep = r.keep || 'after';
-        return `
-        <div class="wm-tag-rule" data-idx="${i}" style="display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap">
-          <input type="checkbox" class="t-on" ${r.enabled ? 'checked' : ''} title="启用"/>
-          <input class="t-open" value="${escapeHtml(r.open || '')}" placeholder="标签如 &lt;a&gt;" style="flex:1;min-width:80px"/>
-          <span>…</span>
-          <input class="t-close" value="${escapeHtml(r.close || '')}" placeholder="闭标签（留空=单标签）" style="flex:1;min-width:80px"/>
-          ${isSingle ? `
-          <select class="t-keep" title="保留方向">
-            <option value="after" ${keep === 'after' ? 'selected' : ''}>留标签之后</option>
-            <option value="before" ${keep === 'before' ? 'selected' : ''}>留标签之前</option>
-          </select>` : ''}
-          <button class="t-del wm-btn" style="padding:2px 8px">删</button>
-        </div>`;
-      }).join('');
+      box.innerHTML = rules.map((r, i) => `
+        <div class="wm-tag-rule" data-idx="${i}" style="margin:8px 0;padding:6px;border:1px solid #d8cfbf;border-radius:6px">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="checkbox" class="t-on" ${r.enabled ? 'checked' : ''} title="启用整条"/>
+            <input class="t-open" value="${escapeHtml(r.open || '')}" placeholder="开标签如 &lt;think&gt;" style="flex:1;min-width:80px"/>
+            <span>…</span>
+            <input class="t-close" value="${escapeHtml(r.close || '')}" placeholder="闭标签（留空可不填）" style="flex:1;min-width:80px"/>
+            <button class="t-del wm-btn" style="padding:2px 8px">删</button>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:6px;font-size:12px;flex-wrap:wrap">
+            <label><input type="checkbox" class="t-wrap" ${r.wrap ? 'checked' : ''}/> 包裹(删中间)</label>
+            <label><input type="checkbox" class="t-sb" ${r.singleBefore ? 'checked' : ''}/> 单标签-留之后(删前)</label>
+            <label><input type="checkbox" class="t-sa" ${r.singleAfter ? 'checked' : ''}/> 单标签-留之前(删后)</label>
+          </div>
+        </div>`).join('');
       box.querySelectorAll('.t-del').forEach((btn) => {
         btn.onclick = () => {
           const idx = parseInt(btn.closest('.wm-tag-rule').dataset.idx, 10);
@@ -215,8 +213,8 @@
     renderTagRules();
     body.querySelector('#tag-add').onclick = () => {
       s.tagStripRules = s.tagStripRules || [];
-      // 默认新增「单标签」规则（最常用：删标签之前/之后），保留方向默认「留标签之后」
-      s.tagStripRules.push({ name: 'new', open: '<new>', close: '', keep: 'after', enabled: true });
+      // 默认新增：开闭标签都填 + 包裹+单标签留之后都勾（最常用多重组合）
+      s.tagStripRules.push({ name: 'new', open: '<new>', close: '</new>', wrap: true, singleBefore: true, singleAfter: false, enabled: true });
       renderTagRules();
     };
 
@@ -234,14 +232,15 @@
       // 收集标签过滤规则（以 DOM 当前输入为准，确保勾选/文本改动都已同步）
       s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => {
         const close = row.querySelector('.t-close').value.trim();
-        const rule = {
+        return {
           name: (row.querySelector('.t-open').value.match(/<([^>\s/]+)/) || [,''])[1] || 'rule',
           open: row.querySelector('.t-open').value.trim(),
           close,
+          wrap: row.querySelector('.t-wrap') ? row.querySelector('.t-wrap').checked : false,
+          singleBefore: row.querySelector('.t-sb') ? row.querySelector('.t-sb').checked : false,
+          singleAfter: row.querySelector('.t-sa') ? row.querySelector('.t-sa').checked : false,
           enabled: row.querySelector('.t-on').checked,
         };
-        if (!close) rule.keep = row.querySelector('.t-keep') ? row.querySelector('.t-keep').value : 'after';
-        return rule;
       }).filter((r) => r.open);
       WM.Settings.save(s);
       body.querySelector('#auto-status').textContent = '✓ 设置已保存';

@@ -43,36 +43,36 @@
   }
 
   // 按规则剔除「标签包裹」的内容（如 <think>...</think>）
-  // rule.open/close 不同 => 成对包裹（如 think//think）：删除 open...close 中间；
-  // rule.open/close 相同 => 同标签包裹（如 <x>...</x>）：删除 <x>...</x> 中间；
-  // rule.close 为空（单标签）：
-  //   keep==='after'（默认）=> 删除 open 及其【之前】的所有内容，保留 open 之后；
-  //   keep==='before' => 删除 open 及其【之后】的所有内容，保留 open 之前。
+  // 一条规则可对同一标签启用多重形态（同时生效、多重存在）：
+  //   wrap          => 成对/相同包裹删中间（需 close；open/close 相同则按标签名构造 <name>...</name>）
+  //   singleBefore  => 残缺单标签「删标签之前、留之后」：删 open 及其之前
+  //   singleAfter   => 残缺单标签「删标签之后、留之前」：删 open 及其之后
   function stripTagged(text, rules) {
     if (!text) return text;
     const list = (rules && rules.filter((r) => r && r.enabled && r.open)) || [];
     if (!list.length) return text;
     let out = text;
     for (const r of list) {
-      if (r.close && r.close !== r.open) {
-        // 成对包裹（不同标签），如 <think>...</think>
-        out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*?' + escapeRegExp(r.close), 'g'), '');
-      } else if (r.close && r.close === r.open) {
-        // 相同标签包裹，如 <x>...</x>：提取标签名构造 <name>...</name>
-        const m = r.open.match(/<([^>\s/]+)/);
-        if (m) {
-          const name = escapeRegExp(m[1]);
-          out = out.replace(new RegExp('<' + name + '[\\s\\S]*?</' + name + '>', 'g'), '');
-        }
-      } else {
-        // 单标签
-        if (r.keep === 'before') {
-          // 删 open 及其之后，保留之前
-          out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*', 'g'), '');
+      const open = escapeRegExp(r.open);
+      // 1) 包裹（成对 / 相同标签）
+      if (r.wrap && r.close) {
+        if (r.close !== r.open) {
+          out = out.replace(new RegExp(open + '[\\s\\S]*?' + escapeRegExp(r.close), 'g'), '');
         } else {
-          // 默认：删 open 及其之前，保留之后
-          out = out.replace(new RegExp('[\\s\\S]*?' + escapeRegExp(r.open), 'g'), '');
+          const m = r.open.match(/<([^>\s/]+)/);
+          if (m) {
+            const name = escapeRegExp(m[1]);
+            out = out.replace(new RegExp('<' + name + '[\\s\\S]*?</' + name + '>', 'g'), '');
+          }
         }
+      }
+      // 2) 残缺单标签：删标签之前、留之后
+      if (r.singleBefore) {
+        out = out.replace(new RegExp('[\\s\\S]*?' + open, 'g'), '');
+      }
+      // 3) 残缺单标签：删标签之后、留之前
+      if (r.singleAfter) {
+        out = out.replace(new RegExp(open + '[\\s\\S]*', 'g'), '');
       }
     }
     // 清理残留的空行与首尾空白
