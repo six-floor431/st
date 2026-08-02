@@ -163,7 +163,7 @@
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors?'checked':''}/> 总结后隐藏已处理楼层</label>
         <div class="wm-h" style="margin-top:10px">标签过滤（总结时剔除标签包裹内容）</div>
-        <div class="wm-hint">勾选的规则会在总结时移除其包裹的文字。支持「成对包裹」（如 &lt;think&gt;…&lt;/think&gt;）、「相同标签包裹」（如 &lt;x&gt;…&lt;/x&gt;）、「单标签」（从标签删到末尾）。</div>
+        <div class="wm-hint">勾选的规则会在总结时移除相应文字。三种形态：①成对包裹（如 &lt;think&gt;…&lt;/think&gt;，删中间）；②相同标签包裹（如 &lt;x&gt;…&lt;/x&gt;，删中间）；③单标签（只填开标签，如 &lt;a&gt;）：默认「留标签之后」即删掉 &lt;a&gt; <b>及其之前</b> 的所有内容（例：<code>xxxx &lt;a&gt; 像这种</code> → 只留 <code>像这种</code>），可在「留标签之前/之后」切换。</div>
         <div id="tag-rules"></div>
         <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
         <div class="wm-h" style="margin-top:10px">自动抽取子任务</div>
@@ -187,14 +187,23 @@
     function renderTagRules() {
       const box = body.querySelector('#tag-rules');
       const rules = s.tagStripRules || (s.tagStripRules = []);
-      box.innerHTML = rules.map((r, i) => `
+      box.innerHTML = rules.map((r, i) => {
+        const isSingle = !r.close; // 单标签
+        const keep = r.keep || 'after';
+        return `
         <div class="wm-tag-rule" data-idx="${i}" style="display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap">
           <input type="checkbox" class="t-on" ${r.enabled ? 'checked' : ''} title="启用"/>
-          <input class="t-open" value="${escapeHtml(r.open || '')}" placeholder="开标签如 &lt;think&gt;" style="flex:1;min-width:90px"/>
+          <input class="t-open" value="${escapeHtml(r.open || '')}" placeholder="标签如 &lt;a&gt;" style="flex:1;min-width:80px"/>
           <span>…</span>
-          <input class="t-close" value="${escapeHtml(r.close || '')}" placeholder="闭标签如 &lt;/think&gt;（留空=单标签）" style="flex:1;min-width:90px"/>
+          <input class="t-close" value="${escapeHtml(r.close || '')}" placeholder="闭标签（留空=单标签）" style="flex:1;min-width:80px"/>
+          ${isSingle ? `
+          <select class="t-keep" title="保留方向">
+            <option value="after" ${keep === 'after' ? 'selected' : ''}>留标签之后</option>
+            <option value="before" ${keep === 'before' ? 'selected' : ''}>留标签之前</option>
+          </select>` : ''}
           <button class="t-del wm-btn" style="padding:2px 8px">删</button>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       box.querySelectorAll('.t-del').forEach((btn) => {
         btn.onclick = () => {
           const idx = parseInt(btn.closest('.wm-tag-rule').dataset.idx, 10);
@@ -206,7 +215,8 @@
     renderTagRules();
     body.querySelector('#tag-add').onclick = () => {
       s.tagStripRules = s.tagStripRules || [];
-      s.tagStripRules.push({ name: 'new', open: '<new>', close: '</new>', enabled: true });
+      // 默认新增「单标签」规则（最常用：删标签之前/之后），保留方向默认「留标签之后」
+      s.tagStripRules.push({ name: 'new', open: '<new>', close: '', keep: 'after', enabled: true });
       renderTagRules();
     };
 
@@ -222,12 +232,17 @@
       s.autoWorld = body.querySelector('#a-world').checked;
       s.autoItems = body.querySelector('#a-item').checked;
       // 收集标签过滤规则（以 DOM 当前输入为准，确保勾选/文本改动都已同步）
-      s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => ({
-        name: (row.querySelector('.t-open').value.match(/<([^>\s/]+)/) || [,''])[1] || 'rule',
-        open: row.querySelector('.t-open').value.trim(),
-        close: row.querySelector('.t-close').value.trim(),
-        enabled: row.querySelector('.t-on').checked,
-      })).filter((r) => r.open);
+      s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => {
+        const close = row.querySelector('.t-close').value.trim();
+        const rule = {
+          name: (row.querySelector('.t-open').value.match(/<([^>\s/]+)/) || [,''])[1] || 'rule',
+          open: row.querySelector('.t-open').value.trim(),
+          close,
+          enabled: row.querySelector('.t-on').checked,
+        };
+        if (!close) rule.keep = row.querySelector('.t-keep') ? row.querySelector('.t-keep').value : 'after';
+        return rule;
+      }).filter((r) => r.open);
       WM.Settings.save(s);
       body.querySelector('#auto-status').textContent = '✓ 设置已保存';
     };

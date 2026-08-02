@@ -43,9 +43,11 @@
   }
 
   // 按规则剔除「标签包裹」的内容（如 <think>...</think>）
-  // rule.open/close 不同 => 成对包裹（如 think//think）；
-  // rule.open/close 相同 => 同标签包裹（如 <x>...</x>）；
-  // rule.close 为空 => 单标签（从 open 删到行尾）。
+  // rule.open/close 不同 => 成对包裹（如 think//think）：删除 open...close 中间；
+  // rule.open/close 相同 => 同标签包裹（如 <x>...</x>）：删除 <x>...</x> 中间；
+  // rule.close 为空（单标签）：
+  //   keep==='after'（默认）=> 删除 open 及其【之前】的所有内容，保留 open 之后；
+  //   keep==='before' => 删除 open 及其【之后】的所有内容，保留 open 之前。
   function stripTagged(text, rules) {
     if (!text) return text;
     const list = (rules && rules.filter((r) => r && r.enabled && r.open)) || [];
@@ -63,8 +65,14 @@
           out = out.replace(new RegExp('<' + name + '[\\s\\S]*?</' + name + '>', 'g'), '');
         }
       } else {
-        // 单标签：从 open（含）删到行尾
-        out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*', 'g'), '');
+        // 单标签
+        if (r.keep === 'before') {
+          // 删 open 及其之后，保留之前
+          out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*', 'g'), '');
+        } else {
+          // 默认：删 open 及其之前，保留之后
+          out = out.replace(new RegExp('[\\s\\S]*?' + escapeRegExp(r.open), 'g'), '');
+        }
       }
     }
     // 清理残留的空行与首尾空白
