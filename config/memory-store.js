@@ -49,21 +49,21 @@
     }
   }
 
-  // 写回 chat_metadata（并触发酒馆保存）
+  // 写回 chat_metadata（酒馆官方持久化路径）
+  // 真实 API：ctx.updateChatMetadata(new_values, reset) 会合并并触发保存；
+  // 再用 saveMetadata() 兜底落盘。绝不直接改 md 引用（会与内部逻辑竞态）。
   async function save(store) {
-    const md = getMetadata();
-    if (!md) return false;
-    md[FIELD] = store;
-    // 通知酒馆元数据变更并落盘
+    const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+    if (!ctx || !ctx.updateChatMetadata) return false;
     try {
-      if (window.SillyTavern && typeof window.SillyTavern.updateChatMetadata === 'function') {
-        window.SillyTavern.updateChatMetadata({ [FIELD]: store }, false);
-      }
-      if (window.SillyTavern && typeof window.SillyTavern.saveChat === 'function') {
-        await window.SillyTavern.saveChat();
-      }
-    } catch (e) { /* 静默 */ }
-    return true;
+      ctx.updateChatMetadata({ [FIELD]: store }, false);
+      if (typeof ctx.saveMetadata === 'function') await ctx.saveMetadata();
+      else if (typeof ctx.saveChat === 'function') await ctx.saveChat();
+      return true;
+    } catch (e) {
+      console.error('[WarmMemo] 保存记忆失败', e);
+      return false;
+    }
   }
 
   // ── 记忆条目 ──
@@ -127,6 +127,20 @@
   async function setSummaryPointer(idx) { const s = load(); s.summaryPointer = idx; await save(s); }
   function getSummaryPointer() { return load().summaryPointer || 0; }
 
+  // ── 导出 / 导入（备份防丢） ──
+  function exportJSON() {
+    const s = load();
+    return JSON.stringify({ type: 'warmmemo_v2', exportedAt: Date.now(), data: s }, null, 2);
+  }
+  async function importJSON(text) {
+    const obj = JSON.parse(text);
+    const data = obj && obj.data ? obj.data : obj; // 兼容裸对象
+    const base = emptyStore();
+    const merged = Object.assign(base, data);
+    await save(merged);
+    return true;
+  }
+
   WM.MemoryStore = {
     FIELD, emptyStore, load, save,
     addMemory, getMemories,
@@ -135,5 +149,6 @@
     setWorld, getWorld,
     setRelations, getRelations,
     setSummaryPointer, getSummaryPointer,
+    exportJSON, importJSON,
   };
 })();

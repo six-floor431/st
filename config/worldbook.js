@@ -1,16 +1,22 @@
 // 世界设定模块：
 // 1) 客观读取：角色卡 description/personality、用户卡、世界书（lorebook）现有条目、当前总结。
 // 2) 用 LLM 推断当前世界观设定（背景、势力、规则、地点等）。
-// 3) 写回：存 chat_metadata（WM.MemoryStore.setWorld）+ 可选写入世界书条目（让所有对话共享世界观）。
+// 3) 写回：存 chat_metadata（WM.MemoryStore.setWorld，真实持久化+注入）；
+//    可选写入世界书（需真实 API：ctx.saveWorldInfo(name, data)，name 在设置里填）。
 (function () {
   'use strict';
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
-  // 读取角色卡信息（酒馆全局）
+  function getCtx() {
+    return window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+  }
+
+  // 读取角色卡信息（真实字段）
   function getCharacterCard() {
     try {
-      const ctx = window.SillyTavern && window.SillyTavern.getContext();
-      const card = (ctx && ctx.characters && ctx.characters[ctx.characterId]) || null;
+      const ctx = getCtx();
+      const id = ctx && (ctx.characterId !== undefined ? ctx.characterId : ctx.currentCharacterId);
+      const card = (ctx && ctx.characters && ctx.characters[id]) || (ctx && ctx.character);
       if (!card) return null;
       return {
         name: card.name,
@@ -25,40 +31,51 @@
   // 读取用户卡 / 人物卡
   function getUserCard() {
     try {
-      const ctx = window.SillyTavern && window.SillyTavern.getContext();
+      const ctx = getCtx();
       const u = ctx && ctx.user;
       if (!u) return null;
       return { name: u.name || '', description: u.description || '' };
     } catch (e) { return null; }
   }
 
-  // 读取世界书（lorebook）现有条目
+  // 读取世界书（lorebook）现有条目（尽力而为：优先 extensionSettings.worldInfo 数组）
   function getLorebookEntries() {
     try {
-      const ctx = window.SillyTavern && window.SillyTavern.getContext();
-      const lore = ctx && ctx.extensionSettings && ctx.extensionSettings.worldInfo;
-      if (lore && Array.isArray(lore)) {
-        return lore.map((e) => ({ key: e.key || e.comment || '', content: e.content || '' }));
+      const ctx = getCtx();
+      const wi = ctx && ctx.extensionSettings && ctx.extensionSettings.worldInfo;
+      if (Array.isArray(wi)) {
+        return wi.map((e) => ({ key: (e && (e.key || e.comment)) || '', content: (e && e.content) || '' }));
       }
       return [];
     } catch (e) { return []; }
   }
 
-  // 把世界观写入世界书（新增/更新一条）
+  // 写入世界书（真实 API：ctx.saveWorldInfo(name, data)）
+  // 需要世界书名（settings.lorebookName）。无名字则仅在 chat_metadata 存（仍注入）。
   async function writeToLorebook(title, content) {
+    const ctx = getCtx();
+    const s = WM.Settings.load();
+    const name = s.lorebookName;
+    if (!name) return { ok: false, reason: 'no_name' };
+    if (!ctx || typeof ctx.saveWorldInfo !== 'function') return { ok: false, reason: 'api_missing' };
     try {
-      const ctx = window.SillyTavern && window.SillyTavern.getContext();
-      const lore = ctx && ctx.extensionSettings && ctx.extensionSettings.worldInfo;
-      if (!Array.isArray(lore)) return false;
-      const uid = (ctx.extensionSettings && ctx.extensionSettings.worldInfo) || lore;
-      const found = lore.find((e) => (e.comment || '').includes('[WarmMemo世界观]'));
-      const entry = found || { key: [], content: '' };
-      if (!found) { entry.comment = '[WarmMemo世界观] ' + title; lore.push(entry); }
-      entry.content = content;
-      if (!entry.key) entry.key = [];
-      if (typeof window.SillyTavern.saveWorldInfo === 'function') await window.SillyTavern.saveWorldInfo();
-      return true;
-    } catch (e) { return false; }
+      // 世界书 v2 结构：{ entries: { [uid]: { comment, content, ... } } }
+      const data = { entries: {} };
+      const uid = Date.now();
+      data.entries[uid] = {
+        comment: '[WarmMemo世界观] ' + (title || '世界观'),
+        content,
+        constant: true,
+        enabled: true,
+        insertion_order: 0,
+        position: 'before_char',
+        depth: 4,
+      };
+      await ctx.saveWorldInfo(name, data);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: e.message || 'write_failed' };
+    }
   }
 
   // 推断世界观：综合角色卡+用户卡+世界书+当前总结
@@ -70,7 +87,7 @@
     const prevWorld = WM.MemoryStore.getWorld() || '';
     const memories = WM.MemoryStore.getMemories();
     const recent = memories.slice(-40).map((m) => m.text).join('\n');
-    const extra = opts.extraInstruction || ''; // 用户自定义更新内容
+    const extra = opts.extraInstruction || '';
 
     const sys = `你是世界观整理助手。请基于以下【素材】整理/更新【世界观设定】。
 素材包含：角色卡设定、用户卡、世界书现有条目、已有的世界观、近期有温度记忆、用户补充指令。
@@ -88,7 +105,8 @@
     userMsg += `请输出更新后的世界观设定：`;
 
     const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 1200 });
-    return out ? out.trim() : '';
+    if (!out || !out.trim()) throw new Error('世界观 LLM 调用失败（未返回内容，检查模型配置）');
+    return out.trim();
   }
 
   WM.Worldbook = { getCharacterCard, getUserCard, getLorebookEntries, writeToLorebook, inferWorldview };

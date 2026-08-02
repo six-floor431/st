@@ -66,13 +66,15 @@
   }
 
   // complete：summary 等子模块用；基于新 settings 字段（summaryModel/summaryBaseUrl/summaryApiKey）
+  // 行为：若配了 key 或 model → 真实直连 /chat/completions；否则真实回退酒馆 shared-api。
+  // 关键：失败时**明确抛错**（不返回空字符串伪装成功），让上层 UI 显示真实原因。
   async function complete(messages, opts) {
     opts = opts || {};
-    const s = (opts.settings) || (await WM.Settings.load());
+    const s = opts.settings || (await WM.Settings.load());
     const baseUrl = s.summaryBaseUrl || 'https://api.openai.com/v1';
     const apiKey = s.summaryApiKey || '';
     const model = opts.model || s.summaryModel || '';
-    // 有配置 key 或模型名 → 直连独立 API；否则回退酒馆 shared-api
+
     if (apiKey || model) {
       try {
         return await callIndependent(messages, {
@@ -81,11 +83,21 @@
           max_tokens: opts.max_tokens,
         });
       } catch (e) {
-        console.warn('[WarmMemo] 独立API失败，回退 shared-api:', e.message);
-        return await callShared(messages);
+        // 仅在确实配了独立 API 但失败时才回退；回退失败则抛明确错误
+        console.warn('[WarmMemo] 独立API失败，尝试回退 shared-api:', e.message);
+        try {
+          return await callShared(messages);
+        } catch (e2) {
+          throw new Error('LLM 调用失败：独立API(' + e.message + ') 且 shared-api(' + e2.message + ')。请在设置中填写有效的总结模型 API。');
+        }
       }
     }
-    return await callShared(messages);
+    // 未配置独立 API：直接走 shared-api，失败抛明确错误（不静默）
+    try {
+      return await callShared(messages);
+    } catch (e) {
+      throw new Error('未配置总结模型且酒馆 shared-api 不可用：' + e.message + '。请在设置中填写 BaseURL/Key/模型名。');
+    }
   }
 
   WM.LLMClient = { generate, complete, callIndependent, callShared, normalizeBaseUrl };

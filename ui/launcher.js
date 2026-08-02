@@ -125,29 +125,57 @@
     body.querySelector('#a-run').onclick = async () => {
       const st = body.querySelector('#auto-status');
       st.textContent = '总结中…';
-      const r = await WM.Summary.runSummary(s);
-      st.textContent = r.ok ? `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range}），关系${r.results.relations||0}/剧情${r.results.plots||0}/世界${r.results.world?'✓':'×'}/物品${r.results.items||0}` : '✗ ' + (r.reason || '失败');
+      try {
+        const r = await WM.Summary.runSummary(s);
+        st.textContent = r.ok
+          ? `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}），关系${r.results.relations} 剧情${r.results.plots} 世界${r.results.world ? '✓' : '×'} 物品${r.results.items}`
+          : '✗ ' + (r.reason || '失败');
+      } catch (e) {
+        st.textContent = '✗ ' + (e.message || e);
+      }
     };
   }
 
   function renderMem(body) {
     const mem = WM.MemoryStore.getMemories();
     let html = `<div class="wm-card"><div class="wm-h">有温度记忆（${mem.length}）</div>
+      <div class="wm-actions">
+        <button id="mem-export" class="wm-btn">导出</button>
+        <button id="mem-import" class="wm-btn">导入</button>
+      </div>
       <input class="wm-search" id="mem-search" placeholder="检索记忆…"/>
       <div class="wm-list" id="mem-list">`;
     html += mem.slice().reverse().map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
     html += `</div></div>`;
     body.innerHTML = html;
+    // 导出
+    body.querySelector('#mem-export').onclick = () => {
+      const blob = new Blob([WM.MemoryStore.exportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'warmmemo-memory-' + Date.now() + '.json';
+      a.click();
+    };
+    // 导入
+    body.querySelector('#mem-import').onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'application/json';
+      inp.onchange = async () => {
+        const txt = await inp.files[0].text();
+        try { await WM.MemoryStore.importJSON(txt); renderMem(body); toast('🌿 记忆已导入'); }
+        catch (e) { toast('🌿 导入失败：' + (e.message || e)); }
+      };
+      inp.click();
+    };
     body.querySelector('#mem-search').oninput = async (e) => {
       const q = e.target.value.trim();
-      let list;
-      if (q && WM.VectorStore && WM.VectorStore.enabled) {
+      let list = mem;
+      if (q && WM.VectorStore) {
         WM.VectorStore.lastQuery = q;
-        list = WM.VectorStore.search(mem, q, 15);
-      } else if (q) {
-        list = mem.filter((m) => m.text.includes(q));
-      } else list = mem;
-      body.querySelector('#mem-list').innerHTML = (list.length ? list.reverse() : list).map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">无匹配</div>';
+        if (WM.VectorStore.enabled) { list = await WM.VectorStore.search(mem, q, 15); }
+        else list = mem.filter((m) => m.text.includes(q));
+      }
+      body.querySelector('#mem-list').innerHTML = (list.length ? list.slice().reverse() : list).map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">无匹配</div>';
     };
   }
 
@@ -182,6 +210,20 @@
       s += `<text x="${(n.x+8).toFixed(0)}" y="${(n.y+4).toFixed(0)}" font-size="9" fill="#5b4a3f">${escapeHtml(n.id.length>6?n.id.slice(0,6)+'…':n.id)}</text>`;
     });
     svg.innerHTML = s;
+    // 点击节点：显示该实体关系详情
+    svg.querySelectorAll('.wm-node').forEach((c) => {
+      c.addEventListener('click', () => {
+        const name = c.getAttribute('data-name');
+        const rels = WM.MemoryStore.getRelations().filter((r) => r.from === name || r.to === name);
+        const listEl = document.getElementById('rel-list');
+        if (!rels.length) { listEl.innerHTML = `<div class="wm-empty">「${escapeHtml(name)}」暂无关系</div>`; return; }
+        listEl.innerHTML = `<div class="wm-h">「${escapeHtml(name)}」的关系（${rels.length}）</div>` + rels.map((r) => {
+          const other = r.from === name ? r.to : r.from;
+          const dir = r.from === name ? '→' : '←';
+          return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
+        }).join('');
+      });
+    });
     // 拖拽
     svg.querySelectorAll('.wm-node').forEach((c) => {
       c.addEventListener('mousedown', (ev) => {
@@ -240,10 +282,12 @@
   function renderWorld(body) {
     const s = WM.Settings.load();
     const world = WM.MemoryStore.getWorld();
+    const loreCount = WM.Worldbook.getLorebookEntries().length;
     body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定</div>
-      <div class="wm-hint">基于角色卡/用户卡/世界书/已有记忆推断，写入并注入上下文</div>
+      <div class="wm-hint">基于角色卡/用户卡/世界书(${loreCount}条)/已有记忆推断，写入并注入上下文</div>
       <textarea id="world-ta" class="wm-ta" placeholder="世界观设定…">${escapeHtml(world)}</textarea>
       <div class="wm-row"><input id="world-extra" placeholder="自定义更新指令（可选）" style="flex:1"/></div>
+      <div class="wm-row"><input id="world-lorename" placeholder="世界书名（同步世界书用，如 lorebook）" value="${s.lorebookName || ''}" style="flex:1"/></div>
       <label class="wm-row"><input type="checkbox" id="world-lore" ${s.worldToLorebook?'checked':''}/> 同步写入世界书（所有对话共享）</label>
       <div class="wm-actions">
         <button id="world-save" class="wm-btn">保存</button>
@@ -251,18 +295,28 @@
       </div>
       <div class="wm-status" id="world-status"></div></div>`;
     body.querySelector('#world-save').onclick = async () => {
+      s.lorebookName = body.querySelector('#world-lorename').value.trim();
+      WM.Settings.save(s);
       await WM.MemoryStore.setWorld(body.querySelector('#world-ta').value);
-      body.querySelector('#world-status').textContent = '✓ 已保存';
+      body.querySelector('#world-status').textContent = '✓ 已保存（记忆+注入）';
     };
     body.querySelector('#world-gen').onclick = async () => {
       const st = body.querySelector('#world-status'); st.textContent = '推断中…';
-      const w = await WM.Worldbook.inferWorldview(s, { extraInstruction: body.querySelector('#world-extra').value });
-      if (w) {
+      try {
+        s.lorebookName = body.querySelector('#world-lorename').value.trim();
+        WM.Settings.save(s);
+        const w = await WM.Worldbook.inferWorldview(s, { extraInstruction: body.querySelector('#world-extra').value });
         body.querySelector('#world-ta').value = w;
         await WM.MemoryStore.setWorld(w);
-        if (body.querySelector('#world-lore').checked) await WM.Worldbook.writeToLorebook('世界观', w);
-        st.textContent = '✓ 世界观已更新';
-      } else st.textContent = '✗ 推断失败，请检查模型配置';
+        if (body.querySelector('#world-lore').checked) {
+          const r = await WM.Worldbook.writeToLorebook('世界观', w);
+          st.textContent = r.ok ? '✓ 世界观已更新并写入世界书' : ('✓ 已存对话记忆；世界书未写（' + (r.reason === 'no_name' ? '请填世界书名' : r.reason) + '）');
+        } else {
+          st.textContent = '✓ 世界观已更新（仅对话记忆+注入）';
+        }
+      } catch (e) {
+        st.textContent = '✗ ' + (e.message || e);
+      }
     };
   }
 
@@ -314,13 +368,36 @@
       const total = WM.Summary.getChatMessages().length;
       range = { start: s.autoSummaryStart, end: s.autoSummaryEnd < 0 ? total - 1 : Math.min(s.autoSummaryEnd, total - 1) };
     }
-    // 'new' 模式：runSummary 内部从 summaryPointer 继续
     setTimeout(async () => {
-      const r = await WM.Summary.runSummary(s, range);
-      if (r.ok && s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
-        await WM.FloorHider.hideUntil(r.range[1]);
+      try {
+        const r = await WM.Summary.runSummary(s, range);
+        if (r.ok) {
+          if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+            await WM.FloorHider.hideUntil(r.range[1]);
+          }
+          toast(`🌿 温记：已提炼 ${r.count} 条记忆`);
+        } else {
+          toast(`🌿 温记：总结未执行（${r.reason}）`);
+        }
+      } catch (e) {
+        toast(`🌿 温记：总结失败 - ${e.message || e}`);
       }
     }, 1500);
+  }
+
+  // 轻量 toast 提示（面板未开也能看到）
+  function toast(msg) {
+    let t = document.getElementById('warmmemo-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'warmmemo-toast';
+      t.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);background:rgba(91,110,87,.95);color:#fff;padding:6px 14px;border-radius:12px;font-size:12px;z-index:10000;box-shadow:0 4px 14px rgba(0,0,0,.2)';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .5s'; }, 3200);
   }
 
   WM.Launcher = { init, renderTab };

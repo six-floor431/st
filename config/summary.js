@@ -8,21 +8,33 @@
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
   // 统一的 LLM 调用入口（供 relations/plot/worldbook/items 复用）
+  // 真实调用：直接 await LLMClient.complete，失败则抛出明确错误（不伪装成功）。
   async function callLLM(system, user, settings, opts) {
     settings = settings || WM.Settings.load();
     opts = opts || {};
     const prompt = [{ role: 'system', content: system }, { role: 'user', content: user }];
-    try {
-      const out = await WM.LLMClient.complete(prompt, {
-        temperature: opts.temperature != null ? opts.temperature : 0.3,
-        max_tokens: opts.maxTokens || 700,
-        model: settings.summaryModel || '',
-      });
-      return out || '';
-    } catch (e) {
-      console.error('[WarmMemo] LLM 调用失败', e);
-      return '';
+    const out = await WM.LLMClient.complete(prompt, {
+      temperature: opts.temperature != null ? opts.temperature : 0.3,
+      max_tokens: opts.maxTokens || 700,
+      model: settings.summaryModel || '',
+      settings,
+    });
+    return out || '';
+  }
+
+  // 记忆去重：若新记忆与已有记忆高度相似则合并（覆盖旧文本），否则新增
+  function dedupeMemory(text, range) {
+    const s = WM.MemoryStore.load();
+    const t = text.trim();
+    const sim = s.memories.find((m) => m.text === t || m.text.includes(t) || t.includes(m.text));
+    if (sim) {
+      sim.text = t; // 更新为更完整的表述
+      sim.ts = Date.now();
+      if (range) sim.range = range;
+      WM.MemoryStore.save(s);
+      return sim.id;
     }
+    return WM.MemoryStore.addMemory(t, range);
   }
 
   // 抓取对话楼层文本
@@ -68,39 +80,46 @@
     userMsg += `【新对话（楼层 ${start}-${end}）】\n${slice}\n\n请输出本次提炼的记忆：`;
 
     const out = await callLLM(sys, userMsg, settings, { maxTokens: 1000, temperature: 0.35 });
-    if (!out || !out.trim()) return { ok: false, reason: 'llm_empty' };
+    if (!out || !out.trim()) return { ok: false, reason: 'llm_empty_or_failed' };
 
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
-    for (const line of lines) await WM.MemoryStore.addMemory(line, [start, end]);
+    for (const line of lines) await dedupeMemory(line, [start, end]);
 
     // 更新总结指针（用于自动隐藏已处理楼层）
     await WM.MemoryStore.setSummaryPointer(end + 1);
 
-    // 分派子任务（真实调用）
-    const results = {};
+    // 分派子任务（真实调用，失败抛错由上层捕获显示）
+    const results = { relations: 0, plots: 0, world: false, items: 0 };
     if (settings.autoRelation) {
-      const rels = await WM.Relations.extractRelations(lines.join('\n'), settings);
-      results.relations = rels.length;
-      const merged = WM.Relations.mergeRelations(WM.MemoryStore.getRelations(), rels);
-      await WM.MemoryStore.setRelations(merged);
+      try {
+        const rels = await WM.Relations.extractRelations(lines.join('\n'), settings);
+        results.relations = rels.length;
+        const merged = WM.Relations.mergeRelations(WM.MemoryStore.getRelations(), rels);
+        await WM.MemoryStore.setRelations(merged);
+      } catch (e) { results.relationsErr = e.message; }
     }
     if (settings.autoPlot) {
-      const plots = await WM.Plot.extractPlots(settings);
-      if (plots.length) {
-        // 覆盖式更新剧情线
-        const s = WM.MemoryStore.load();
-        s.plots = plots.map((p) => ({ id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), title: p.title, summary: p.summary, status: p.status, ts: Date.now() }));
-        await WM.MemoryStore.save(s);
-        results.plots = plots.length;
-      }
+      try {
+        const plots = await WM.Plot.extractPlots(settings);
+        if (plots.length) {
+          const s = WM.MemoryStore.load();
+          s.plots = plots.map((p) => ({ id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), title: p.title, summary: p.summary, status: p.status, ts: Date.now() }));
+          await WM.MemoryStore.save(s);
+          results.plots = plots.length;
+        }
+      } catch (e) { results.plotsErr = e.message; }
     }
     if (settings.autoWorld) {
-      const world = await WM.Worldbook.inferWorldview(settings);
-      if (world) { await WM.MemoryStore.setWorld(world); results.world = true; }
+      try {
+        const world = await WM.Worldbook.inferWorldview(settings);
+        if (world) { await WM.MemoryStore.setWorld(world); results.world = true; }
+      } catch (e) { results.worldErr = e.message; }
     }
     if (settings.autoItems) {
-      const items = await extractItems(settings, lines.join('\n'));
-      if (items.length) { for (const it of items) await WM.MemoryStore.addItem(it.name, it.desc, it.owner); results.items = items.length; }
+      try {
+        const items = await extractItems(settings, lines.join('\n'));
+        if (items.length) { for (const it of items) await WM.MemoryStore.addItem(it.name, it.desc, it.owner); results.items = items.length; }
+      } catch (e) { results.itemsErr = e.message; }
     }
 
     return { ok: true, count: lines.length, range: [start, end], results };

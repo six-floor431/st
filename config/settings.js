@@ -31,6 +31,7 @@
     autoWorld: true,
     autoItems: true,
     worldToLorebook: false,       // 是否把世界观写进世界书
+    lorebookName: '',             // 世界书名（saveWorldInfo 需要，留空则只存对话记忆）
     injectMemories: true,         // 是否注入记忆到上下文
     injectWorld: true,
   };
