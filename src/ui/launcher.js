@@ -162,6 +162,10 @@
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors?'checked':''}/> 总结后隐藏已处理楼层</label>
+        <div class="wm-h" style="margin-top:10px">标签过滤（总结时剔除标签包裹内容）</div>
+        <div class="wm-hint">勾选的规则会在总结时移除其包裹的文字。支持「成对包裹」（如 &lt;think&gt;…&lt;/think&gt;）、「相同标签包裹」（如 &lt;x&gt;…&lt;/x&gt;）、「单标签」（从标签删到末尾）。</div>
+        <div id="tag-rules"></div>
+        <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
         <div class="wm-h" style="margin-top:10px">自动抽取子任务</div>
         <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation?'checked':''}/> 关系图</label>
         <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot?'checked':''}/> 剧情线</label>
@@ -178,6 +182,34 @@
       body.querySelector('#a-count-row').style.display = mode.value === 'count' ? '' : 'none';
       body.querySelector('#a-range-row').style.display = mode.value === 'range' ? '' : 'none';
     };
+
+    // 标签过滤规则渲染
+    function renderTagRules() {
+      const box = body.querySelector('#tag-rules');
+      const rules = s.tagStripRules || (s.tagStripRules = []);
+      box.innerHTML = rules.map((r, i) => `
+        <div class="wm-tag-rule" data-idx="${i}" style="display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap">
+          <input type="checkbox" class="t-on" ${r.enabled ? 'checked' : ''} title="启用"/>
+          <input class="t-open" value="${escapeHtml(r.open || '')}" placeholder="开标签如 &lt;think&gt;" style="flex:1;min-width:90px"/>
+          <span>…</span>
+          <input class="t-close" value="${escapeHtml(r.close || '')}" placeholder="闭标签如 &lt;/think&gt;（留空=单标签）" style="flex:1;min-width:90px"/>
+          <button class="t-del wm-btn" style="padding:2px 8px">删</button>
+        </div>`).join('');
+      box.querySelectorAll('.t-del').forEach((btn) => {
+        btn.onclick = () => {
+          const idx = parseInt(btn.closest('.wm-tag-rule').dataset.idx, 10);
+          s.tagStripRules.splice(idx, 1);
+          renderTagRules();
+        };
+      });
+    }
+    renderTagRules();
+    body.querySelector('#tag-add').onclick = () => {
+      s.tagStripRules = s.tagStripRules || [];
+      s.tagStripRules.push({ name: 'new', open: '<new>', close: '</new>', enabled: true });
+      renderTagRules();
+    };
+
     body.querySelector('#a-save').onclick = () => {
       s.autoSummaryEnabled = body.querySelector('#a-on').checked;
       s.autoSummaryMode = mode.value;
@@ -189,6 +221,13 @@
       s.autoPlot = body.querySelector('#a-plot').checked;
       s.autoWorld = body.querySelector('#a-world').checked;
       s.autoItems = body.querySelector('#a-item').checked;
+      // 收集标签过滤规则（以 DOM 当前输入为准，确保勾选/文本改动都已同步）
+      s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => ({
+        name: (row.querySelector('.t-open').value.match(/<([^>\s/]+)/) || [,''])[1] || 'rule',
+        open: row.querySelector('.t-open').value.trim(),
+        close: row.querySelector('.t-close').value.trim(),
+        enabled: row.querySelector('.t-on').checked,
+      })).filter((r) => r.open);
       WM.Settings.save(s);
       body.querySelector('#auto-status').textContent = '✓ 设置已保存';
     };

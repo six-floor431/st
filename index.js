@@ -36,6 +36,12 @@
       autoPlot: true,
       autoWorld: true,
       autoItems: true,
+      // 总结时剔除「标签包裹」的内容（如 <think>...</think>），规则可自定义
+      // open/close 不同 => 成对包裹（如 think//think）；open/close 相同 => 同标签包裹（如 <x>...</x>）；
+      // close 为空 => 单标签（从 open 删到行尾）。
+      tagStripRules: [
+        { name: "think", open: "<think>", close: "</think>", enabled: true }
+      ],
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
       lorebookName: "WarmMemo",
@@ -971,11 +977,39 @@ ${recent}
       }
       return WM.MemoryStore.addMemory(t, range);
     }
+    function escapeRegExp(s) {
+      return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    function stripTagged(text, rules) {
+      if (!text) return text;
+      const list = rules && rules.filter((r) => r && r.enabled && r.open) || [];
+      if (!list.length) return text;
+      let out = text;
+      for (const r of list) {
+        if (r.close && r.close !== r.open) {
+          out = out.replace(new RegExp(escapeRegExp(r.open) + "[\\s\\S]*?" + escapeRegExp(r.close), "g"), "");
+        } else if (r.close && r.close === r.open) {
+          const m = r.open.match(/<([^>\s/]+)/);
+          if (m) {
+            const name = escapeRegExp(m[1]);
+            out = out.replace(new RegExp("<" + name + "[\\s\\S]*?</" + name + ">", "g"), "");
+          }
+        } else {
+          out = out.replace(new RegExp(escapeRegExp(r.open) + "[\\s\\S]*", "g"), "");
+        }
+      }
+      return out.replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
+    }
     function getChatMessages() {
+      const rules = (WM.Settings.load() || {}).tagStripRules;
       try {
         const ctx = window.SillyTavern && window.SillyTavern.getContext();
         const msgs = ctx && ctx.chat || [];
-        return msgs.map((m, i) => ({ index: i, name: m.name || (m.is_user ? "\u7528\u6237" : "\u89D2\u8272"), text: m.mes || "" }));
+        return msgs.map((m, i) => ({
+          index: i,
+          name: m.name || (m.is_user ? "\u7528\u6237" : "\u89D2\u8272"),
+          text: stripTagged(m.mes || "", rules)
+        }));
       } catch (e) {
         return [];
       }
@@ -1092,7 +1126,7 @@ ${text}
         return [];
       }
     }
-    WM.Summary = { callLLM, runSummary, getChatMessages, extractItems };
+    WM.Summary = { callLLM, runSummary, getChatMessages, extractItems, stripTagged };
   })();
 
   // src/config/relations.js
@@ -1473,6 +1507,10 @@ ${it.desc || ""}` }));
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors ? "checked" : ""}/> \u603B\u7ED3\u540E\u9690\u85CF\u5DF2\u5904\u7406\u697C\u5C42</label>
+        <div class="wm-h" style="margin-top:10px">\u6807\u7B7E\u8FC7\u6EE4\uFF08\u603B\u7ED3\u65F6\u5254\u9664\u6807\u7B7E\u5305\u88F9\u5185\u5BB9\uFF09</div>
+        <div class="wm-hint">\u52FE\u9009\u7684\u89C4\u5219\u4F1A\u5728\u603B\u7ED3\u65F6\u79FB\u9664\u5176\u5305\u88F9\u7684\u6587\u5B57\u3002\u652F\u6301\u300C\u6210\u5BF9\u5305\u88F9\u300D\uFF08\u5982 &lt;think&gt;\u2026&lt;/think&gt;\uFF09\u3001\u300C\u76F8\u540C\u6807\u7B7E\u5305\u88F9\u300D\uFF08\u5982 &lt;x&gt;\u2026&lt;/x&gt;\uFF09\u3001\u300C\u5355\u6807\u7B7E\u300D\uFF08\u4ECE\u6807\u7B7E\u5220\u5230\u672B\u5C3E\uFF09\u3002</div>
+        <div id="tag-rules"></div>
+        <div class="wm-row"><button id="tag-add" class="wm-btn">+ \u65B0\u589E\u6807\u7B7E\u89C4\u5219</button></div>
         <div class="wm-h" style="margin-top:10px">\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</div>
         <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation ? "checked" : ""}/> \u5173\u7CFB\u56FE</label>
         <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
@@ -1489,6 +1527,31 @@ ${it.desc || ""}` }));
         body.querySelector("#a-count-row").style.display = mode.value === "count" ? "" : "none";
         body.querySelector("#a-range-row").style.display = mode.value === "range" ? "" : "none";
       };
+      function renderTagRules() {
+        const box = body.querySelector("#tag-rules");
+        const rules = s.tagStripRules || (s.tagStripRules = []);
+        box.innerHTML = rules.map((r, i) => `
+        <div class="wm-tag-rule" data-idx="${i}" style="display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap">
+          <input type="checkbox" class="t-on" ${r.enabled ? "checked" : ""} title="\u542F\u7528"/>
+          <input class="t-open" value="${escapeHtml(r.open || "")}" placeholder="\u5F00\u6807\u7B7E\u5982 &lt;think&gt;" style="flex:1;min-width:90px"/>
+          <span>\u2026</span>
+          <input class="t-close" value="${escapeHtml(r.close || "")}" placeholder="\u95ED\u6807\u7B7E\u5982 &lt;/think&gt;\uFF08\u7559\u7A7A=\u5355\u6807\u7B7E\uFF09" style="flex:1;min-width:90px"/>
+          <button class="t-del wm-btn" style="padding:2px 8px">\u5220</button>
+        </div>`).join("");
+        box.querySelectorAll(".t-del").forEach((btn) => {
+          btn.onclick = () => {
+            const idx = parseInt(btn.closest(".wm-tag-rule").dataset.idx, 10);
+            s.tagStripRules.splice(idx, 1);
+            renderTagRules();
+          };
+        });
+      }
+      renderTagRules();
+      body.querySelector("#tag-add").onclick = () => {
+        s.tagStripRules = s.tagStripRules || [];
+        s.tagStripRules.push({ name: "new", open: "<new>", close: "</new>", enabled: true });
+        renderTagRules();
+      };
       body.querySelector("#a-save").onclick = () => {
         s.autoSummaryEnabled = body.querySelector("#a-on").checked;
         s.autoSummaryMode = mode.value;
@@ -1500,6 +1563,12 @@ ${it.desc || ""}` }));
         s.autoPlot = body.querySelector("#a-plot").checked;
         s.autoWorld = body.querySelector("#a-world").checked;
         s.autoItems = body.querySelector("#a-item").checked;
+        s.tagStripRules = Array.from(body.querySelectorAll("#tag-rules .wm-tag-rule")).map((row) => ({
+          name: (row.querySelector(".t-open").value.match(/<([^>\s/]+)/) || [, ""])[1] || "rule",
+          open: row.querySelector(".t-open").value.trim(),
+          close: row.querySelector(".t-close").value.trim(),
+          enabled: row.querySelector(".t-on").checked
+        })).filter((r) => r.open);
         WM.Settings.save(s);
         body.querySelector("#auto-status").textContent = "\u2713 \u8BBE\u7F6E\u5DF2\u4FDD\u5B58";
       };

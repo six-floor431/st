@@ -37,12 +37,51 @@
     return WM.MemoryStore.addMemory(t, range);
   }
 
-  // 抓取对话楼层文本
+  // 把字符串转义为正则源（标签内容可能含 < > 等）
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // 按规则剔除「标签包裹」的内容（如 <think>...</think>）
+  // rule.open/close 不同 => 成对包裹（如 think//think）；
+  // rule.open/close 相同 => 同标签包裹（如 <x>...</x>）；
+  // rule.close 为空 => 单标签（从 open 删到行尾）。
+  function stripTagged(text, rules) {
+    if (!text) return text;
+    const list = (rules && rules.filter((r) => r && r.enabled && r.open)) || [];
+    if (!list.length) return text;
+    let out = text;
+    for (const r of list) {
+      if (r.close && r.close !== r.open) {
+        // 成对包裹（不同标签），如 <think>...</think>
+        out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*?' + escapeRegExp(r.close), 'g'), '');
+      } else if (r.close && r.close === r.open) {
+        // 相同标签包裹，如 <x>...</x>：提取标签名构造 <name>...</name>
+        const m = r.open.match(/<([^>\s/]+)/);
+        if (m) {
+          const name = escapeRegExp(m[1]);
+          out = out.replace(new RegExp('<' + name + '[\\s\\S]*?</' + name + '>', 'g'), '');
+        }
+      } else {
+        // 单标签：从 open（含）删到行尾
+        out = out.replace(new RegExp(escapeRegExp(r.open) + '[\\s\\S]*', 'g'), '');
+      }
+    }
+    // 清理残留的空行与首尾空白
+    return out.replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+  }
+
+  // 抓取对话楼层文本（已剔除标签包裹内容）
   function getChatMessages() {
+    const rules = (WM.Settings.load() || {}).tagStripRules;
     try {
       const ctx = window.SillyTavern && window.SillyTavern.getContext();
       const msgs = (ctx && ctx.chat) || [];
-      return msgs.map((m, i) => ({ index: i, name: m.name || (m.is_user ? '用户' : '角色'), text: m.mes || '' }));
+      return msgs.map((m, i) => ({
+        index: i,
+        name: m.name || (m.is_user ? '用户' : '角色'),
+        text: stripTagged(m.mes || '', rules),
+      }));
     } catch (e) { return []; }
   }
 
@@ -147,5 +186,5 @@
     } catch (e) { return []; }
   }
 
-  WM.Summary = { callLLM, runSummary, getChatMessages, extractItems };
+  WM.Summary = { callLLM, runSummary, getChatMessages, extractItems, stripTagged };
 })();
