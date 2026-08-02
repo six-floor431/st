@@ -399,10 +399,18 @@
       <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
       <label class="wm-row">模型名<input id="c-model" value="${s.summaryModel}" placeholder="如 gpt-4o-mini"/></label>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索
-        <span class="wm-muted">Embed:${s.embeddingBaseUrl||'未填'}</span></label>
-      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
+        <input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）
         <input type="checkbox" id="c-injw" ${s.injectWorld?'checked':''}/> 含世界观</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">Embedding（向量）配置</div>
+      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选"/></label>
+      <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-h">Rerank（重排序）配置</div>
+      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
+      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
+      <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
       <div class="wm-h">世界书（数据按角色卡隔离）</div>
       <label class="wm-row">世界书名<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
@@ -411,8 +419,15 @@
       <div class="wm-h">接管酒馆向量 / 重排序</div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>
-      <div class="wm-actions"><button id="c-save" class="wm-btn primary">保存设置</button></div>
+      <div class="wm-divider"></div>
+      <div class="wm-actions">
+        <button id="c-test" class="wm-btn">测试连接</button>
+        <button id="c-save" class="wm-btn primary">保存设置</button>
+      </div>
+      <div id="c-test-result" class="wm-test-box"></div>
       <div class="wm-hint">不填模型即回退酒馆自带 shared-api（textgeneration）。本地反代填 127.0.0.1。</div></div>`;
+
+    // 保存
     body.querySelector('#c-save').onclick = () => {
       s.summaryBaseUrl = body.querySelector('#c-base').value;
       s.summaryApiKey = body.querySelector('#c-key').value;
@@ -421,6 +436,12 @@
       s.rerankEnabled = body.querySelector('#c-rerank').checked;
       s.injectMemories = body.querySelector('#c-inj').checked;
       s.injectWorld = body.querySelector('#c-injw').checked;
+      s.embeddingBaseUrl = body.querySelector('#c-emb-url').value;
+      s.embeddingApiKey = body.querySelector('#c-emb-key').value;
+      s.embeddingModel = body.querySelector('#c-emb-model').value;
+      s.rerankBaseUrl = body.querySelector('#c-rk-url').value;
+      s.rerankApiKey = body.querySelector('#c-rk-key').value;
+      s.rerankModel = body.querySelector('#c-rk-model').value;
       s.lorebookName = body.querySelector('#c-lore').value.trim();
       s.worldToLorebook = body.querySelector('#c-wlore').checked;
       s.takeoverEmbedding = body.querySelector('#c-take-emb').checked;
@@ -428,6 +449,51 @@
       WM.Settings.save(s);
       if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
       body.querySelector('.wm-hint').textContent = '✓ 已保存（世界书已绑定当前角色卡）';
+    };
+
+    // 测试连接：逐项验证各 API 是否连通
+    body.querySelector('#c-test').onclick = async () => {
+      const box = body.querySelector('#c-test-result');
+      // 先按当前输入构造临时 settings（不覆盖已保存）
+      const tmp = Object.assign({}, WM.Settings.load(), {
+        summaryBaseUrl: body.querySelector('#c-base').value,
+        summaryApiKey: body.querySelector('#c-key').value,
+        summaryModel: body.querySelector('#c-model').value,
+        embeddingBaseUrl: body.querySelector('#c-emb-url').value,
+        embeddingApiKey: body.querySelector('#c-emb-key').value,
+        embeddingModel: body.querySelector('#c-emb-model').value,
+        rerankBaseUrl: body.querySelector('#c-rk-url').value,
+        rerankApiKey: body.querySelector('#c-rk-key').value,
+        rerankModel: body.querySelector('#c-rk-model').value,
+      });
+      box.innerHTML = '<div class="wm-test-item">⏳ 测试中…</div>';
+      const rows = [];
+      const add = (name, r, detail) => {
+        const ok = r && r.success;
+        rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
+      };
+      // 1) 世界书（酒馆 TavernHelper）
+      try {
+        const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
+        if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
+        else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
+      } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
+      // 2) 总结模型（LLM）
+      try { add('总结模型(LLM)', await WM.LLMClient.testConnection(tmp), ''); }
+      catch (e) { add('总结模型(LLM)', { success: false }, String(e.message || e)); }
+      // 3) Embedding（仅在启用时测）
+      try {
+        if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
+          add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '');
+        else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+      } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
+      // 4) Rerank（仅在启用时测）
+      try {
+        if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
+          add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '');
+        else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+      } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
+      box.innerHTML = rows.join('');
     };
   }
 
@@ -489,6 +555,6 @@
     t._timer = setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .5s'; }, 3200);
   }
 
-  WM.Launcher = { init, renderTab };
+  WM.Launcher = { init, renderTab, renderCfg, renderWorld };
 })();
 

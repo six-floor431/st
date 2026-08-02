@@ -100,5 +100,19 @@
     }
   }
 
-  WM.LLMClient = { generate, complete, callIndependent, callShared, normalizeBaseUrl };
+  // 测试连接：发一个最小请求，验证总结模型（独立 API 或酒馆 shared-api）是否可用
+  async function testConnection(settings) {
+    try {
+      const out = await complete(
+        [{ role: 'user', content: '请只回复两个字：ok' }],
+        { settings: settings, max_tokens: 8, temperature: 0 }
+      );
+      const ok = typeof out === 'string' && out.length > 0;
+      return { success: ok, detail: ok ? ('模型返回: ' + out.slice(0, 40)) : '返回为空' };
+    } catch (e) {
+      return { success: false, error: String(e.message || e) };
+    }
+  }
+
+  WM.LLMClient = { generate, complete, callIndependent, callShared, testConnection, normalizeBaseUrl };
 })();

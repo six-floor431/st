@@ -461,7 +461,19 @@ ${it.desc || ""}`.trim(),
         throw new Error("\u672A\u914D\u7F6E\u603B\u7ED3\u6A21\u578B\u4E14\u9152\u9986 shared-api \u4E0D\u53EF\u7528\uFF1A" + e.message + "\u3002\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 BaseURL/Key/\u6A21\u578B\u540D\u3002");
       }
     }
-    WM.LLMClient = { generate, complete, callIndependent, callShared, normalizeBaseUrl };
+    async function testConnection(settings) {
+      try {
+        const out = await complete(
+          [{ role: "user", content: "\u8BF7\u53EA\u56DE\u590D\u4E24\u4E2A\u5B57\uFF1Aok" }],
+          { settings, max_tokens: 8, temperature: 0 }
+        );
+        const ok = typeof out === "string" && out.length > 0;
+        return { success: ok, detail: ok ? "\u6A21\u578B\u8FD4\u56DE: " + out.slice(0, 40) : "\u8FD4\u56DE\u4E3A\u7A7A" };
+      } catch (e) {
+        return { success: false, error: String(e.message || e) };
+      }
+    }
+    WM.LLMClient = { generate, complete, callIndependent, callShared, testConnection, normalizeBaseUrl };
   })();
 
   // src/config/vector-store.js
@@ -1721,10 +1733,18 @@ ${it.desc || ""}` }));
       <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
       <label class="wm-row">\u6A21\u578B\u540D<input id="c-model" value="${s.summaryModel}" placeholder="\u5982 gpt-4o-mini"/></label>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22
-        <span class="wm-muted">Embed:${s.embeddingBaseUrl || "\u672A\u586B"}</span></label>
-      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
+        <input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09
         <input type="checkbox" id="c-injw" ${s.injectWorld ? "checked" : ""}/> \u542B\u4E16\u754C\u89C2</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
+      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-h">Rerank\uFF08\u91CD\u6392\u5E8F\uFF09\u914D\u7F6E</div>
+      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
+      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
       <div class="wm-h">\u4E16\u754C\u4E66\uFF08\u6570\u636E\u6309\u89D2\u8272\u5361\u9694\u79BB\uFF09</div>
       <label class="wm-row">\u4E16\u754C\u4E66\u540D<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
@@ -1733,7 +1753,12 @@ ${it.desc || ""}` }));
       <div class="wm-h">\u63A5\u7BA1\u9152\u9986\u5411\u91CF / \u91CD\u6392\u5E8F</div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
-      <div class="wm-actions"><button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button></div>
+      <div class="wm-divider"></div>
+      <div class="wm-actions">
+        <button id="c-test" class="wm-btn">\u6D4B\u8BD5\u8FDE\u63A5</button>
+        <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
+      </div>
+      <div id="c-test-result" class="wm-test-box"></div>
       <div class="wm-hint">\u4E0D\u586B\u6A21\u578B\u5373\u56DE\u9000\u9152\u9986\u81EA\u5E26 shared-api\uFF08textgeneration\uFF09\u3002\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
       body.querySelector("#c-save").onclick = () => {
         s.summaryBaseUrl = body.querySelector("#c-base").value;
@@ -1743,6 +1768,12 @@ ${it.desc || ""}` }));
         s.rerankEnabled = body.querySelector("#c-rerank").checked;
         s.injectMemories = body.querySelector("#c-inj").checked;
         s.injectWorld = body.querySelector("#c-injw").checked;
+        s.embeddingBaseUrl = body.querySelector("#c-emb-url").value;
+        s.embeddingApiKey = body.querySelector("#c-emb-key").value;
+        s.embeddingModel = body.querySelector("#c-emb-model").value;
+        s.rerankBaseUrl = body.querySelector("#c-rk-url").value;
+        s.rerankApiKey = body.querySelector("#c-rk-key").value;
+        s.rerankModel = body.querySelector("#c-rk-model").value;
         s.lorebookName = body.querySelector("#c-lore").value.trim();
         s.worldToLorebook = body.querySelector("#c-wlore").checked;
         s.takeoverEmbedding = body.querySelector("#c-take-emb").checked;
@@ -1750,6 +1781,55 @@ ${it.desc || ""}` }));
         WM.Settings.save(s);
         if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
         body.querySelector(".wm-hint").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u4E16\u754C\u4E66\u5DF2\u7ED1\u5B9A\u5F53\u524D\u89D2\u8272\u5361\uFF09";
+      };
+      body.querySelector("#c-test").onclick = async () => {
+        const box = body.querySelector("#c-test-result");
+        const tmp = Object.assign({}, WM.Settings.load(), {
+          summaryBaseUrl: body.querySelector("#c-base").value,
+          summaryApiKey: body.querySelector("#c-key").value,
+          summaryModel: body.querySelector("#c-model").value,
+          embeddingBaseUrl: body.querySelector("#c-emb-url").value,
+          embeddingApiKey: body.querySelector("#c-emb-key").value,
+          embeddingModel: body.querySelector("#c-emb-model").value,
+          rerankBaseUrl: body.querySelector("#c-rk-url").value,
+          rerankApiKey: body.querySelector("#c-rk-key").value,
+          rerankModel: body.querySelector("#c-rk-model").value
+        });
+        box.innerHTML = '<div class="wm-test-item">\u23F3 \u6D4B\u8BD5\u4E2D\u2026</div>';
+        const rows = [];
+        const add = (name, r, detail) => {
+          const ok = r && r.success;
+          rows.push(`<div class="wm-test-item ${ok ? "wm-ok" : "wm-bad"}">${ok ? "\u2705" : "\u274C"} ${name}${ok ? "\uFF1A" + (detail || "") : "\uFF1A" + (r && r.error || "\u5931\u8D25")}</div>`);
+        };
+        try {
+          const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
+          if (wbOk) {
+            const b = await WM.Worldbook.ensureLorebook();
+            add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: b }, b ? "\u5DF2\u5C31\u7EEA\uFF1A" + WM.Worldbook.targetName() : "");
+          } else add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, "TavernHelper \u4E0D\u53EF\u7528");
+        } catch (e) {
+          add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
+        }
+        try {
+          add("\u603B\u7ED3\u6A21\u578B(LLM)", await WM.LLMClient.testConnection(tmp), "");
+        } catch (e) {
+          add("\u603B\u7ED3\u6A21\u578B(LLM)", { success: false }, String(e.message || e));
+        }
+        try {
+          if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
+            add("Embedding(\u5411\u91CF)", await WM.EmbeddingClient.testConnection(tmp), "");
+          else add("Embedding(\u5411\u91CF)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
+        } catch (e) {
+          add("Embedding(\u5411\u91CF)", { success: false }, String(e.message || e));
+        }
+        try {
+          if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
+            add("Rerank(\u91CD\u6392)", await WM.RerankClient.testConnection(tmp), "");
+          else add("Rerank(\u91CD\u6392)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
+        } catch (e) {
+          add("Rerank(\u91CD\u6392)", { success: false }, String(e.message || e));
+        }
+        box.innerHTML = rows.join("");
       };
     }
     function escapeHtml(t) {
@@ -1808,7 +1888,7 @@ ${it.desc || ""}` }));
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = { init, renderTab };
+    WM.Launcher = { init, renderTab, renderCfg, renderWorld };
   })();
 
   // src/index.js

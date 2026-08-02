@@ -159,6 +159,10 @@
   min-height: 36px;
 }
 .wm-btn:hover { background: rgba(46, 125, 50, 0.95); }
+.wm-test-box { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.wm-test-item { font-size: 13px; padding: 6px 8px; border-radius: 6px; line-height: 1.4; word-break: break-word; }
+.wm-test-item.wm-ok { background: rgba(46, 125, 50, 0.12); border: 1px solid rgba(46, 125, 50, 0.35); color: #2e7d32; }
+.wm-test-item.wm-bad { background: rgba(211, 47, 47, 0.1); border: 1px solid rgba(211, 47, 47, 0.4); color: #c62828; }
 .wm-item {
   border: 1px solid rgba(46, 125, 50, 0.18);
   border-radius: 8px;
