@@ -1,74 +1,211 @@
-/* WarmMemo · 水墨可爱风 */
-:root{
-  --wm-paper:#f7f3ea; --wm-ink:#3b342c; --wm-ink2:#6b5d4f;
-  --wm-dai:#5b6e57; --wm-dai2:#8a9a8b; --wm-zhu:#b06a5b;
-  --wm-line:#d9cfbd; --wm-card:#fffdf8;
+/* ============================================================
+ * WarmMemo (温记) 样式 —— 响应式适配（参考柚月记忆窗口规范）
+ * 适配：桌面 / 平板 / 手机竖屏；深浅皮肤；触控友好
+ * 布局引擎对齐参考范本：dvw/dvh 动态视口 + 多级 @media 断点
+ * ============================================================ */
+
+/* 输入框旁按钮：始终可见、可点、不遮挡 */
+#warmmemo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(46, 125, 50, 0.4);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(245, 248, 244, 0.95), rgba(232, 240, 233, 0.95));
+  color: #2e7d32;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  z-index: 9999;
 }
-#warmmemo-btn{
-  background:linear-gradient(180deg,#fff,#f3ede0);
-  border:1px solid var(--wm-line); color:var(--wm-dai);
-  border-radius:14px; padding:4px 10px; font-size:13px; cursor:pointer;
-  box-shadow:0 1px 3px rgba(0,0,0,.08); white-space:nowrap; z-index:9999;
-}
-#warmmemo-btn:hover{ color:var(--wm-zhu); border-color:var(--wm-dai2); }
-/* 找不到输入框容器时的保底悬浮按钮 */
-#warmmemo-btn.wm-float{
-  position:fixed; left:14px; bottom:14px;
+#warmmemo-btn:hover { background: rgba(232, 240, 233, 1); }
+
+/* 浮入保底按钮（找不到输入框时） */
+.wm-float {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 9999;
 }
 
-.wm-panel{
-  position:fixed; right:14px; bottom:74px; width:340px; max-width:94vw;
-  max-height:78vh; background:var(--wm-paper); color:var(--wm-ink);
-  border:1px solid var(--wm-line); border-radius:18px; z-index:9999;
-  box-shadow:0 8px 30px rgba(60,50,40,.22); display:none; flex-direction:column;
-  overflow:hidden; font-family:"PingFang SC","Microsoft YaHei",sans-serif; font-size:13px;
+/* ---------- 遮罩层（点击空白关闭，对齐柚月 .acu-window-overlay） ---------- */
+.wm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 12px;                 /* 保留边距，避免手机端遮挡底层 */
+  box-sizing: border-box;
 }
-.wm-panel.open{ display:flex; }
-.wm-header{ display:flex; justify-content:space-between; align-items:center;
-  padding:10px 14px; background:linear-gradient(90deg,#eef1e6,#f7f3ea);
-  border-bottom:1px solid var(--wm-line); }
-.wm-title{ font-weight:700; color:var(--wm-dai); letter-spacing:1px; }
-.wm-close{ background:none; border:none; font-size:20px; color:var(--wm-ink2); cursor:pointer; line-height:1; }
-.wm-tabs{ display:flex; flex-wrap:wrap; gap:4px; padding:6px 8px; border-bottom:1px solid var(--wm-line); background:#fbf8f1; }
-.wm-tabs button{ background:none; border:1px solid transparent; color:var(--wm-ink2);
-  border-radius:12px; padding:3px 9px; font-size:12px; cursor:pointer; }
-.wm-tabs button.active{ background:var(--wm-dai); color:#fff; border-color:var(--wm-dai); }
-.wm-body{ padding:10px 12px; overflow-y:auto; }
-.wm-card{ background:var(--wm-card); border:1px solid var(--wm-line); border-radius:14px; padding:10px 12px; margin-bottom:8px; }
-.wm-h{ font-weight:700; color:var(--wm-dai); margin-bottom:6px; }
-.wm-hint{ color:var(--wm-ink2); font-size:11px; margin-bottom:6px; }
-.wm-muted{ color:var(--wm-ink2); font-size:11px; }
-.wm-row{ display:flex; align-items:center; gap:6px; margin:6px 0; flex-wrap:wrap; }
-.wm-row input[type=text],.wm-row input:not([type=checkbox]),.wm-search,.wm-ta,select{
-  border:1px solid var(--wm-line); border-radius:10px; padding:5px 8px; background:#fff; color:var(--wm-ink); font-size:12px; flex:1; min-width:0; }
-.wm-list{ max-height:240px; overflow-y:auto; margin-top:6px; }
-.wm-item{ background:#fbf8f1; border:1px solid var(--wm-line); border-radius:10px; padding:6px 8px; margin:4px 0; line-height:1.5; }
-.wm-empty{ color:var(--wm-ink2); text-align:center; padding:10px; }
-.wm-weight{ color:var(--wm-zhu); letter-spacing:1px; }
-.wm-del{ float:right; color:var(--wm-zhu); cursor:pointer; }
-.wm-actions{ display:flex; gap:8px; margin-top:8px; }
-.wm-btn{ background:#fff; border:1px solid var(--wm-line); color:var(--wm-ink); border-radius:12px; padding:6px 12px; cursor:pointer; flex:1; }
-.wm-btn.primary{ background:var(--wm-dai); color:#fff; border-color:var(--wm-dai); }
-.wm-btn:hover{ filter:brightness(.97); }
-.wm-status{ margin-top:6px; color:var(--wm-dai); font-size:12px; }
-.wm-ta{ width:100%; min-height:160px; resize:vertical; line-height:1.6; }
+.wm-overlay.open { display: flex; }
 
-/* 关系图 */
-.wm-graph{ width:100%; height:300px; background:radial-gradient(circle at 50% 40%,#fbf8f1,#f1ead9); border:1px solid var(--wm-line); border-radius:12px; margin:6px 0; }
+/* ---------- 面板（浮层窗口，对齐柚月 .acu-window 结构） ---------- */
+.wm-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 24px));
+  height: min(80vh, calc(100dvh - 24px));
+  max-width: 100%;
+  max-height: 100%;
+  background: var(--wm-bg, #f5f8f4);
+  color: var(--wm-fg, #2b3a2e);
+  border: 1px solid rgba(46, 125, 50, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  font-size: 14px;
+}
 
-/* 剧情时间线 */
-.wm-timeline{ position:relative; padding-left:14px; border-left:2px dashed var(--wm-dai2); margin-top:6px; }
-.wm-plot{ position:relative; margin:8px 0; padding:6px 10px; background:#fbf8f1; border:1px solid var(--wm-line); border-radius:10px; }
-.wm-plot::before{ content:''; position:absolute; left:-21px; top:10px; width:9px; height:9px; border-radius:50%; background:var(--wm-dai); }
-.wm-plot-done::before{ background:var(--wm-ink2); }
-.wm-plot-abandon::before{ background:var(--wm-zhu); }
-.wm-plot-title{ font-weight:700; color:var(--wm-dai); }
-.wm-plot-sum{ color:var(--wm-ink2); font-size:12px; margin-top:2px; }
-.wm-badge{ font-size:10px; background:var(--wm-dai2); color:#fff; border-radius:8px; padding:1px 6px; margin-left:4px; }
+/* 最大化（手机全屏 / 手动全屏） */
+.wm-panel.wm-maximized {
+  width: calc(100vw - 12px);
+  height: calc(100dvh - 12px);
+}
 
-/* 手机适配 */
-@media (max-width:600px){
-  .wm-panel{ right:0; left:0; bottom:0; width:100%; max-width:100%; max-height:82vh;
-    border-radius:18px 18px 0 0; }
-  #warmmemo-btn{ font-size:12px; padding:3px 8px; }
+/* 头部：触控友好 min-height 44px */
+.wm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(46, 125, 50, 0.12), rgba(46, 125, 50, 0.04));
+  border-bottom: 1px solid rgba(46, 125, 50, 0.2);
+  flex: 0 0 auto;
+}
+.wm-title { font-weight: 600; font-size: 15px; }
+.wm-controls { display: flex; gap: 6px; }
+.wm-ctrl {
+  width: 32px; height: 32px;
+  border: none; border-radius: 8px;
+  background: rgba(46, 125, 50, 0.1);
+  color: #2e7d32; cursor: pointer; font-size: 18px; line-height: 1;
+}
+.wm-ctrl:hover { background: rgba(46, 125, 50, 0.2); }
+
+/* Tab 栏：窄屏横向滚动，防溢出 */
+.wm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(46, 125, 50, 0.15);
+  flex: 0 0 auto;
+  scrollbar-width: thin;
+}
+.wm-tabs button {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid rgba(46, 125, 50, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.wm-tabs button.active {
+  background: rgba(46, 125, 50, 0.85);
+  color: #fff;
+  border-color: rgba(46, 125, 50, 0.85);
+}
+
+/* 内容区：可滚动 + flex 防溢出 */
+.wm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 通用卡片 / 行 */
+.wm-card {
+  border: 1px solid rgba(46, 125, 50, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.wm-h { font-weight: 600; margin-bottom: 8px; }
+.wm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; min-width: 0; }
+.wm-row label { display: flex; align-items: center; gap: 6px; }
+.wm-row input[type="text"], .wm-row input[type="number"], .wm-row select, .wm-row textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(46, 125, 50, 0.3);
+  border-radius: 8px;
+  background: var(--wm-input-bg, #fff);
+  color: inherit;
+  font-size: 14px;
+}
+.wm-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(46, 125, 50, 0.4);
+  border-radius: 8px;
+  background: rgba(46, 125, 50, 0.85);
+  color: #fff;
+  cursor: pointer;
+  min-height: 36px;
+}
+.wm-btn:hover { background: rgba(46, 125, 50, 0.95); }
+.wm-item {
+  border: 1px solid rgba(46, 125, 50, 0.18);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.4);
+}
+.wm-item .wm-name { font-weight: 600; }
+.wm-empty { color: #8a9a8d; font-style: italic; padding: 8px 0; }
+.wm-link { color: #2e7d32; cursor: pointer; text-decoration: underline; }
+
+/* ============================================================
+ * 响应式断点（对齐柚月记忆规范）
+ * ============================================================ */
+
+/* 平板竖屏及以下：面板更宽、更靠边 */
+@media (max-width: 1100px) {
+  .wm-panel {
+    width: min(480px, calc(100vw - 24px));
+  }
+}
+
+/* 手机横屏 / 小平板 */
+@media (max-width: 768px) {
+  .wm-overlay { padding: 12px; }
+  .wm-panel { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
+  .wm-panel.wm-maximized { width: calc(100vw - 12px); height: calc(100dvh - 12px); }
+  .wm-title { font-size: 14px; }
+}
+
+/* 手机竖屏 */
+@media (max-width: 480px) {
+  .wm-overlay { padding: 8px; }
+  .wm-panel { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 12px; }
+  .wm-panel.wm-maximized { width: calc(100vw - 8px); height: calc(100dvh - 8px); }
+  .wm-header { padding: 6px 10px; }
+  .wm-tabs button { padding: 6px 10px; }
+  .wm-body { padding: 10px; }
+}
+
+/* 极窄屏（小手机） */
+@media (max-width: 360px) {
+  .wm-panel { width: calc(100vw - 8px); height: calc(100dvh - 8px); }
+  .wm-title { font-size: 13px; }
+  #warmmemo-btn { padding: 4px 8px; font-size: 13px; }
+}
+
+/* 触控设备：加大可点区域 */
+@media (pointer: coarse) {
+  .wm-tabs button, .wm-btn, .wm-ctrl { min-height: 40px; }
+  .wm-row input, .wm-row select, .wm-row textarea { min-height: 40px; }
 }

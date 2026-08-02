@@ -1140,22 +1140,34 @@ ${text}
       btnEl.type = "button";
       btnEl.title = "\u6E29\u8BB0 \xB7 \u8BB0\u5FC6\u4E0E\u4E16\u754C\u89C2";
       btnEl.textContent = "\u{1F33F} \u8BB0\u5FC6";
-      btnEl.onclick = () => {
-        ensurePanel();
-        panelEl.classList.toggle("open");
-        if (panelEl.classList.contains("open")) renderTab("auto");
-      };
+      btnEl.onclick = openPanel;
       document.body.appendChild(btnEl);
+    }
+    function isNarrowScreen() {
+      return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
     }
     function ensurePanel() {
       if (panelEl) return panelEl;
+      let overlay = document.getElementById("warmmemo-overlay");
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "warmmemo-overlay";
+        overlay.className = "wm-overlay";
+        overlay.onclick = (e) => {
+          if (e.target === overlay) closePanel();
+        };
+        document.body.appendChild(overlay);
+      }
       panelEl = document.createElement("div");
       panelEl.id = "warmmemo-panel";
       panelEl.className = "wm-panel";
       panelEl.innerHTML = `
       <div class="wm-header">
         <span class="wm-title">\u{1F33F} \u6E29\u8BB0 \xB7 WarmMemo</span>
-        <button class="wm-close" title="\u6536\u8D77">\xD7</button>
+        <div class="wm-controls">
+          <button class="wm-ctrl" id="wm-max" title="\u5168\u5C4F/\u8FD8\u539F">\u2922</button>
+          <button class="wm-ctrl wm-close" title="\u6536\u8D77">\xD7</button>
+        </div>
       </div>
       <div class="wm-tabs">
         <button data-tab="auto" class="active">\u81EA\u52A8\u603B\u7ED3</button>
@@ -1167,8 +1179,12 @@ ${text}
         <button data-tab="cfg">\u8BBE\u7F6E</button>
       </div>
       <div class="wm-body"></div>`;
-      document.body.appendChild(panelEl);
-      panelEl.querySelector(".wm-close").onclick = () => panelEl.classList.remove("open");
+      overlay.appendChild(panelEl);
+      panelEl.querySelector(".wm-close").onclick = closePanel;
+      panelEl.querySelector("#wm-max").onclick = () => {
+        panelEl.classList.toggle("wm-maximized");
+        if (panelEl.classList.contains("wm-maximized")) renderTab(currentTab);
+      };
       panelEl.querySelectorAll(".wm-tabs button").forEach((b) => {
         b.onclick = () => {
           panelEl.querySelectorAll(".wm-tabs button").forEach((x) => x.classList.remove("active"));
@@ -1176,7 +1192,22 @@ ${text}
           renderTab(b.dataset.tab);
         };
       });
+      if (isNarrowScreen()) panelEl.classList.add("wm-maximized");
       return panelEl;
+    }
+    let currentTab = "auto";
+    function closePanel() {
+      if (panelEl) panelEl.classList.remove("open", "wm-maximized");
+      const ov = document.getElementById("warmmemo-overlay");
+      if (ov) ov.classList.remove("open");
+    }
+    function openPanel() {
+      ensurePanel();
+      const ov = document.getElementById("warmmemo-overlay");
+      if (ov) ov.classList.add("open");
+      panelEl.classList.add("open");
+      if (isNarrowScreen()) panelEl.classList.add("wm-maximized");
+      renderTab(currentTab);
     }
     function injectButton() {
       if (document.getElementById("warmmemo-btn")) return;
@@ -1188,11 +1219,7 @@ ${text}
         btnEl.type = "button";
         btnEl.title = "\u6E29\u8BB0 \xB7 \u8BB0\u5FC6\u4E0E\u4E16\u754C\u89C2";
         btnEl.textContent = "\u{1F33F} \u8BB0\u5FC6";
-        btnEl.onclick = () => {
-          ensurePanel();
-          panelEl.classList.toggle("open");
-          if (panelEl.classList.contains("open")) renderTab("auto");
-        };
+        btnEl.onclick = openPanel;
         container.appendChild(btnEl);
       } else {
         injectButton._tries = (injectButton._tries || 0) + 1;
@@ -1204,6 +1231,7 @@ ${text}
       }
     }
     function renderTab(tab) {
+      currentTab = tab || "auto";
       const body = panelEl.querySelector(".wm-body");
       if (tab === "auto") return renderAuto(body);
       if (tab === "mem") return renderMem(body);

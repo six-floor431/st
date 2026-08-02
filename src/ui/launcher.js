@@ -31,19 +31,36 @@
     btnEl.type = 'button';
     btnEl.title = '温记 · 记忆与世界观';
     btnEl.textContent = '🌿 记忆';
-    btnEl.onclick = () => { ensurePanel(); panelEl.classList.toggle('open'); if (panelEl.classList.contains('open')) renderTab('auto'); };
+    btnEl.onclick = openPanel;
     document.body.appendChild(btnEl);
+  }
+
+  // 是否窄屏（手机/平板竖屏）。参考柚月记忆：用 matchMedia 判定，决定面板全屏比例
+  function isNarrowScreen() {
+    return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
   }
 
   function ensurePanel() {
     if (panelEl) return panelEl;
+    // 遮罩层（点击空白关闭，参考柚月 .acu-window-overlay）
+    let overlay = document.getElementById('warmmemo-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'warmmemo-overlay';
+      overlay.className = 'wm-overlay';
+      overlay.onclick = (e) => { if (e.target === overlay) closePanel(); };
+      document.body.appendChild(overlay);
+    }
     panelEl = document.createElement('div');
     panelEl.id = 'warmmemo-panel';
     panelEl.className = 'wm-panel';
     panelEl.innerHTML = `
       <div class="wm-header">
         <span class="wm-title">🌿 温记 · WarmMemo</span>
-        <button class="wm-close" title="收起">×</button>
+        <div class="wm-controls">
+          <button class="wm-ctrl" id="wm-max" title="全屏/还原">⤢</button>
+          <button class="wm-ctrl wm-close" title="收起">×</button>
+        </div>
       </div>
       <div class="wm-tabs">
         <button data-tab="auto" class="active">自动总结</button>
@@ -55,8 +72,13 @@
         <button data-tab="cfg">设置</button>
       </div>
       <div class="wm-body"></div>`;
-    document.body.appendChild(panelEl);
-    panelEl.querySelector('.wm-close').onclick = () => panelEl.classList.remove('open');
+    overlay.appendChild(panelEl);
+
+    panelEl.querySelector('.wm-close').onclick = closePanel;
+    panelEl.querySelector('#wm-max').onclick = () => {
+      panelEl.classList.toggle('wm-maximized');
+      if (panelEl.classList.contains('wm-maximized')) renderTab(currentTab);
+    };
     panelEl.querySelectorAll('.wm-tabs button').forEach((b) => {
       b.onclick = () => {
         panelEl.querySelectorAll('.wm-tabs button').forEach((x) => x.classList.remove('active'));
@@ -64,7 +86,26 @@
         renderTab(b.dataset.tab);
       };
     });
+
+    // 窄屏打开时默认全屏，确保不被手机输入栏/导航栏遮挡
+    if (isNarrowScreen()) panelEl.classList.add('wm-maximized');
     return panelEl;
+  }
+
+  let currentTab = 'auto';
+  function closePanel() {
+    if (panelEl) panelEl.classList.remove('open', 'wm-maximized');
+    const ov = document.getElementById('warmmemo-overlay');
+    if (ov) ov.classList.remove('open');
+  }
+
+  function openPanel() {
+    ensurePanel();
+    const ov = document.getElementById('warmmemo-overlay');
+    if (ov) ov.classList.add('open');
+    panelEl.classList.add('open');
+    if (isNarrowScreen()) panelEl.classList.add('wm-maximized');
+    renderTab(currentTab);
   }
 
   function injectButton() {
@@ -77,7 +118,7 @@
       btnEl.type = 'button';
       btnEl.title = '温记 · 记忆与世界观';
       btnEl.textContent = '🌿 记忆';
-      btnEl.onclick = () => { ensurePanel(); panelEl.classList.toggle('open'); if (panelEl.classList.contains('open')) renderTab('auto'); };
+      btnEl.onclick = openPanel;
       container.appendChild(btnEl);
     } else {
       // 重试几次，仍找不到就降级为悬浮按钮，保证一定可见可点
@@ -89,6 +130,7 @@
 
   // ── 各 Tab 渲染 ──
   function renderTab(tab) {
+    currentTab = tab || 'auto';
     const body = panelEl.querySelector('.wm-body');
     if (tab === 'auto') return renderAuto(body);
     if (tab === 'mem') return renderMem(body);
