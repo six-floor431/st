@@ -1,120 +1,104 @@
-// 真实 LLM 调用客户端
-// 模式 A（independent-api）：直连 OpenAI 兼容 /chat/completions（用独立的总结模型与 key）
-// 模式 B（shared-api）：回退到酒馆已配置的 textgeneration（不额外要 key）
+// LLM 调用封装：全部走酒馆官方 generate / generateRaw
+// 复用酒馆的源管理、代理预设、模型列表、流式等能力，不自己手写 fetch。
+// 通过 custom_api 参数切换调用来源（参考 lolocard-master 的做法）。
 (function () {
-  'use strict';
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
-  function normalizeBaseUrl(u) {
-    if (!u) return u;
-    return u.replace('0.0.0.0', '127.0.0.1').replace(/\/+$/, '');
+  // 取酒馆官方生成入口（插件在顶层 window 下运行）
+  function getGenerate() {
+    const ST = window.SillyTavern || {};
+    return ST.generate || (ST.generateRaw ? null : null);
+  }
+  function getGenerateRaw() {
+    const ST = window.SillyTavern || {};
+    return ST.generateRaw || null;
   }
 
-  // 直连独立 API：真实发起 /chat/completions 请求
-  async function callIndependent(messages, cfg) {
-    const base = normalizeBaseUrl(cfg.baseUrl) || 'https://api.openai.com/v1';
-    const url = base.replace(/\/?v1\/?$/, '') + '/v1/chat/completions';
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + (cfg.apiKey || ''),
-      },
-      body: JSON.stringify({
-        model: cfg.model || 'gpt-4o-mini',
-        messages,
-        temperature: cfg.temperature != null ? cfg.temperature : 0.7,
-      }),
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      throw new Error('独立API ' + r.status + ': ' + t.slice(0, 200));
-    }
-    const j = await r.json();
-    return j.choices && j.choices[0] && j.choices[0].message.content;
+  // 把 {role,content} 消息列表转成 generateRaw 的 ordered_prompts
+  function toOrderedPrompts(messages) {
+    return (messages || []).map((m) => ({ role: m.role || 'user', content: m.content || '' }));
   }
 
-  // 酒馆 shared-api：走 SillyTavern 全局 textgeneration
-  async function callShared(messages) {
-    if (window.textgeneration && typeof window.textgeneration.generate === 'function') {
-      return await window.textgeneration.generate(messages);
+  // 由 profile 组装酒馆 custom_api 配置（custom 来源时）
+  function buildCustomApi(p) {
+    if (!p) return null;
+    // 优先使用酒馆代理预设（proxy_preset）
+    if (p.proxyPreset) {
+      return { proxy_preset: p.proxyPreset, preset_sources: [] };
     }
-    if (window.SillyTavern && window.SillyTavern.sendGenerateRequest) {
-      return await window.SillyTavern.sendGenerateRequest(messages, { noHistory: true });
+    if (p.apiUrl || p.apiKey || p.model) {
+      const api = { source: 'custom', apiurl: p.apiUrl || '', key: p.apiKey || '', model: p.model || '' };
+      return api;
     }
-    throw new Error('酒馆 shared-api 不可用（textgeneration 未就绪）');
+    return null;
   }
 
-  // 主入口（兼容旧调用）
-  async function generate(messages, settings) {
-    const s = settings || (await WM.Settings.load());
-    const mode = s.summaryMode || 'independent-api';
-    if (mode === 'independent-api' && s.summaryApi && s.summaryApi.apiKey) {
-      try {
-        return await callIndependent(messages, {
-          baseUrl: s.summaryApi.baseUrl,
-          apiKey: s.summaryApi.apiKey,
-          model: s.summaryApi.model,
-          temperature: 0.7,
-        });
-      } catch (e) {
-        console.warn('[WarmMemo] 独立API失败，回退 shared-api:', e.message);
-        return await callShared(messages);
-      }
-    }
-    return await callShared(messages);
-  }
-
-  // complete：支持按 profile 独立调用（各功能不挤在一起）
-  // profile: { source:'local'|'custom', baseUrl, apiKey, model }
-  //   source==='local'  => 走酒馆 shared-api（textgeneration），无需额外配置
-  //   source==='custom' => 直连独立 API（baseUrl/apiKey/model）
-  // opts: { settings, temperature, max_tokens, model }
-  // 关键：失败时**明确抛错**（不返回空字符串伪装成功），让上层 UI 显示真实原因。
+  // 核心：用酒馆官方接口完成一次对话补全
+  // opts.profile: { source:'local'|'custom', proxyPreset?, apiUrl?, apiKey?, model? }
   async function complete(messages, opts) {
     opts = opts || {};
-    const s = opts.settings || (await WM.Settings.load());
-    const profile = opts.profile || null;
+    const profile = opts.profile || { source: 'local' };
+    const gr = getGenerateRaw();
+    const gen = getGenerate();
+    if (!gr && !gen) {
+      throw new Error('酒馆 generate 接口不可用（请确认在酒馆环境中运行）');
+    }
+    const ordered_prompts = toOrderedPrompts(messages);
 
-    // 无 profile 或 source 为 local/未配置 → 走酒馆 shared-api
-    const useCustom = profile && profile.source === 'custom' && (profile.apiKey || profile.model || profile.baseUrl);
-    if (!useCustom) {
-      try {
-        return await callShared(messages);
-      } catch (e) {
-        throw new Error('酒馆 shared-api 不可用：' + e.message + '。如需独立模型请在对应功能的 LLM 配置选「自定义」并填写 BaseURL/Key/模型名。');
+    if (profile.source === 'custom') {
+      const custom_api = buildCustomApi(profile);
+      if (!custom_api) {
+        throw new Error('自定义来源未配置（需填代理预设或 URL/Key/模型）');
       }
+      // 用 generateRaw 精确控制 system/user 提示词
+      if (gr) {
+        const out = await gr({ ordered_prompts, custom_api, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
+        return extractText(out);
+      }
+      const out = await gen({ user_input: (messages[messages.length - 1] || {}).content || '', custom_api, max_new_tokens: opts.maxTokens || 512 });
+      return extractText(out);
     }
 
-    // 自定义独立 API
-    const baseUrl = profile.baseUrl || s.summaryBaseUrl || 'https://api.openai.com/v1';
-    const apiKey = profile.apiKey || '';
-    const model = opts.model || profile.model || s.summaryModel || 'gpt-4o-mini';
-    try {
-      return await callIndependent(messages, {
-        baseUrl, apiKey, model,
-        temperature: opts.temperature != null ? opts.temperature : 0.7,
-        max_tokens: opts.max_tokens,
-      });
-    } catch (e) {
-      // 自定义失败不静默回退（用户明确选了 custom），直接抛明确错误
-      throw new Error('自定义 API 调用失败（' + (profile.model || model) + '）：' + e.message);
+    // local：用酒馆当前源（shared-api）
+    if (gr) {
+      const out = await gr({ ordered_prompts, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
+      return extractText(out);
     }
+    const out = await gen({ user_input: (messages[messages.length - 1] || {}).content || '', max_new_tokens: opts.maxTokens || 512 });
+    return extractText(out);
   }
 
-  // 测试连接：发一个最小请求，验证总结模型（独立 API 或酒馆 shared-api）是否可用
-  async function testConnection(settings) {
+  // 解析酒馆 generate 返回的文本
+  function extractText(out) {
+    if (typeof out === 'string') return out;
+    if (out && typeof out === 'object') {
+      if (typeof out.reply === 'string') return out.reply;
+      if (Array.isArray(out.choices) && out.choices[0]) {
+        const m = out.choices[0].message || out.choices[0].text || {};
+        return m.content || m.text || '';
+      }
+      if (typeof out.content === 'string') return out.content;
+    }
+    return String(out || '');
+  }
+
+  // 测试连接：按 profile 发一句测试
+  async function testConnection(opts) {
+    opts = opts || {};
+    const profile = opts.profile || { source: 'local' };
     try {
       const out = await complete(
-        [{ role: 'user', content: '请只回复两个字：ok' }],
-        { settings: settings, max_tokens: 8, temperature: 0 }
+        [{ role: 'system', content: '你是测试助手。' }, { role: 'user', content: '回复一个字：好' }],
+        { profile, maxTokens: 16 }
       );
-      const ok = typeof out === 'string' && out.length > 0;
-      return { success: ok, detail: ok ? ('模型返回: ' + out.slice(0, 40)) : '返回为空' };
+      if (out && String(out).trim().length > 0) {
+        return { success: true, detail: '连通，返回：' + String(out).trim().slice(0, 30) };
+      }
+      return { success: false, error: '返回为空' };
     } catch (e) {
-      return { success: false, error: String(e.message || e) };
+      return { success: false, error: String(e && e.message ? e.message : e) };
     }
   }
 
-  WM.LLMClient = { generate, complete, callIndependent, callShared, testConnection, normalizeBaseUrl };
+  WM.LLMClient = { complete, testConnection, buildCustomApi };
 })();

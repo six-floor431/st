@@ -468,18 +468,19 @@
 
   function renderLlmProfiles(s) {
     return LLM_FUNCS.map((f) => {
-      const p = (s.llmProfiles && s.llmProfiles[f.key]) || { source: 'local', baseUrl: '', apiKey: '', model: '' };
+      const p = (s.llmProfiles && s.llmProfiles[f.key]) || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
       return `
       <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <span class="wm-h" style="margin:0">${f.name}</span>
           <select class="p-src" title="调用来源">
-            <option value="local" ${p.source === 'local' ? 'selected' : ''}>本地酒馆(shared-api)</option>
+            <option value="local" ${p.source === 'local' ? 'selected' : ''}>本地酒馆(当前源)</option>
             <option value="custom" ${p.source === 'custom' ? 'selected' : ''}>自定义配置</option>
           </select>
         </div>
         <div class="p-custom" style="${p.source === 'custom' ? '' : 'display:none'};margin-top:6px">
-          <label class="wm-row">Base URL<input class="p-base" value="${escapeHtml(p.baseUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">代理预设名<input class="p-preset" value="${escapeHtml(p.proxyPreset)}" placeholder="留空则填下方 URL（酒馆代理预设名）"/></label>
+          <label class="wm-row">API URL<input class="p-url" value="${escapeHtml(p.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名<input class="p-model" value="${escapeHtml(p.model)}" placeholder="如 gpt-4o-mini"/></label>
         </div>
@@ -540,7 +541,8 @@
         const key = card.dataset.func;
         s.llmProfiles[key] = {
           source: card.querySelector('.p-src').value,
-          baseUrl: card.querySelector('.p-base').value.trim(),
+          proxyPreset: card.querySelector('.p-preset').value.trim(),
+          apiUrl: card.querySelector('.p-url').value.trim(),
           apiKey: card.querySelector('.p-key').value.trim(),
           model: card.querySelector('.p-model').value.trim(),
         };

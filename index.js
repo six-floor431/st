@@ -46,16 +46,18 @@
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
       // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
-      //   source: 'local'  => 调用酒馆本地 shared-api（textgeneration，无需额外 key）
-      //   source: 'custom' => 用下方自定义 baseUrl/apiKey/model 直连
+      //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
+      //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
+      //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
+      //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
       // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
       // 用户可在设置里为每个功能单独覆盖。
       llmProfiles: {
-        summary: { source: "local", baseUrl: "", apiKey: "", model: "" },
-        relations: { source: "local", baseUrl: "", apiKey: "", model: "" },
-        plot: { source: "local", baseUrl: "", apiKey: "", model: "" },
-        world: { source: "local", baseUrl: "", apiKey: "", model: "" },
-        items: { source: "local", baseUrl: "", apiKey: "", model: "" }
+        summary: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
+        relations: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
+        plot: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
+        world: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
+        items: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" }
       },
       lorebookName: "WarmMemo",
       // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
@@ -395,101 +397,86 @@ ${it.desc || ""}`.trim(),
 
   // src/config/llm-client.js
   (function() {
-    "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
-    function normalizeBaseUrl(u) {
-      if (!u) return u;
-      return u.replace("0.0.0.0", "127.0.0.1").replace(/\/+$/, "");
+    function getGenerate() {
+      const ST = window.SillyTavern || {};
+      return ST.generate || (ST.generateRaw ? null : null);
     }
-    async function callIndependent(messages, cfg) {
-      const base = normalizeBaseUrl(cfg.baseUrl) || "https://api.openai.com/v1";
-      const url = base.replace(/\/?v1\/?$/, "") + "/v1/chat/completions";
-      const r = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + (cfg.apiKey || "")
-        },
-        body: JSON.stringify({
-          model: cfg.model || "gpt-4o-mini",
-          messages,
-          temperature: cfg.temperature != null ? cfg.temperature : 0.7
-        })
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error("\u72EC\u7ACBAPI " + r.status + ": " + t.slice(0, 200));
-      }
-      const j = await r.json();
-      return j.choices && j.choices[0] && j.choices[0].message.content;
+    function getGenerateRaw() {
+      const ST = window.SillyTavern || {};
+      return ST.generateRaw || null;
     }
-    async function callShared(messages) {
-      if (window.textgeneration && typeof window.textgeneration.generate === "function") {
-        return await window.textgeneration.generate(messages);
-      }
-      if (window.SillyTavern && window.SillyTavern.sendGenerateRequest) {
-        return await window.SillyTavern.sendGenerateRequest(messages, { noHistory: true });
-      }
-      throw new Error("\u9152\u9986 shared-api \u4E0D\u53EF\u7528\uFF08textgeneration \u672A\u5C31\u7EEA\uFF09");
+    function toOrderedPrompts(messages) {
+      return (messages || []).map((m) => ({ role: m.role || "user", content: m.content || "" }));
     }
-    async function generate(messages, settings) {
-      const s = settings || await WM.Settings.load();
-      const mode = s.summaryMode || "independent-api";
-      if (mode === "independent-api" && s.summaryApi && s.summaryApi.apiKey) {
-        try {
-          return await callIndependent(messages, {
-            baseUrl: s.summaryApi.baseUrl,
-            apiKey: s.summaryApi.apiKey,
-            model: s.summaryApi.model,
-            temperature: 0.7
-          });
-        } catch (e) {
-          console.warn("[WarmMemo] \u72EC\u7ACBAPI\u5931\u8D25\uFF0C\u56DE\u9000 shared-api:", e.message);
-          return await callShared(messages);
-        }
+    function buildCustomApi(p) {
+      if (!p) return null;
+      if (p.proxyPreset) {
+        return { proxy_preset: p.proxyPreset, preset_sources: [] };
       }
-      return await callShared(messages);
+      if (p.apiUrl || p.apiKey || p.model) {
+        const api = { source: "custom", apiurl: p.apiUrl || "", key: p.apiKey || "", model: p.model || "" };
+        return api;
+      }
+      return null;
     }
     async function complete(messages, opts) {
       opts = opts || {};
-      const s = opts.settings || await WM.Settings.load();
-      const profile = opts.profile || null;
-      const useCustom = profile && profile.source === "custom" && (profile.apiKey || profile.model || profile.baseUrl);
-      if (!useCustom) {
-        try {
-          return await callShared(messages);
-        } catch (e) {
-          throw new Error("\u9152\u9986 shared-api \u4E0D\u53EF\u7528\uFF1A" + e.message + "\u3002\u5982\u9700\u72EC\u7ACB\u6A21\u578B\u8BF7\u5728\u5BF9\u5E94\u529F\u80FD\u7684 LLM \u914D\u7F6E\u9009\u300C\u81EA\u5B9A\u4E49\u300D\u5E76\u586B\u5199 BaseURL/Key/\u6A21\u578B\u540D\u3002");
+      const profile = opts.profile || { source: "local" };
+      const gr = getGenerateRaw();
+      const gen = getGenerate();
+      if (!gr && !gen) {
+        throw new Error("\u9152\u9986 generate \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF09");
+      }
+      const ordered_prompts = toOrderedPrompts(messages);
+      if (profile.source === "custom") {
+        const custom_api = buildCustomApi(profile);
+        if (!custom_api) {
+          throw new Error("\u81EA\u5B9A\u4E49\u6765\u6E90\u672A\u914D\u7F6E\uFF08\u9700\u586B\u4EE3\u7406\u9884\u8BBE\u6216 URL/Key/\u6A21\u578B\uFF09");
         }
+        if (gr) {
+          const out3 = await gr({ ordered_prompts, custom_api, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
+          return extractText(out3);
+        }
+        const out2 = await gen({ user_input: (messages[messages.length - 1] || {}).content || "", custom_api, max_new_tokens: opts.maxTokens || 512 });
+        return extractText(out2);
       }
-      const baseUrl = profile.baseUrl || s.summaryBaseUrl || "https://api.openai.com/v1";
-      const apiKey = profile.apiKey || "";
-      const model = opts.model || profile.model || s.summaryModel || "gpt-4o-mini";
-      try {
-        return await callIndependent(messages, {
-          baseUrl,
-          apiKey,
-          model,
-          temperature: opts.temperature != null ? opts.temperature : 0.7,
-          max_tokens: opts.max_tokens
-        });
-      } catch (e) {
-        throw new Error("\u81EA\u5B9A\u4E49 API \u8C03\u7528\u5931\u8D25\uFF08" + (profile.model || model) + "\uFF09\uFF1A" + e.message);
+      if (gr) {
+        const out2 = await gr({ ordered_prompts, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
+        return extractText(out2);
       }
+      const out = await gen({ user_input: (messages[messages.length - 1] || {}).content || "", max_new_tokens: opts.maxTokens || 512 });
+      return extractText(out);
     }
-    async function testConnection(settings) {
+    function extractText(out) {
+      if (typeof out === "string") return out;
+      if (out && typeof out === "object") {
+        if (typeof out.reply === "string") return out.reply;
+        if (Array.isArray(out.choices) && out.choices[0]) {
+          const m = out.choices[0].message || out.choices[0].text || {};
+          return m.content || m.text || "";
+        }
+        if (typeof out.content === "string") return out.content;
+      }
+      return String(out || "");
+    }
+    async function testConnection(opts) {
+      opts = opts || {};
+      const profile = opts.profile || { source: "local" };
       try {
         const out = await complete(
-          [{ role: "user", content: "\u8BF7\u53EA\u56DE\u590D\u4E24\u4E2A\u5B57\uFF1Aok" }],
-          { settings, max_tokens: 8, temperature: 0 }
+          [{ role: "system", content: "\u4F60\u662F\u6D4B\u8BD5\u52A9\u624B\u3002" }, { role: "user", content: "\u56DE\u590D\u4E00\u4E2A\u5B57\uFF1A\u597D" }],
+          { profile, maxTokens: 16 }
         );
-        const ok = typeof out === "string" && out.length > 0;
-        return { success: ok, detail: ok ? "\u6A21\u578B\u8FD4\u56DE: " + out.slice(0, 40) : "\u8FD4\u56DE\u4E3A\u7A7A" };
+        if (out && String(out).trim().length > 0) {
+          return { success: true, detail: "\u8FDE\u901A\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
+        }
+        return { success: false, error: "\u8FD4\u56DE\u4E3A\u7A7A" };
       } catch (e) {
-        return { success: false, error: String(e.message || e) };
+        return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { generate, complete, callIndependent, callShared, testConnection, normalizeBaseUrl };
+    WM.LLMClient = { complete, testConnection, buildCustomApi };
   })();
 
   // src/config/vector-store.js
@@ -1841,18 +1828,19 @@ ${it.desc || ""}` }));
     ];
     function renderLlmProfiles(s) {
       return LLM_FUNCS.map((f) => {
-        const p = s.llmProfiles && s.llmProfiles[f.key] || { source: "local", baseUrl: "", apiKey: "", model: "" };
+        const p = s.llmProfiles && s.llmProfiles[f.key] || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
         return `
       <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <span class="wm-h" style="margin:0">${f.name}</span>
           <select class="p-src" title="\u8C03\u7528\u6765\u6E90">
-            <option value="local" ${p.source === "local" ? "selected" : ""}>\u672C\u5730\u9152\u9986(shared-api)</option>
+            <option value="local" ${p.source === "local" ? "selected" : ""}>\u672C\u5730\u9152\u9986(\u5F53\u524D\u6E90)</option>
             <option value="custom" ${p.source === "custom" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u914D\u7F6E</option>
           </select>
         </div>
         <div class="p-custom" style="${p.source === "custom" ? "" : "display:none"};margin-top:6px">
-          <label class="wm-row">Base URL<input class="p-base" value="${escapeHtml(p.baseUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">\u4EE3\u7406\u9884\u8BBE\u540D<input class="p-preset" value="${escapeHtml(p.proxyPreset)}" placeholder="\u7559\u7A7A\u5219\u586B\u4E0B\u65B9 URL\uFF08\u9152\u9986\u4EE3\u7406\u9884\u8BBE\u540D\uFF09"/></label>
+          <label class="wm-row">API URL<input class="p-url" value="${escapeHtml(p.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D<input class="p-model" value="${escapeHtml(p.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
         </div>
@@ -1910,7 +1898,8 @@ ${it.desc || ""}` }));
           const key = card.dataset.func;
           s.llmProfiles[key] = {
             source: card.querySelector(".p-src").value,
-            baseUrl: card.querySelector(".p-base").value.trim(),
+            proxyPreset: card.querySelector(".p-preset").value.trim(),
+            apiUrl: card.querySelector(".p-url").value.trim(),
             apiKey: card.querySelector(".p-key").value.trim(),
             model: card.querySelector(".p-model").value.trim()
           };

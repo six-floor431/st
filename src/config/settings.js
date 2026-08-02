@@ -39,16 +39,18 @@
     ],
     worldToLorebook: true,        // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
     // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
-    //   source: 'local'  => 调用酒馆本地 shared-api（textgeneration，无需额外 key）
-    //   source: 'custom' => 用下方自定义 baseUrl/apiKey/model 直连
+    //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
+    //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
+    //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
+    //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
     // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
     // 用户可在设置里为每个功能单独覆盖。
     llmProfiles: {
-      summary:   { source: 'local', baseUrl: '', apiKey: '', model: '' },
-      relations: { source: 'local', baseUrl: '', apiKey: '', model: '' },
-      plot:      { source: 'local', baseUrl: '', apiKey: '', model: '' },
-      world:     { source: 'local', baseUrl: '', apiKey: '', model: '' },
-      items:     { source: 'local', baseUrl: '', apiKey: '', model: '' },
+      summary:   { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
+      relations: { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
+      plot:      { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
+      world:     { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
+      items:     { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
     },
     lorebookName: 'WarmMemo',     // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
     // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
