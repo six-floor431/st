@@ -1,25 +1,28 @@
 @echo off
 chcp 65001 >nul
 REM ============================================================
-REM  ContextPro 一次性 Git 初始化脚本（只需跑这一次）
-REM  用法：1) 先在 GitHub 网页新建一个空仓库，名叫 context-pro
-REM        2) 把下面的 REPO_URL 改成你的仓库地址
-REM        3) 双击本文件或在终端运行
+REM  WarmMemo 一次性 Git 初始化脚本（只需跑这一次）
+REM  注意：本仓库根目录就是扩展根（manifest.json 在根），
+REM        这样酒馆「Install Extension from URL」才能成功。
+REM  用法：1) 先在 GitHub 网页新建空仓库 six-floor431/st（若已建可跳过）
+REM        2) 确认下面 REPO_URL 与你的仓库一致
+REM        3) 双击本文件
 REM ============================================================
 
-set "REPO_URL=https://github.com/YOUR_GITHUB_USERNAME/context-pro.git"
+set "REPO_URL=https://github.com/six-floor431/st.git"
 
 cd /d "%~dp0"
 
 git init
 git add -A
-git commit -m "init: ContextPro 酒馆原生扩展（总结楼层/向量本地化/重排云端/关系力图）"
+git commit -m "init: WarmMemo 温度记忆扩展（仓库根即扩展根）"
 git branch -M main
 git remote add origin %REPO_URL%
 git push -u origin main
 
 echo.
 echo ============================================================
-echo  首次推送完成！以后更新只需双击 update.bat
+echo  首次推送完成！之后更新只需双击 update.bat
+echo  酒馆里用 Install Extension from URL：%REPO_URL%
 echo ============================================================
 pause
