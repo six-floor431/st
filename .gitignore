@@ -21,3 +21,9 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### WarmMemo 构建产物与依赖 ###
+node_modules/
+package-lock.json
+# 临时脚本（_ 开头）
+_*.js

@@ -1,0 +1,13 @@
+{
+  "name": "warm-memo",
+  "version": "1.0.0",
+  "description": "温记/WarmMemo - SillyTavern 长上下文记忆扩展（多文件源码 + esbuild 打包）",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --format=iife --target=es2020 --outfile=index.js --legal-comments=none",
+    "watch": "esbuild src/index.js --bundle --format=iife --target=es2020 --outfile=index.js --legal-comments=none --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
