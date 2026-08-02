@@ -1,0 +1,12 @@
+fix: 彻底根治「按钮不显示 / 子模块 404 / text/plain MIME 被拒」
+
+根因：原以「遍历 document.scripts 取 base + 动态经典 <script> 加载子模块」，
+若 base 误判走回退路径则子模块 404；且动态经典 <script> 会被浏览器 strict MIME
+(text/plain) 拦截，导致全部子模块（含按钮逻辑）从未执行，输入框旁无按钮。
+
+修复：把全部 15 个模块内联为单一自包含 index.js，彻底消除任何子文件 HTTP 请求，
+酒馆仅加载 index.js 即完成所有挂载；启动在 DOMContentLoaded/可直接执行时调用
+Launcher.init()，按钮注入 #send_form .input-options（找不到则降级悬浮按钮）。
+同时修复 embedding-client.js 未定义 provider 变量（调用 embedding 时必抛 ReferenceError）的真实 bug。
+已用模拟酒馆 DOM 的 E2E 验证：index.js 直接执行即挂载全部核心模块、注入「🌿 记忆」按钮、
+绑定 chat_completion_prompt_ready 注入钩子均成功。删除已内联的旧 config/ ui/ 子目录。
