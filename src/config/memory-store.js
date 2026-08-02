@@ -12,6 +12,7 @@
     return {
       version: 2,
       memories: [],   // [{id, text, ts, range:[start,end], vector?:number[]}]
+      summaries: [], // 每段总结/剧情摘要独立存档 [{id, kind:'summary'|'plot', title, text, ts}]
       items: [],      // 物品追踪 [{id, name, desc, owner, ts}]
       plots: [],      // 剧情线 [{id, title, summary, ts, status:'active'|'done'|'abandon'}]
       world: '',      // 世界观设定文本
@@ -59,6 +60,10 @@
       ctx.updateChatMetadata({ [FIELD]: store }, false);
       if (typeof ctx.saveMetadata === 'function') await ctx.saveMetadata();
       else if (typeof ctx.saveChat === 'function') await ctx.saveChat();
+      // 存档成功后，异步把结构化数据拆分同步到世界书条目（不阻塞存档）
+      if (WM.Worldbook && WM.Settings && WM.Settings.load().worldToLorebook !== false) {
+        dispatchLorebook().catch((e) => console.warn('[WarmMemo] 世界书同步失败', e));
+      }
       return true;
     } catch (e) {
       console.error('[WarmMemo] 保存记忆失败', e);
@@ -76,6 +81,81 @@
     return id;
   }
   function getMemories() { return load().memories; }
+
+  // ── 总结 / 剧情摘要（独立存档，不与其他内容挤在一起） ──
+  async function addSummary(text, kind, title) {
+    const s = load();
+    const id = 'sm_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    s.summaries.push({
+      id,
+      kind: kind || 'summary',
+      title: title || new Date().toLocaleString('zh-CN'),
+      text: String(text).trim(),
+      ts: Date.now(),
+    });
+    if (s.summaries.length > 300) s.summaries = s.summaries.slice(-300);
+    await save(s);
+    return id;
+  }
+  async function removeSummary(id) {
+    const s = load();
+    s.summaries = s.summaries.filter((x) => x.id !== id);
+    await save(s);
+  }
+  function getSummaries() { return load().summaries; }
+
+  // ── 世界书分派：把结构化数据「拆分」成独立世界书条目（每段总结/每个物品/每组关系各一条） ──
+  // 数据隔离已由 chat_metadata 保证；此处只负责把内容写入「当前角色卡绑定」的世界书。
+  async function dispatchLorebook() {
+    if (!WM.Worldbook) return;
+    const s = load();
+    const settings = WM.Settings.load();
+    if (settings.worldToLorebook === false) return; // 用户关闭了世界书写入
+    // 1) 每段总结/剧情摘要 → 独立条目（不挤在一起）
+    for (const sm of s.summaries) {
+      await WM.Worldbook.writeEntry({
+        kind: sm.kind === 'plot' ? 'summary' : 'summary',
+        sourceId: 'summary::' + sm.id,
+        title: (sm.kind === 'plot' ? '剧情摘要·' : '总结·') + sm.title,
+        content: sm.text,
+        strategy: 'constant',
+      });
+    }
+    // 2) 每个物品 → 独立条目（按物品名触发）
+    for (const it of s.items) {
+      if (!it.name) continue;
+      await WM.Worldbook.writeEntry({
+        kind: 'item',
+        sourceId: 'item::' + it.id,
+        title: '物品·' + it.name,
+        content: `物品：${it.name}${it.owner ? '（持有者：' + it.owner + '）' : ''}\n${it.desc || ''}`.trim(),
+        keys: [it.name],
+        strategy: 'selective',
+      });
+    }
+    // 3) 关系 → 按主体人物分组，同一人挤一起、不同人分开
+    const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
+    for (const g of groups) {
+      await WM.Worldbook.writeEntry({
+        kind: 'relation',
+        sourceId: 'relation::' + g.person,
+        title: '关系·' + g.person,
+        content: `${g.person}的关系：${g.text}`,
+        keys: g.keys,
+        strategy: 'constant',
+      });
+    }
+    // 4) 世界观 → 单条目
+    if (s.world && s.world.trim()) {
+      await WM.Worldbook.writeEntry({
+        kind: 'world',
+        sourceId: 'world::main',
+        title: '世界观设定',
+        content: s.world,
+        strategy: 'constant',
+      });
+    }
+  }
 
   // ── 物品 ──
   async function addItem(name, desc, owner) {
@@ -144,7 +224,8 @@
   WM.MemoryStore = {
     FIELD, emptyStore, load, save,
     addMemory, getMemories,
-    addItem, updateItem, removeItem, getItems,
+    addSummary, removeSummary, getSummaries,
+    dispatchLorebook,
     addPlot, updatePlot, removePlot, getPlots,
     setWorld, getWorld,
     setRelations, getRelations,

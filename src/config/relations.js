@@ -90,5 +90,25 @@
     return nodes;
   }
 
-  WM.Relations = { extractRelations, mergeRelations, forceLayout };
+  // 按「主体人物」分组关系：返回 [{ person, keys:[person], text:'与A是…、与B是…' }, ...]
+  // 同一人的多条关系挤在一起，不同人分开（满足用户要求）。
+  function groupByPerson(relations) {
+    if (!relations || !Array.isArray(relations.pairs)) return [];
+    const map = {}; // person -> [{other, rel}]
+    const pushRel = (person, other, rel) => {
+      if (!person || !other) return;
+      (map[person] = map[person] || []).push({ other, rel });
+    };
+    for (const p of relations.pairs) {
+      if (!p.from || !p.to) continue;
+      pushRel(p.from, p.to, p.label);
+      pushRel(p.to, p.from, p.label); // 双向：两人各自条目都记录这段关系
+    }
+    return Object.keys(map).map((person) => {
+      const lines = map[person].map((x) => `与${x.other}是${x.rel}`);
+      return { person, keys: [person], text: lines.join('、') };
+    });
+  }
+
+  WM.Relations = { extractRelations, mergeRelations, forceLayout, groupByPerson };
 })();

@@ -353,7 +353,7 @@
   function renderWorld(body) {
     const s = WM.Settings.load();
     const world = WM.MemoryStore.getWorld();
-    const loreCount = WM.Worldbook.getLorebookEntries().length;
+    const loreCount = WM.Worldbook.listEntries ? WM.Worldbook.listEntries().length : 0;
     body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定</div>
       <div class="wm-hint">基于角色卡/用户卡/世界书(${loreCount}条)/已有记忆推断，写入并注入上下文</div>
       <textarea id="world-ta" class="wm-ta" placeholder="世界观设定…">${escapeHtml(world)}</textarea>
@@ -380,8 +380,8 @@
         body.querySelector('#world-ta').value = w;
         await WM.MemoryStore.setWorld(w);
         if (body.querySelector('#world-lore').checked) {
-          const r = await WM.Worldbook.writeToLorebook('世界观', w);
-          st.textContent = r.ok ? '✓ 世界观已更新并写入世界书' : ('✓ 已存对话记忆；世界书未写（' + (r.reason === 'no_name' ? '请填世界书名' : r.reason) + '）');
+          await WM.Worldbook.writeWorld(w);
+          st.textContent = '✓ 世界观已更新并写入世界书（独立条目）';
         } else {
           st.textContent = '✓ 世界观已更新（仅对话记忆+注入）';
         }
@@ -399,8 +399,17 @@
       <label class="wm-row">模型名<input id="c-model" value="${s.summaryModel}" placeholder="如 gpt-4o-mini"/></label>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索
         <span class="wm-muted">Embed:${s.embeddingBaseUrl||'未填'}</span></label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）
         <input type="checkbox" id="c-injw" ${s.injectWorld?'checked':''}/> 含世界观</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">世界书（数据按角色卡隔离）</div>
+      <label class="wm-row">世界书名<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook?'checked':''}/> 拆分写入世界书条目（总结/物品/关系各自独立条目）</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">接管酒馆向量 / 重排序</div>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>
       <div class="wm-actions"><button id="c-save" class="wm-btn primary">保存设置</button></div>
       <div class="wm-hint">不填模型即回退酒馆自带 shared-api（textgeneration）。本地反代填 127.0.0.1。</div></div>`;
     body.querySelector('#c-save').onclick = () => {
@@ -408,10 +417,16 @@
       s.summaryApiKey = body.querySelector('#c-key').value;
       s.summaryModel = body.querySelector('#c-model').value;
       s.vectorEnabled = body.querySelector('#c-vec').checked;
+      s.rerankEnabled = body.querySelector('#c-rerank').checked;
       s.injectMemories = body.querySelector('#c-inj').checked;
       s.injectWorld = body.querySelector('#c-injw').checked;
+      s.lorebookName = body.querySelector('#c-lore').value.trim();
+      s.worldToLorebook = body.querySelector('#c-wlore').checked;
+      s.takeoverEmbedding = body.querySelector('#c-take-emb').checked;
+      s.takeoverRerank = body.querySelector('#c-take-re').checked;
       WM.Settings.save(s);
-      body.querySelector('.wm-hint').textContent = '✓ 已保存';
+      if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+      body.querySelector('.wm-hint').textContent = '✓ 已保存（世界书已绑定当前角色卡）';
     };
   }
 
@@ -419,6 +434,8 @@
 
   function init() {
     injectButton();
+    // 绑定 WarmMemo 世界书到当前角色卡，实现「每个角色卡数据隔离」
+    if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook().catch((e) => console.warn('[WarmMemo] 世界书绑定失败', e));
     WM.Injection.init();
     // 自动总结：监听新楼层
     const es = (window.eventSource && window.eventSource.eventNames) ? window.eventSource : (window.SillyTavern && window.SillyTavern.eventSource);

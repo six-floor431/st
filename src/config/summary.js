@@ -85,6 +85,10 @@
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
     for (const line of lines) await dedupeMemory(line, [start, end]);
 
+    // 本次总结作为「独立一段」存档（不与其它段落挤在一起），并写入独立世界书条目
+    const dateLabel = new Date().toLocaleString('zh-CN');
+    await WM.MemoryStore.addSummary(out, 'summary', dateLabel);
+
     // 更新总结指针（用于自动隐藏已处理楼层）
     await WM.MemoryStore.setSummaryPointer(end + 1);
 
@@ -105,6 +109,8 @@
           const s = WM.MemoryStore.load();
           s.plots = plots.map((p) => ({ id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), title: p.title, summary: p.summary, status: p.status, ts: Date.now() }));
           await WM.MemoryStore.save(s);
+          // 每条剧情线作为独立「剧情摘要」存档（分开，不挤在一起）
+          for (const p of plots) await WM.MemoryStore.addSummary(p.summary, 'plot', p.title);
           results.plots = plots.length;
         }
       } catch (e) { results.plotsErr = e.message; }

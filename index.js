@@ -36,10 +36,15 @@
       autoPlot: true,
       autoWorld: true,
       autoItems: true,
-      worldToLorebook: false,
-      // 是否把世界观写进世界书
-      lorebookName: "",
-      // 世界书名（saveWorldInfo 需要，留空则只存对话记忆）
+      worldToLorebook: true,
+      // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
+      lorebookName: "WarmMemo",
+      // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
+      // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
+      takeoverEmbedding: false,
+      // 接管向量检索：开启后注入用我们自己的 embedding 相似度召回
+      takeoverRerank: false,
+      // 接管重排序：开启后对世界书召回结果做 rerank 重排
       injectMemories: true,
       // 是否注入记忆到上下文
       injectWorld: true
@@ -129,6 +134,8 @@
         version: 2,
         memories: [],
         // [{id, text, ts, range:[start,end], vector?:number[]}]
+        summaries: [],
+        // 每段总结/剧情摘要独立存档 [{id, kind:'summary'|'plot', title, text, ts}]
         items: [],
         // 物品追踪 [{id, name, desc, owner, ts}]
         plots: [],
@@ -174,6 +181,9 @@
         ctx.updateChatMetadata({ [FIELD]: store }, false);
         if (typeof ctx.saveMetadata === "function") await ctx.saveMetadata();
         else if (typeof ctx.saveChat === "function") await ctx.saveChat();
+        if (WM.Worldbook && WM.Settings && WM.Settings.load().worldToLorebook !== false) {
+          dispatchLorebook().catch((e) => console.warn("[WarmMemo] \u4E16\u754C\u4E66\u540C\u6B65\u5931\u8D25", e));
+        }
         return true;
       } catch (e) {
         console.error("[WarmMemo] \u4FDD\u5B58\u8BB0\u5FC6\u5931\u8D25", e);
@@ -190,6 +200,75 @@
     }
     function getMemories() {
       return load().memories;
+    }
+    async function addSummary(text, kind, title) {
+      const s = load();
+      const id = "sm_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
+      s.summaries.push({
+        id,
+        kind: kind || "summary",
+        title: title || (/* @__PURE__ */ new Date()).toLocaleString("zh-CN"),
+        text: String(text).trim(),
+        ts: Date.now()
+      });
+      if (s.summaries.length > 300) s.summaries = s.summaries.slice(-300);
+      await save(s);
+      return id;
+    }
+    async function removeSummary(id) {
+      const s = load();
+      s.summaries = s.summaries.filter((x) => x.id !== id);
+      await save(s);
+    }
+    function getSummaries() {
+      return load().summaries;
+    }
+    async function dispatchLorebook() {
+      if (!WM.Worldbook) return;
+      const s = load();
+      const settings = WM.Settings.load();
+      if (settings.worldToLorebook === false) return;
+      for (const sm of s.summaries) {
+        await WM.Worldbook.writeEntry({
+          kind: sm.kind === "plot" ? "summary" : "summary",
+          sourceId: "summary::" + sm.id,
+          title: (sm.kind === "plot" ? "\u5267\u60C5\u6458\u8981\xB7" : "\u603B\u7ED3\xB7") + sm.title,
+          content: sm.text,
+          strategy: "constant"
+        });
+      }
+      for (const it of s.items) {
+        if (!it.name) continue;
+        await WM.Worldbook.writeEntry({
+          kind: "item",
+          sourceId: "item::" + it.id,
+          title: "\u7269\u54C1\xB7" + it.name,
+          content: `\u7269\u54C1\uFF1A${it.name}${it.owner ? "\uFF08\u6301\u6709\u8005\uFF1A" + it.owner + "\uFF09" : ""}
+${it.desc || ""}`.trim(),
+          keys: [it.name],
+          strategy: "selective"
+        });
+      }
+      const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
+      for (const g of groups) {
+        await WM.Worldbook.writeEntry({
+          kind: "relation",
+          sourceId: "relation::" + g.person,
+          title: "\u5173\u7CFB\xB7" + g.person,
+          content: `${g.person}\u7684\u5173\u7CFB\uFF1A${g.text}`,
+          keys: g.keys,
+          strategy: "constant"
+        });
+      }
+      if (s.world && s.world.trim()) {
+        await WM.Worldbook.writeEntry({
+          kind: "world",
+          sourceId: "world::main",
+          title: "\u4E16\u754C\u89C2\u8BBE\u5B9A",
+          content: s.world,
+          strategy: "constant"
+        });
+      }
     }
     async function addItem(name, desc, owner) {
       const s = load();
@@ -272,10 +351,10 @@
       save,
       addMemory,
       getMemories,
-      addItem,
-      updateItem,
-      removeItem,
-      getItems,
+      addSummary,
+      removeSummary,
+      getSummaries,
+      dispatchLorebook,
       addPlot,
       updatePlot,
       removePlot,
@@ -619,121 +698,195 @@
   (function() {
     "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
+    function helper() {
+      return window.TavernHelper;
+    }
+    function available() {
+      return typeof helper() !== "undefined";
+    }
+    function targetName() {
+      const s = WM.Settings && WM.Settings.load ? WM.Settings.load() : {};
+      return s.lorebookName && s.lorebookName.trim() || "WarmMemo";
+    }
+    async function ensureLorebook() {
+      if (!available()) return false;
+      const name = targetName();
+      try {
+        const names = await helper().getWorldbookNames();
+        if (!names.includes(name)) {
+          await helper().createWorldbook(name, []);
+        }
+        if (helper().rebindCharWorldbooks) {
+          const cur = await helper().getCharWorldbookNames("current");
+          if (!cur.includes(name)) {
+            await helper().rebindCharWorldbooks([...cur, name], "current");
+          }
+        }
+        return true;
+      } catch (e) {
+        console.warn("[WarmMemo] ensureLorebook \u5931\u8D25:", e);
+        return false;
+      }
+    }
+    function extraOf(sourceId) {
+      return { warmMemo: true, sourceId: sourceId || "" };
+    }
+    async function listEntries() {
+      if (!available()) return [];
+      const name = targetName();
+      try {
+        const entries = await helper().getWorldbookEntries(name);
+        return (entries || []).map((e, i) => ({ uid: String(e.uid != null ? e.uid : i), entry: e }));
+      } catch (e) {
+        return [];
+      }
+    }
+    async function writeEntry(opts) {
+      if (!opts || !opts.content || !opts.content.trim()) return null;
+      const ok = await ensureLorebook();
+      if (!ok) return null;
+      const name = targetName();
+      const sourceId = opts.sourceId || [opts.kind, opts.title].join("::");
+      const entry = {
+        content: opts.content,
+        comment: opts.title || opts.kind,
+        name: opts.title || "",
+        enabled: true,
+        position: opts.position || "before_prompt",
+        // 默认在提示词之前
+        // 触发策略
+        strategy: {
+          type: opts.strategy === "selective" ? "selective" : "constant",
+          depth: 1,
+          useExcept: false,
+          tokens: 512,
+          keys: opts.keys && opts.keys.length ? opts.keys : [],
+          order: 100
+        },
+        excludeRecursion: false,
+        preventRecursion: false,
+        delayUntilRecursion: false,
+        probability: 100,
+        useProbability: false,
+        extra: extraOf(sourceId)
+      };
+      try {
+        const existing = await listEntries();
+        const hit = existing.find((x) => x.entry.extra && x.entry.extra.warmMemo && x.entry.extra.sourceId === sourceId);
+        if (hit) {
+          const merged = Object.assign({}, x_merge(hit.entry), entry);
+          await helper().updateWorldbookEntry(name, hit.uid, merged);
+          return hit.uid;
+        } else {
+          const created = await helper().createWorldbookEntries(name, [entry]);
+          if (Array.isArray(created) && created.length) return String(created[0].uid != null ? created[0].uid : created[0].id);
+          return "new";
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] writeEntry \u5931\u8D25:", e);
+        return null;
+      }
+    }
+    function x_merge(base) {
+      return Object.assign({}, base);
+    }
+    async function removeEntry(sourceId) {
+      if (!available() || !sourceId) return;
+      const name = targetName();
+      try {
+        const existing = await listEntries();
+        const hit = existing.find((x) => x.entry.extra && x.entry.extra.warmMemo && x.entry.extra.sourceId === sourceId);
+        if (hit) await helper().deleteWorldbookEntry(name, hit.uid);
+      } catch (e) {
+        console.warn("[WarmMemo] removeEntry \u5931\u8D25:", e);
+      }
+    }
+    async function clearAll() {
+      if (!available()) return;
+      const name = targetName();
+      try {
+        const existing = await listEntries();
+        for (const x of existing) {
+          if (x.entry.extra && x.entry.extra.warmMemo) await helper().deleteWorldbookEntry(name, x.uid);
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] clearAll \u5931\u8D25:", e);
+      }
+    }
+    async function writeSummary(dateLabel, content) {
+      return writeEntry({ kind: "summary", title: "\u603B\u7ED3\xB7" + dateLabel, content, strategy: "constant" });
+    }
+    async function writeItem(itemName, content) {
+      return writeEntry({ kind: "item", title: "\u7269\u54C1\xB7" + itemName, content, keys: [itemName], strategy: "selective" });
+    }
+    async function writeRelation(person, content, keys) {
+      return writeEntry({ kind: "relation", title: "\u5173\u7CFB\xB7" + person, content, keys: keys && keys.length ? keys : [person], strategy: "constant" });
+    }
+    async function writeWorld(content) {
+      return writeEntry({ kind: "world", title: "\u4E16\u754C\u89C2\u8BBE\u5B9A", content, strategy: "constant" });
+    }
     function getCtx() {
       return window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
     }
     function getCharacterCard() {
       try {
         const ctx = getCtx();
-        const id = ctx && (ctx.characterId !== void 0 ? ctx.characterId : ctx.currentCharacterId);
-        const card = ctx && ctx.characters && ctx.characters[id] || ctx && ctx.character;
-        if (!card) return null;
-        return {
-          name: card.name,
-          description: card.description || "",
-          personality: card.personality || "",
-          scenario: card.scenario || "",
-          first_mes: card.first_mes || ""
-        };
+        const c = ctx && ctx.characterCard;
+        if (c) return { name: c.name, description: c.description, personality: c.personality };
+        const chat = ctx && ctx.chat;
+        const last = chat && chat.find((m) => !m.is_user);
+        return { name: last && last.name || ctx && ctx.name2 || "", description: last && last.mes || "" };
       } catch (e) {
-        return null;
+        return {};
       }
     }
     function getUserCard() {
       try {
         const ctx = getCtx();
         const u = ctx && ctx.user;
-        if (!u) return null;
-        return { name: u.name || "", description: u.description || "" };
+        if (u) return { name: u.name, description: u.description };
+        return { name: ctx && ctx.name1 || "\u7528\u6237", description: "" };
       } catch (e) {
-        return null;
+        return {};
       }
     }
-    function getLorebookEntries() {
-      try {
-        const ctx = getCtx();
-        const wi = ctx && ctx.extensionSettings && ctx.extensionSettings.worldInfo;
-        if (Array.isArray(wi)) {
-          return wi.map((e) => ({ key: e && (e.key || e.comment) || "", content: e && e.content || "" }));
-        }
-        return [];
-      } catch (e) {
-        return [];
-      }
-    }
-    async function writeToLorebook(title, content) {
-      const ctx = getCtx();
-      const s = WM.Settings.load();
-      const name = s.lorebookName;
-      if (!name) return { ok: false, reason: "no_name" };
-      if (!ctx || typeof ctx.saveWorldInfo !== "function") return { ok: false, reason: "api_missing" };
-      try {
-        const data = { entries: {} };
-        const uid = Date.now();
-        data.entries[uid] = {
-          comment: "[WarmMemo\u4E16\u754C\u89C2] " + (title || "\u4E16\u754C\u89C2"),
-          content,
-          constant: true,
-          enabled: true,
-          insertion_order: 0,
-          position: "before_char",
-          depth: 4
-        };
-        await ctx.saveWorldInfo(name, data);
-        return { ok: true };
-      } catch (e) {
-        return { ok: false, reason: e.message || "write_failed" };
-      }
+    async function getLorebookEntries() {
+      const list = await listEntries();
+      return list.map((x) => ({ key: x.entry.name || x.entry.comment || "", content: x.entry.content || "" }));
     }
     async function inferWorldview(settings, opts) {
-      opts = opts || {};
-      const char = getCharacterCard() || {};
-      const user = getUserCard() || {};
-      const lore = getLorebookEntries();
-      const prevWorld = WM.MemoryStore.getWorld() || "";
-      const memories = WM.MemoryStore.getMemories();
-      const recent = memories.slice(-40).map((m) => m.text).join("\n");
-      const extra = opts.extraInstruction || "";
-      const sys = `\u4F60\u662F\u4E16\u754C\u89C2\u6574\u7406\u52A9\u624B\u3002\u8BF7\u57FA\u4E8E\u4EE5\u4E0B\u3010\u7D20\u6750\u3011\u6574\u7406/\u66F4\u65B0\u3010\u4E16\u754C\u89C2\u8BBE\u5B9A\u3011\u3002
-\u7D20\u6750\u5305\u542B\uFF1A\u89D2\u8272\u5361\u8BBE\u5B9A\u3001\u7528\u6237\u5361\u3001\u4E16\u754C\u4E66\u73B0\u6709\u6761\u76EE\u3001\u5DF2\u6709\u7684\u4E16\u754C\u89C2\u3001\u8FD1\u671F\u6709\u6E29\u5EA6\u8BB0\u5FC6\u3001\u7528\u6237\u8865\u5145\u6307\u4EE4\u3002
-\u8981\u6C42\uFF1A
-- \u8F93\u51FA\u7EAF\u6587\u672C\u300C\u4E16\u754C\u89C2\u8BBE\u5B9A\u300D\uFF0C\u5206\u6BB5\u6E05\u6670\uFF08\u80CC\u666F/\u52BF\u529B\u4E0E\u7EC4\u7EC7/\u5730\u70B9/\u89C4\u5219\u4E0E\u5E38\u8BC6/\u7279\u6B8A\u8BBE\u5B9A\u7B49\uFF09\u3002
-- \u4FDD\u6301\u4E0E\u5DF2\u6709\u4E16\u754C\u89C2\u4E00\u81F4\uFF1B\u82E5\u7D20\u6750\u77DB\u76FE\u4EE5\u8FD1\u671F\u8BB0\u5FC6\u4E3A\u51C6\uFF1B\u4E0D\u8981\u7F16\u9020\u7D20\u6750\u6CA1\u6709\u7684\u6839\u672C\u6027\u8BBE\u5B9A\u3002
-- \u8BED\u8A00\u98CE\u683C\u4E0E\u89D2\u8272\u8BBE\u5B9A\u8D34\u5408\uFF0C\u7B80\u6D01\u6709\u6E29\u5EA6\u3002\u957F\u5EA6\u9002\u4E2D\u3002`;
-      let userMsg = `\u3010\u89D2\u8272\u5361\u3011
-\u540D\u79F0\uFF1A${char.name || "\u672A\u77E5"}
-\u63CF\u8FF0\uFF1A${char.description || "\u65E0"}
-\u6027\u683C\uFF1A${char.personality || "\u65E0"}
-\u573A\u666F\uFF1A${char.scenario || "\u65E0"}
-
-`;
-      userMsg += `\u3010\u7528\u6237\u5361\u3011
-\u540D\u79F0\uFF1A${user.name || "\u672A\u77E5"}
-\u63CF\u8FF0\uFF1A${user.description || "\u65E0"}
-
-`;
-      userMsg += `\u3010\u4E16\u754C\u4E66\u73B0\u6709\u6761\u76EE\u3011
-` + (lore.length ? lore.map((l) => `\xB7 ${l.key}: ${l.content.slice(0, 200)}`).join("\n") : "\uFF08\u65E0\uFF09") + `
-
-`;
-      userMsg += `\u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011
-${prevWorld || "\uFF08\u65E0\uFF09"}
-
-`;
-      userMsg += `\u3010\u8FD1\u671F\u8BB0\u5FC6\u3011
-${recent || "\uFF08\u65E0\uFF09"}
-
-`;
-      if (extra) userMsg += `\u3010\u7528\u6237\u8865\u5145/\u81EA\u5B9A\u4E49\u66F4\u65B0\u3011
-${extra}
-
-`;
-      userMsg += `\u8BF7\u8F93\u51FA\u66F4\u65B0\u540E\u7684\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
-      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 1200 });
-      if (!out || !out.trim()) throw new Error("\u4E16\u754C\u89C2 LLM \u8C03\u7528\u5931\u8D25\uFF08\u672A\u8FD4\u56DE\u5185\u5BB9\uFF0C\u68C0\u67E5\u6A21\u578B\u914D\u7F6E\uFF09");
-      return out.trim();
+      settings = settings || WM.Settings && WM.Settings.load || {};
+      const char = getCharacterCard();
+      const user = getUserCard();
+      const prev = WM.MemoryStore ? WM.MemoryStore.getWorld() : "";
+      const sys = `\u4F60\u662F\u4E16\u754C\u89C2\u6574\u7406\u8005\u3002\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u7528\u6237\u8BBE\u5B9A\u3011\u4E0E\u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011\uFF0C\u63A8\u65AD\u5E76\u8865\u5168\u5F53\u524D\u6545\u4E8B\u7684\u4E16\u754C\u89C2\u8BBE\u5B9A\u3002
+\u8981\u6C42\uFF1A\u5BA2\u89C2\u3001\u7D27\u51D1\uFF0C\u6DB5\u76D6\u65F6\u4EE3/\u5730\u70B9/\u52BF\u529B/\u89C4\u5219/\u5173\u952E\u8BBE\u5B9A\u3002\u4E0E\u5DF2\u6709\u4E0D\u51B2\u7A81\u5219\u5408\u5E76\u3002\u6700\u591A 600 \u5B57\u3002
+${opts && opts.extraInstruction ? "\u989D\u5916\u6307\u4EE4\uFF1A" + opts.extraInstruction : ""}`;
+      const userMsg = `\u3010\u89D2\u8272\u8BBE\u5B9A\u3011${char.name || "\u672A\u77E5"}\uFF1A${char.description || ""}
+\u3010\u7528\u6237\u8BBE\u5B9A\u3011${user.name || "\u672A\u77E5"}\uFF1A${user.description || ""}
+\u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011${prev || "\uFF08\u65E0\uFF09"}
+\u8BF7\u8F93\u51FA\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
+      if (!WM.Summary || !WM.Summary.callLLM) return prev;
+      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4 });
+      return out && out.trim() ? out.trim() : prev;
     }
-    WM.Worldbook = { getCharacterCard, getUserCard, getLorebookEntries, writeToLorebook, inferWorldview };
+    WM.Worldbook = {
+      available,
+      ensureLorebook,
+      writeEntry,
+      removeEntry,
+      clearAll,
+      listEntries,
+      getLorebookEntries,
+      writeSummary,
+      writeItem,
+      writeRelation,
+      writeWorld,
+      targetName,
+      getCharacterCard,
+      getUserCard,
+      inferWorldview
+    };
   })();
 
   // src/config/plot.js
@@ -847,6 +1000,8 @@ ${slice}
       if (!out || !out.trim()) return { ok: false, reason: "llm_empty_or_failed" };
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
       for (const line of lines) await dedupeMemory(line, [start, end]);
+      const dateLabel = (/* @__PURE__ */ new Date()).toLocaleString("zh-CN");
+      await WM.MemoryStore.addSummary(out, "summary", dateLabel);
       await WM.MemoryStore.setSummaryPointer(end + 1);
       const results = { relations: 0, plots: 0, world: false, items: 0 };
       if (settings.autoRelation) {
@@ -866,6 +1021,7 @@ ${slice}
             const s = WM.MemoryStore.load();
             s.plots = plots.map((p) => ({ id: "pl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), title: p.title, summary: p.summary, status: p.status, ts: Date.now() }));
             await WM.MemoryStore.save(s);
+            for (const p of plots) await WM.MemoryStore.addSummary(p.summary, "plot", p.title);
             results.plots = plots.length;
           }
         } catch (e) {
@@ -1004,7 +1160,24 @@ ${text}
       }
       return nodes;
     }
-    WM.Relations = { extractRelations, mergeRelations, forceLayout };
+    function groupByPerson(relations) {
+      if (!relations || !Array.isArray(relations.pairs)) return [];
+      const map = {};
+      const pushRel = (person, other, rel) => {
+        if (!person || !other) return;
+        (map[person] = map[person] || []).push({ other, rel });
+      };
+      for (const p of relations.pairs) {
+        if (!p.from || !p.to) continue;
+        pushRel(p.from, p.to, p.label);
+        pushRel(p.to, p.from, p.label);
+      }
+      return Object.keys(map).map((person) => {
+        const lines = map[person].map((x) => `\u4E0E${x.other}\u662F${x.rel}`);
+        return { person, keys: [person], text: lines.join("\u3001") };
+      });
+    }
+    WM.Relations = { extractRelations, mergeRelations, forceLayout, groupByPerson };
   })();
 
   // src/config/injection.js
@@ -1024,30 +1197,50 @@ ${text}
       }
       return "chat_completion_prompt_ready";
     }
+    function collectCandidates() {
+      const s = WM.MemoryStore.load();
+      const cands = [];
+      s.summaries.forEach((sm) => cands.push({ id: sm.id, type: sm.kind === "plot" ? "\u5267\u60C5\u6458\u8981" : "\u603B\u7ED3", text: sm.title + "\n" + sm.text }));
+      s.items.forEach((it) => cands.push({ id: it.id, type: "\u7269\u54C1", text: `\u7269\u54C1\uFF1A${it.name}${it.owner ? "\uFF08\u6301\u6709\u8005\uFF1A" + it.owner + "\uFF09" : ""}
+${it.desc || ""}` }));
+      const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
+      groups.forEach((g) => cands.push({ id: "relation::" + g.person, type: "\u5173\u7CFB", text: g.person + "\u7684\u5173\u7CFB\uFF1A" + g.text }));
+      if (s.world && s.world.trim()) cands.push({ id: "world::main", type: "\u4E16\u754C\u89C2", text: s.world });
+      return cands;
+    }
     function buildMemoryBlock() {
       const settings = WM.Settings.load();
       if (settings.injectMemories === false && settings.injectWorld === false) return "";
       const mem = WM.MemoryStore.getMemories();
-      const world = WM.MemoryStore.getWorld();
-      const items = WM.MemoryStore.getItems();
-      if (!mem.length && !world && !items.length) return "";
-      let picked = mem;
-      if (settings.vectorEnabled && WM.VectorStore && WM.VectorStore.lastQuery && WM.VectorStore.enabled) {
-        picked = WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
-      } else {
-        picked = mem.slice(-Math.min(20, mem.length));
+      let memBlock = "";
+      if (settings.injectMemories !== false && mem.length) {
+        let picked = mem;
+        if (settings.vectorEnabled && WM.VectorStore && WM.VectorStore.lastQuery && WM.VectorStore.enabled) {
+          picked = WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
+        } else {
+          picked = mem.slice(-Math.min(20, mem.length));
+        }
+        memBlock = "\u3010\u6709\u6E29\u5EA6\u7684\u8BB0\u5FC6\uFF08\u89D2\u8272\u4E0E\u7528\u6237\u5171\u540C\u7ECF\u5386\u7684\u8FC7\u5F80\uFF09\u3011\n" + picked.map((m) => "\xB7 " + (m.text || "")).join("\n");
       }
-      const parts = [];
-      if (settings.injectMemories !== false && picked.length) {
-        parts.push("\u3010\u6709\u6E29\u5EA6\u7684\u8BB0\u5FC6\uFF08\u89D2\u8272\u4E0E\u7528\u6237\u5171\u540C\u7ECF\u5386\u7684\u8FC7\u5F80\uFF09\u3011\n" + picked.map((m) => "\xB7 " + m.text).join("\n"));
+      const wbOk = WM.Worldbook && WM.Worldbook.available();
+      const candidates = collectCandidates();
+      if (settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore) {
+        const q = WM.VectorStore.lastQuery || "";
+        const ranked = q ? WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
+        const parts2 = [memBlock];
+        if (settings.injectMemories !== false && ranked.length) {
+          parts2.push("\u3010\u6E29\u8BB0\u53EC\u56DE\uFF08\u5411\u91CF\u63A5\u7BA1\uFF09\u3011\n" + ranked.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
+        }
+        return parts2.filter(Boolean).join("\n\n");
       }
-      if (settings.injectWorld !== false && world) {
-        parts.push("\u3010\u5F53\u524D\u4E16\u754C\u89C2\u8BBE\u5B9A\u3011\n" + world);
+      if (wbOk) {
+        return memBlock;
       }
-      if (settings.injectMemories !== false && items.length) {
-        parts.push("\u3010\u7269\u54C1/\u6301\u6709\u7269\u8FFD\u8E2A\u3011\n" + items.map((i) => `\xB7 ${i.name}\uFF08${i.owner || "\u672A\u77E5"}\uFF09\uFF1A${i.desc}`).join("\n"));
+      const parts = [memBlock];
+      if (settings.injectMemories !== false && settings.injectWorld !== false && candidates.length) {
+        parts.push("\u3010\u6E29\u8BB0\u5185\u5BB9\uFF08\u4E16\u754C\u4E66\u4E0D\u53EF\u7528\uFF0C\u5DF2\u515C\u5E95\u6CE8\u5165\uFF09\u3011\n" + candidates.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
       }
-      return parts.join("\n\n");
+      return parts.filter(Boolean).join("\n\n");
     }
     function init() {
       const ctx = getCtx();
@@ -1067,6 +1260,8 @@ ${text}
           if (sys) {
             if (sys.content && sys.content.includes("\u3010\u6709\u6E29\u5EA6\u7684\u8BB0\u5FC6")) {
               sys.content = sys.content.replace(/【有温度的记忆[\s\S]*$/, "") + "\n\n" + block;
+            } else if (sys.content && sys.content.includes("\u3010\u6E29\u8BB0")) {
+              sys.content = sys.content.replace(/【温记[\s\S]*$/, "") + "\n\n" + block;
             } else {
               sys.content = (sys.content || "") + "\n\n" + block;
             }
@@ -1079,7 +1274,7 @@ ${text}
       });
       console.log("[WarmMemo] \u6CE8\u5165\u94A9\u5B50\u5DF2\u7ED1\u5B9A\uFF1A", readyEvent);
     }
-    WM.Injection = { init, buildMemoryBlock };
+    WM.Injection = { init, buildMemoryBlock, collectCandidates };
   })();
 
   // src/config/floor-hider.js
@@ -1468,7 +1663,7 @@ ${text}
     function renderWorld(body) {
       const s = WM.Settings.load();
       const world = WM.MemoryStore.getWorld();
-      const loreCount = WM.Worldbook.getLorebookEntries().length;
+      const loreCount = WM.Worldbook.listEntries ? WM.Worldbook.listEntries().length : 0;
       body.innerHTML = `<div class="wm-card"><div class="wm-h">\u4E16\u754C\u8BBE\u5B9A</div>
       <div class="wm-hint">\u57FA\u4E8E\u89D2\u8272\u5361/\u7528\u6237\u5361/\u4E16\u754C\u4E66(${loreCount}\u6761)/\u5DF2\u6709\u8BB0\u5FC6\u63A8\u65AD\uFF0C\u5199\u5165\u5E76\u6CE8\u5165\u4E0A\u4E0B\u6587</div>
       <textarea id="world-ta" class="wm-ta" placeholder="\u4E16\u754C\u89C2\u8BBE\u5B9A\u2026">${escapeHtml(world)}</textarea>
@@ -1496,8 +1691,8 @@ ${text}
           body.querySelector("#world-ta").value = w;
           await WM.MemoryStore.setWorld(w);
           if (body.querySelector("#world-lore").checked) {
-            const r = await WM.Worldbook.writeToLorebook("\u4E16\u754C\u89C2", w);
-            st.textContent = r.ok ? "\u2713 \u4E16\u754C\u89C2\u5DF2\u66F4\u65B0\u5E76\u5199\u5165\u4E16\u754C\u4E66" : "\u2713 \u5DF2\u5B58\u5BF9\u8BDD\u8BB0\u5FC6\uFF1B\u4E16\u754C\u4E66\u672A\u5199\uFF08" + (r.reason === "no_name" ? "\u8BF7\u586B\u4E16\u754C\u4E66\u540D" : r.reason) + "\uFF09";
+            await WM.Worldbook.writeWorld(w);
+            st.textContent = "\u2713 \u4E16\u754C\u89C2\u5DF2\u66F4\u65B0\u5E76\u5199\u5165\u4E16\u754C\u4E66\uFF08\u72EC\u7ACB\u6761\u76EE\uFF09";
           } else {
             st.textContent = "\u2713 \u4E16\u754C\u89C2\u5DF2\u66F4\u65B0\uFF08\u4EC5\u5BF9\u8BDD\u8BB0\u5FC6+\u6CE8\u5165\uFF09";
           }
@@ -1514,8 +1709,17 @@ ${text}
       <label class="wm-row">\u6A21\u578B\u540D<input id="c-model" value="${s.summaryModel}" placeholder="\u5982 gpt-4o-mini"/></label>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22
         <span class="wm-muted">Embed:${s.embeddingBaseUrl || "\u672A\u586B"}</span></label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09
         <input type="checkbox" id="c-injw" ${s.injectWorld ? "checked" : ""}/> \u542B\u4E16\u754C\u89C2</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">\u4E16\u754C\u4E66\uFF08\u6570\u636E\u6309\u89D2\u8272\u5361\u9694\u79BB\uFF09</div>
+      <label class="wm-row">\u4E16\u754C\u4E66\u540D<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook ? "checked" : ""}/> \u62C6\u5206\u5199\u5165\u4E16\u754C\u4E66\u6761\u76EE\uFF08\u603B\u7ED3/\u7269\u54C1/\u5173\u7CFB\u5404\u81EA\u72EC\u7ACB\u6761\u76EE\uFF09</label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">\u63A5\u7BA1\u9152\u9986\u5411\u91CF / \u91CD\u6392\u5E8F</div>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
       <div class="wm-actions"><button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button></div>
       <div class="wm-hint">\u4E0D\u586B\u6A21\u578B\u5373\u56DE\u9000\u9152\u9986\u81EA\u5E26 shared-api\uFF08textgeneration\uFF09\u3002\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
       body.querySelector("#c-save").onclick = () => {
@@ -1523,10 +1727,16 @@ ${text}
         s.summaryApiKey = body.querySelector("#c-key").value;
         s.summaryModel = body.querySelector("#c-model").value;
         s.vectorEnabled = body.querySelector("#c-vec").checked;
+        s.rerankEnabled = body.querySelector("#c-rerank").checked;
         s.injectMemories = body.querySelector("#c-inj").checked;
         s.injectWorld = body.querySelector("#c-injw").checked;
+        s.lorebookName = body.querySelector("#c-lore").value.trim();
+        s.worldToLorebook = body.querySelector("#c-wlore").checked;
+        s.takeoverEmbedding = body.querySelector("#c-take-emb").checked;
+        s.takeoverRerank = body.querySelector("#c-take-re").checked;
         WM.Settings.save(s);
-        body.querySelector(".wm-hint").textContent = "\u2713 \u5DF2\u4FDD\u5B58";
+        if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+        body.querySelector(".wm-hint").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u4E16\u754C\u4E66\u5DF2\u7ED1\u5B9A\u5F53\u524D\u89D2\u8272\u5361\uFF09";
       };
     }
     function escapeHtml(t) {
@@ -1534,6 +1744,7 @@ ${text}
     }
     function init() {
       injectButton();
+      if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook().catch((e) => console.warn("[WarmMemo] \u4E16\u754C\u4E66\u7ED1\u5B9A\u5931\u8D25", e));
       WM.Injection.init();
       const es = window.eventSource && window.eventSource.eventNames ? window.eventSource : window.SillyTavern && window.SillyTavern.eventSource;
       if (es && es.on) {
