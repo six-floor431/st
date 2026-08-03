@@ -809,18 +809,19 @@ ${it.message}`;
       const timeoutMs = 2e4;
       const guard = new Promise((_, reject) => setTimeout(() => reject(new Error("\u6D4B\u8BD5\u8D85\u65F6\uFF08" + timeoutMs / 1e3 + "s \u65E0\u54CD\u5E94\uFF09")), timeoutMs));
       try {
+        const ver = window.WarmMemo && window.WarmMemo.version || "?";
+        console.log("[WarmMemo] ===== \u6D4B\u8BD5\u8FDE\u63A5(LLM) \u53D1\u8D77\uFF0C\u7248\u672C v" + ver + " =====");
         const out = await Promise.race([
           complete(
             [
               { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\uFF0C\u4E0D\u8981\u4F7F\u7528\u804A\u5929\u5386\u53F2\u3002" },
-              { role: "user", content: "\u8FD9\u662F\u6D4B\u8BD5\u8FDE\u63A5\u7684\uFF0C\u8BF7\u53D1\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u77E5\u4E0D\u77E5\u9053\uFF1F\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
+              { role: "user", content: "[WarmMemo\u6D4B\u8BD5\u8FDE\u63A5]\u8FD9\u662F\u6D4B\u8BD5\u8FDE\u63A5\u7684\uFF0C\u8BF7\u53D1\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u77E5\u4E0D\u77E5\u9053\uFF1F\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
             ],
             { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
           ),
           guard
         ]);
         if (out && String(out).trim().length > 0) {
-          const ver = window.WarmMemo && window.WarmMemo.version || "?";
           return { success: true, detail: "\u8FDE\u901A[v" + ver + "]\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
         }
         return { success: false, error: "\u8FD4\u56DE\u4E3A\u7A7A" };
@@ -3384,7 +3385,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "1.0.4";
+  window.WarmMemo.version = "8b80d9b";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

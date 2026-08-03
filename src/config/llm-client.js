@@ -159,16 +159,17 @@
     const timeoutMs = 20000;
     const guard = new Promise((_, reject) => setTimeout(() => reject(new Error('测试超时（' + (timeoutMs / 1000) + 's 无响应）')), timeoutMs));
     try {
+      const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
+      console.log('[WarmMemo] ===== 测试连接(LLM) 发起，版本 v' + ver + ' =====');
       const out = await Promise.race([
         complete(
           [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题，不要使用聊天历史。' },
-           { role: 'user', content: '这是测试连接的，请发「成功」两个字，知不知道？只回复「成功」，不要回复其它任何内容。' }],
+           { role: 'user', content: '[WarmMemo测试连接]这是测试连接的，请发「成功」两个字，知不知道？只回复「成功」，不要回复其它任何内容。' }],
           { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
         ),
         guard,
       ]);
       if (out && String(out).trim().length > 0) {
-        const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
         return { success: true, detail: '连通[v' + ver + ']，返回：' + String(out).trim().slice(0, 30) };
       }
       return { success: false, error: '返回为空' };
