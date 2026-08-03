@@ -762,7 +762,15 @@ ${it.message}`;
       }
       return [];
     }
-    async function complete(messages, opts) {
+    async function complete(a, b, c, d) {
+      let messages, opts;
+      if (typeof b === "string") {
+        messages = [{ role: "system", content: a || "" }, { role: "user", content: b || "" }];
+        opts = Object.assign({}, d || {}, c && c.llmConfig ? { profile: c.llmConfig } : {});
+      } else {
+        messages = a || [];
+        opts = b || {};
+      }
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
       const gr = getGenerateRaw();
@@ -776,7 +784,10 @@ ${it.message}`;
         should_stream: false,
         max_new_tokens: maxTokens,
         // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
-        temperature: opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3
+        temperature: opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3,
+        // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
+        max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
+        should_silence: opts.should_silence != null ? opts.should_silence : true
       };
       if (profile.source === "custom") {
         const custom_api = buildCustomApi(profile);
@@ -792,11 +803,19 @@ ${it.message}`;
     async function testConnection(opts) {
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
+      const timeoutMs = 2e4;
+      const guard = new Promise((_, reject) => setTimeout(() => reject(new Error("\u6D4B\u8BD5\u8D85\u65F6\uFF08" + timeoutMs / 1e3 + "s \u65E0\u54CD\u5E94\uFF09")), timeoutMs));
       try {
-        const out = await complete(
-          [{ role: "user", content: "\u8BF7\u56DE\u590D\uFF1A\u4F60\u597D" }],
-          { profile, maxTokens: 16, temperature: 0.1 }
-        );
+        const out = await Promise.race([
+          complete(
+            [
+              { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\uFF0C\u4E0D\u8981\u4F7F\u7528\u804A\u5929\u5386\u53F2\u3002" },
+              { role: "user", content: "\u8BF7\u53EA\u56DE\u590D\u300C\u8FDE\u901A\u300D\u4E24\u4E2A\u5B57\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
+            ],
+            { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
+          ),
+          guard
+        ]);
         if (out && String(out).trim().length > 0) {
           return { success: true, detail: "\u8FDE\u901A\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
         }

@@ -88,8 +88,20 @@
   }
 
   // 核心：只调用 LLM 本体，提示词完全由调用方控制
-  // messages: [{role:'system'|'user', content}]
-  async function complete(messages, opts) {
+  // 支持两种签名（向后兼容）：
+  //   新：complete(messages, opts)  —— messages: [{role:'system'|'user', content}]
+  //   旧：complete(systemText, userText, settings, opts)
+  async function complete(a, b, c, d) {
+    let messages, opts;
+    if (typeof b === 'string') {
+      // 旧签名：complete(systemText, userText, settings, opts)
+      messages = [{ role: 'system', content: a || '' }, { role: 'user', content: b || '' }];
+      opts = Object.assign({}, d || {}, (c && c.llmConfig) ? { profile: c.llmConfig } : {});
+    } else {
+      // 新签名：complete(messages, opts)
+      messages = a || [];
+      opts = b || {};
+    }
     opts = opts || {};
     const profile = opts.profile || { source: 'local' };
     const gr = getGenerateRaw();
@@ -105,6 +117,9 @@
       max_new_tokens: maxTokens,
       // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
       temperature: opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3),
+      // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
+      max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
+      should_silence: opts.should_silence != null ? opts.should_silence : true,
     };
     if (profile.source === 'custom') {
       const custom_api = buildCustomApi(profile);
@@ -120,15 +135,22 @@
     return text ? String(text).trim() : '';
   }
 
-  // 测试连接：按 profile 发一句测试
+  // 测试连接：完全隔离的一次极简请求，不带入任何聊天历史/角色卡，避免"回答了其他问题"还拖很久
   async function testConnection(opts) {
     opts = opts || {};
     const profile = opts.profile || { source: 'local' };
+    // 超时保护：测试最多等 20s，避免卡死浪费时间
+    const timeoutMs = 20000;
+    const guard = new Promise((_, reject) => setTimeout(() => reject(new Error('测试超时（' + (timeoutMs / 1000) + 's 无响应）')), timeoutMs));
     try {
-      const out = await complete(
-        [{ role: 'user', content: '请回复：你好' }],
-        { profile, maxTokens: 16, temperature: 0.1 }
-      );
+      const out = await Promise.race([
+        complete(
+          [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题，不要使用聊天历史。' },
+           { role: 'user', content: '请只回复「连通」两个字，不要回复其它任何内容。' }],
+          { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
+        ),
+        guard,
+      ]);
       if (out && String(out).trim().length > 0) {
         return { success: true, detail: '连通，返回：' + String(out).trim().slice(0, 30) };
       }
