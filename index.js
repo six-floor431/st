@@ -833,8 +833,11 @@ ${it.message}`;
         return extractFromSSE(rawText);
       }
       let t = "";
+      let reasoning = "";
       if (j.choices && j.choices[0]) {
-        t = j.choices[0].message && j.choices[0].message.content || j.choices[0].text || "";
+        const m = j.choices[0].message || {};
+        t = m.content || j.choices[0].text || "";
+        reasoning = m.reasoning_content || "";
       } else if (j.candidates && j.candidates[0]) {
         const c = j.candidates[0];
         const parts = c.content && c.content.parts || [];
@@ -843,6 +846,7 @@ ${it.message}`;
         t = j;
       }
       if (t) return String(t).trim();
+      if (reasoning) return String(reasoning).trim();
       return extractFromSSE(rawText);
     }
     function extractFromSSE(rawText) {
@@ -877,7 +881,7 @@ ${it.message}`;
               { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\u3002" },
               { role: "user", content: "[WarmMemo\u6D4B\u8BD5\u8FDE\u63A5]\u8BF7\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
             ],
-            { profile, maxTokens: 8, temperature: 0 }
+            { profile, maxTokens: 60, temperature: 0 }
           ),
           guard
         ]);
@@ -3539,7 +3543,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-llm-empty-sse-parse";
+  window.WarmMemo.version = "fix-llm-reasoning-fallback";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

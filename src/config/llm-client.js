@@ -125,8 +125,11 @@
       return extractFromSSE(rawText);
     }
     let t = '';
+    let reasoning = '';
     if (j.choices && j.choices[0]) {
-      t = (j.choices[0].message && j.choices[0].message.content) || j.choices[0].text || '';
+      const m = j.choices[0].message || {};
+      t = m.content || j.choices[0].text || '';
+      reasoning = m.reasoning_content || ''; // 深度思考链（部分模型如 deepseek-reasoner 把正文放这里）
     } else if (j.candidates && j.candidates[0]) {
       const c = j.candidates[0];
       const parts = (c.content && c.content.parts) || [];
@@ -135,6 +138,8 @@
       t = j;
     }
     if (t) return String(t).trim();
+    // content 为空但有思考链：回退用思考链内容（避免 finish_reason=length 时误报空）
+    if (reasoning) return String(reasoning).trim();
     // JSON 合法但结构不匹配：再试 SSE（某些端点即便 stream:false 也回 SSE）
     return extractFromSSE(rawText);
   }
@@ -171,7 +176,7 @@
         complete(
           [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题。' },
            { role: 'user', content: '[WarmMemo测试连接]请只回复「成功」两个字，不要回复其它任何内容。' }],
-          { profile, maxTokens: 8, temperature: 0 }
+          { profile, maxTokens: 60, temperature: 0 }
         ),
         guard,
       ]);
