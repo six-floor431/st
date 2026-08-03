@@ -799,17 +799,27 @@
     // 绑定 WarmMemo 世界书到当前角色卡，实现「每个角色卡数据隔离」
     if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook().catch((e) => console.warn('[WarmMemo] 世界书绑定失败', e));
     WM.Injection.init();
-    // 自动总结：监听新楼层
+    // 自动总结：监听 AI 回复流式输出「完成并落库」后触发，确保不抢在半截输出上总结
     const es = (window.eventSource && window.eventSource.eventNames) ? window.eventSource : (window.SillyTavern && window.SillyTavern.eventSource);
     if (es && es.on) {
-      const ev = (window.eventSource && window.eventSource.eventNames) ? window.eventSource.eventNames.MESSAGE_SENT : 'MESSAGE_SENT';
-      es.on(ev, autoSummaryHook);
+      const names = (window.eventSource && window.eventSource.eventNames) ? window.eventSource.eventNames : {};
+      // 优先 MESSAGE_RECEIVED（AI 完整回复已写入楼层）；缺失时回退 MESSAGE_SENT（用户发送）
+      const evReceived = names.MESSAGE_RECEIVED || 'MESSAGE_RECEIVED';
+      const evSent = names.MESSAGE_SENT || 'MESSAGE_SENT';
+      es.on(evReceived, autoSummaryHook); // 主：流式真正结束后
+      es.on(evSent, autoSummaryHook);    // 备：兼容旧版/无 RECEIVED 环境
     }
   }
 
+  let _lastAutoAt = 0; // 去重：避免 MESSAGE_SENT + MESSAGE_RECEIVED 双触发重复总结
   async function autoSummaryHook() {
     const s = WM.Settings.load();
     if (!s.autoSummaryEnabled) return;
+    const now = Date.now();
+    if (now - _lastAutoAt < 1200) return; // 1.2s 内只跑一次
+    _lastAutoAt = now;
+    // 注意：本 hook 主要绑定在 MESSAGE_RECEIVED（AI 流式输出完成且楼层落库之后），
+    // 因此这里不需要长延时等待流式，只留极小缓冲让 chat 元数据稳定。
     setTimeout(async () => {
       try {
         const r = await WM.Summary.triggerSummary(s);
@@ -825,7 +835,7 @@
       } catch (e) {
         toast(`🌿 温记：总结失败 - ${e.message || e}`);
       }
-    }, 1500);
+    }, 400);
   }
 
   // 轻量 toast 提示（面板未开也能看到）

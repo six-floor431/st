@@ -2286,13 +2286,20 @@ ${it.desc || ""}` }));
       WM.Injection.init();
       const es = window.eventSource && window.eventSource.eventNames ? window.eventSource : window.SillyTavern && window.SillyTavern.eventSource;
       if (es && es.on) {
-        const ev = window.eventSource && window.eventSource.eventNames ? window.eventSource.eventNames.MESSAGE_SENT : "MESSAGE_SENT";
-        es.on(ev, autoSummaryHook);
+        const names = window.eventSource && window.eventSource.eventNames ? window.eventSource.eventNames : {};
+        const evReceived = names.MESSAGE_RECEIVED || "MESSAGE_RECEIVED";
+        const evSent = names.MESSAGE_SENT || "MESSAGE_SENT";
+        es.on(evReceived, autoSummaryHook);
+        es.on(evSent, autoSummaryHook);
       }
     }
+    let _lastAutoAt = 0;
     async function autoSummaryHook() {
       const s = WM.Settings.load();
       if (!s.autoSummaryEnabled) return;
+      const now = Date.now();
+      if (now - _lastAutoAt < 1200) return;
+      _lastAutoAt = now;
       setTimeout(async () => {
         try {
           const r = await WM.Summary.triggerSummary(s);
@@ -2307,7 +2314,7 @@ ${it.desc || ""}` }));
         } catch (e) {
           toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u603B\u7ED3\u5931\u8D25 - ${e.message || e}`);
         }
-      }, 1500);
+      }, 400);
     }
     function toast(msg) {
       let t = document.getElementById("warmmemo-toast");
