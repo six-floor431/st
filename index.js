@@ -740,6 +740,51 @@ ${it.message}`;
     };
   })();
 
+  // src/config/tag-filter.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    function escapeRegExp(s) {
+      return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    function applyRule(text, r) {
+      if (!r || !r.open) return text;
+      const open = r.open;
+      let out = text;
+      if (r.wrap) {
+        const close = r.close && r.close.trim() || open;
+        const oRe = escapeRegExp(open);
+        const cRe = escapeRegExp(close);
+        const re = new RegExp(oRe + "[\\s\\S]*?" + cRe, "g");
+        out = out.replace(re, "");
+      }
+      if (r.singleBefore) {
+        const idx = out.indexOf(open);
+        if (idx >= 0) out = out.slice(idx + open.length);
+      }
+      if (r.singleAfter) {
+        const idx = out.indexOf(open);
+        if (idx >= 0) out = out.slice(0, idx);
+      }
+      return out;
+    }
+    function strip(text, rules) {
+      if (!text) return text;
+      if (!Array.isArray(rules) || !rules.length) return text;
+      let out = String(text);
+      for (const r of rules) {
+        if (r && r.enabled !== false && r.open) {
+          try {
+            out = applyRule(out, r);
+          } catch (e) {
+          }
+        }
+      }
+      return out.replace(/\n{3,}/g, "\n\n");
+    }
+    WM.TagFilter = { strip, applyRule, escapeRegExp };
+  })();
+
   // src/config/llm-client.js
   (function() {
     "use strict";
@@ -1669,6 +1714,13 @@ ${recent}
         content: (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content
       }));
     }
+    function buildDialogue(msgs, settings) {
+      const rules = settings && settings.tagStripRules || [];
+      return msgs.map((m) => {
+        const raw = (m.name ? "\u3010" + m.name + "\u3011" : "") + (m.content || "");
+        return WM.TagFilter && WM.TagFilter.strip ? WM.TagFilter.strip(raw, rules) : raw;
+      }).join("\n");
+    }
     async function callLLM(systemText, userText, settings, opts) {
       opts = opts || {};
       const maxRetry = opts.maxRetry != null ? opts.maxRetry : 3;
@@ -1752,7 +1804,7 @@ ${recent}
         const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
         const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
         const summaryTpl = settings.prompts && settings.prompts.summary;
-        const sys = fillTemplate(summaryTpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+        const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
         let summaryText = "";
         try {
           summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
@@ -1767,7 +1819,7 @@ ${recent}
         const labels = [];
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.relations;
-          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+          const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
           const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
           let parsed = [];
           try {
@@ -1785,7 +1837,7 @@ ${recent}
         labels.push("relations");
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
-          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries, relations: relationsText });
+          const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
           const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
           const statusMap = { "\u8FDB\u884C\u4E2D": "active", "\u5DF2\u5B8C\u7ED3": "done", "\u5B8C\u7ED3": "done", "\u5DF2\u5E9F\u5F03": "abandon", "\u5E9F\u5F03": "abandon" };
           const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
@@ -1836,7 +1888,7 @@ ${recent}
           if (!tpl) return { kind: "items", ok: true, skipped: true };
           const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
           const s = fillTemplate(tpl, {
-            recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"),
+            recent: buildDialogue(recent, settings),
             plot: knownPlots
           });
           const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });

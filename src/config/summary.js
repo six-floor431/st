@@ -36,6 +36,15 @@
     }));
   }
 
+  // 构造传给 LLM 的「对话文本块」：对每条 content 应用标签过滤（剔除 <think> 等包裹内容）
+  function buildDialogue(msgs, settings) {
+    const rules = (settings && settings.tagStripRules) || [];
+    return msgs.map((m) => {
+      const raw = (m.name ? '【' + m.name + '】' : '') + (m.content || '');
+      return WM.TagFilter && WM.TagFilter.strip ? WM.TagFilter.strip(raw, rules) : raw;
+    }).join('\n');
+  }
+
   // 带重试的 LLM 调用：失败重试 3 次，指数退避（1s→2s→4s）
   async function callLLM(systemText, userText, settings, opts) {
     opts = opts || {};
@@ -135,7 +144,7 @@
 
     // 1) 先做总结
     const summaryTpl = settings.prompts && settings.prompts.summary;
-    const sys = fillTemplate(summaryTpl, { recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'), historySummary: histSummaries });
+    const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
     let summaryText = '';
     try {
       summaryText = await callLLM(sys, '请输出这段对话的总结：', settings, { temperature: 0.3, phase: 'summary' });
@@ -155,7 +164,7 @@
     // 关系
     tasks.push((async () => {
       const tpl = settings.prompts && settings.prompts.relations;
-      const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'), historySummary: histSummaries });
+      const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       const out = await callLLM(s, '请输出角色之间的关系（每行 人物A → 人物B：关系）：', settings, { temperature: 0.3, phase: 'relations' });
       let parsed = [];
       try {
@@ -175,7 +184,7 @@
     // 剧情：时间｜标题｜内容｜状态
     tasks.push((async () => {
       const tpl = settings.prompts && settings.prompts.plot;
-      const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'), historySummary: histSummaries, relations: relationsText });
+      const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
       const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
       const statusMap = { '进行中': 'active', '已完结': 'done', '完结': 'done', '已废弃': 'abandon', '废弃': 'abandon' };
       const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -233,7 +242,7 @@
       const knownPlots = (WM.MemoryStore.getPlots() || [])
         .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
       const s = fillTemplate(tpl, {
-        recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'),
+        recent: buildDialogue(recent, settings),
         plot: knownPlots,
       });
       const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
