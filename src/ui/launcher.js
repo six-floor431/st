@@ -798,19 +798,13 @@
       </div>`;
     return `
       <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
-        <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。选择 <b>本地酒馆</b> 即用酒馆当前对话源；选择 <b>自定义配置</b> 可指定代理预设或独立 API。配完可点「测试连接」验证可用性。</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0">
-          <span class="wm-h" style="margin:0">调用来源</span>
-          <select id="llm-src" title="调用来源">
-            <option value="local" ${c.source === 'local' ? 'selected' : ''}>本地酒馆(当前源)</option>
-            <option value="custom" ${c.source === 'custom' ? 'selected' : ''}>自定义配置</option>
-          </select>
-        </div>
-        <div id="llm-custom" style="${c.source === 'custom' ? '' : 'display:none'};margin-top:6px">
-          <label class="wm-row">代理预设名<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="留空则填下方 URL（酒馆代理预设名）"/></label>
-          <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
-          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
-          <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini"/></label>
+        <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。<b>留空</b>即用酒馆当前对话源；<b>填了 Base URL</b> 则直接调用该地址（自适应 OpenAI / DeepSeek / 火山引擎 等任意兼容服务，无需选厂家）。配完可点「测试连接」验证可用性。</div>
+        <div id="llm-custom" style="margin-top:6px">
+          <label class="wm-row">Base URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1、https://ark.cn-beijing.volces.com/api/v3、https://api.deepseek.com/v1"/></label>
+          <div class="wm-hint">直接填任意厂家的 Base URL 即可，自动按 OpenAI 兼容协议请求（火山引擎填 <code>https://ark.cn-beijing.volces.com/api/v3</code>，DeepSeek 填 <code>https://api.deepseek.com/v1</code>）。</div>
+          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-...（本地酒馆源可留空）"/></label>
+          <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
+          <label class="wm-row">代理预设名(可选)<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="留空则用上方 URL（酒馆代理预设名）"/></label>
           <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能（总结/关系/剧情/世界观）共用，模型会在该范围内完整输出</span></label>
         </div>
         <div class="wm-divider"></div>
@@ -907,13 +901,15 @@
   function syncPaneToSettings(body, s, scope) {
     const q = (sel) => body.querySelector(sel);
     if (!scope || scope === 'llm') {
-      if (q('#llm-src')) {
+      if (q('#llm-url') !== null) {
+        // 留空 apiUrl 视为使用酒馆当前源（source=local），否则用自定义 BaseURL
+        const apiUrl = q('#llm-url').value.trim();
         s.llmConfig = {
-          source: q('#llm-src').value,
-          proxyPreset: q('#llm-preset').value.trim(),
-          apiUrl: q('#llm-url').value.trim(),
-          apiKey: q('#llm-key').value.trim(),
-          model: q('#llm-model').value.trim(),
+          source: apiUrl ? 'custom' : 'local',
+          proxyPreset: q('#llm-preset') ? q('#llm-preset').value.trim() : '',
+          apiUrl,
+          apiKey: q('#llm-key') ? q('#llm-key').value.trim() : '',
+          model: q('#llm-model') ? q('#llm-model').value.trim() : '',
           maxTokens: Math.max(50, parseInt(q('#llm-maxtok').value, 10) || 700),
         };
         s.presetPrefix = {
@@ -939,12 +935,10 @@
       if (q('#c-vec')) {
         s.vectorEnabled = q('#c-vec').checked;
       }
-      if (q('#c-emb-src')) {
-        s.embeddingSource = q('#c-emb-src').value;
-        s.embeddingBaseUrl = q('#c-emb-url') ? q('#c-emb-url').value : s.embeddingBaseUrl;
+      if (q('#c-emb-url') !== null) {
+        s.embeddingBaseUrl = q('#c-emb-url').value;
         s.embeddingApiKey = q('#c-emb-key') ? q('#c-emb-key').value : s.embeddingApiKey;
         s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
-        s.embeddingProxyPath = q('#c-emb-proxy') ? q('#c-emb-proxy').value : s.embeddingProxyPath;
         s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
       }
     }
@@ -952,12 +946,10 @@
       if (q('#c-rerank')) {
         s.rerankEnabled = q('#c-rerank').checked;
       }
-      if (q('#c-rk-src')) {
-        s.rerankSource = q('#c-rk-src').value;
-        s.rerankBaseUrl = q('#c-rk-url') ? q('#c-rk-url').value : s.rerankBaseUrl;
+      if (q('#c-rk-url') !== null) {
+        s.rerankBaseUrl = q('#c-rk-url').value;
         s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
         s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
-        s.rerankProxyPath = q('#c-rk-proxy') ? q('#c-rk-proxy').value : s.rerankProxyPath;
         s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
       }
     }
@@ -977,10 +969,6 @@
       el.addEventListener('change', () => syncPaneToSettings(body, s));
       el.addEventListener('input', () => syncPaneToSettings(body, s));
     });
-    // 来源切换显示
-    const srcSel = body.querySelector('#llm-src');
-    const customBox = body.querySelector('#llm-custom');
-    if (srcSel && customBox) srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
     // 预设前置 mode 切换
     const ppImport = body.querySelector('#pp-import');
     const ppPreset = body.querySelector('#pp-preset');
@@ -991,33 +979,6 @@
         if (ppPreset) ppPreset.style.display = m === 'preset' ? '' : 'none';
       };
     });
-
-    // 向量来源切换显示（云端/本地Ollama/本地反代）
-    const embSrc = body.querySelector('#c-emb-src');
-    if (embSrc) {
-      const sync = () => {
-        const v = embSrc.value;
-        const cloud = body.querySelector('#emb-cloud');
-        const ollama = body.querySelector('#emb-ollama');
-        const proxy = body.querySelector('#emb-proxy');
-        if (cloud) cloud.style.display = v === 'cloud' ? '' : 'none';
-        if (ollama) ollama.style.display = v === 'ollama' ? '' : 'none';
-        if (proxy) proxy.style.display = v === 'localProxy' ? '' : 'none';
-      };
-      embSrc.onchange = sync; sync();
-    }
-    // 重排来源切换显示（云端/本地反代）
-    const rkSrc = body.querySelector('#c-rk-src');
-    if (rkSrc) {
-      const sync = () => {
-        const v = rkSrc.value;
-        const cloud = body.querySelector('#rk-cloud');
-        const proxy = body.querySelector('#rk-proxy');
-        if (cloud) cloud.style.display = v === 'cloud' ? '' : 'none';
-        if (proxy) proxy.style.display = v === 'localProxy' ? '' : 'none';
-      };
-      rkSrc.onchange = sync; sync();
-    }
 
     // 三级标签：任意 [data-lv3] 容器内按钮切换对应 [data-ptab-pane]
     body.querySelectorAll('.wm-subtabs[data-lv3]').forEach((bar) => {
@@ -1075,17 +1036,15 @@
       };
       const testEmb = async () => {
         try {
-          const embTestable = tmp.embeddingSource === 'ollama' || tmp.embeddingSource === 'localProxy'
-            ? !!(tmp.embeddingProxyPath)
-            : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
-          if (embTestable) add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '来源=' + (tmp.embeddingSource || 'cloud'));
+          const embTestable = !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
+          if (embTestable) add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), 'BaseURL=' + (tmp.embeddingBaseUrl || '(用APIKey/模型)'));
           else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
         } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
       };
       const testRk = async () => {
         try {
-          const rkTestable = tmp.rerankSource === 'localProxy' ? !!(tmp.rerankProxyPath) : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
-          if (rkTestable) add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '来源=' + (tmp.rerankSource || 'cloud'));
+          const rkTestable = !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
+          if (rkTestable) add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), 'BaseURL=' + (tmp.rerankBaseUrl || '(用APIKey/模型)'));
           else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
         } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
       };
@@ -1113,61 +1072,28 @@
     </div>`;
   }
 
-  // 向量(Embedding)面板：来源可选 云端 / 本地Ollama / 本地反代
+  // 向量(Embedding)面板：直接填 Base URL 自适应任意 OpenAI 兼容 / 本地反代 / Gemini，无需选厂家
   function renderPaneVector(s) {
-    const src = s.embeddingSource || 'cloud';
-    const showCloud = src === 'cloud' ? '' : 'none';
-    const showProxy = src === 'localProxy' ? '' : 'none';
-    const showOllama = src === 'ollama' ? '' : 'none';
     return `<div class="wm-card">
       <div class="wm-h">Embedding（向量）配置</div>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索</label>
-      <label class="wm-row">来源
-        <select id="c-emb-src">
-          <option value="cloud" ${src==='cloud'?'selected':''}>云端服务</option>
-          <option value="ollama" ${src==='ollama'?'selected':''}>本地 Ollama</option>
-          <option value="localProxy" ${src==='localProxy'?'selected':''}>本地反代</option>
-        </select>
-      </label>
-      <div id="emb-cloud" style="display:${showCloud}">
-        <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
-        <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选"/></label>
-      </div>
-      <div id="emb-ollama" style="display:${showOllama}">
-        <div class="wm-hint">使用本地 Ollama 的 OpenAI 兼容接口（默认 http://127.0.0.1:11434/v1）。</div>
-      </div>
-      <div id="emb-proxy" style="display:${showProxy}">
-        <label class="wm-row">本地反代路径<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://localhost:8080/vec/v1/embeddings"/></label>
-        <div class="wm-hint">自建本地反代地址。支持多种约定：<br/>· 同源代理(Caddy 等)：<code>http://localhost:8080/vec</code>（自动补为 /vec/v1/embeddings）<br/>· 裸地址：<code>http://127.0.0.1:8080</code>（自动补 /v1/embeddings）<br/>· 只接受 GET 的反代节点：在地址后加 <code>?method=GET</code></div>
-      </div>
+      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="http://127.0.0.1:8080/vec/v1/embeddings 或 https://api.siliconflow.cn/v1"/></label>
+      <div class="wm-hint">直接填任意服务的 Base URL，自动适配：<br/>· 本地反代/同源代理：<code>http://127.0.0.1:8080/vec</code>（自动补 /v1/embeddings）<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（本地反代留空）"/></label>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
     </div>`;
   }
 
-  // 重排序(Rerank)面板：来源可选 云端 / 本地反代
+  // 重排序(Rerank)面板：直接填 Base URL 自适应任意 OpenAI 兼容 / 本地反代
   function renderPaneRerank(s) {
-    const src = s.rerankSource || 'cloud';
-    const showCloud = src === 'cloud' ? '' : 'none';
-    const showProxy = src === 'localProxy' ? '' : 'none';
     return `<div class="wm-card">
       <div class="wm-h">Rerank（重排序）配置</div>
       <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
-      <label class="wm-row">来源
-        <select id="c-rk-src">
-          <option value="cloud" ${src==='cloud'?'selected':''}>云端服务</option>
-          <option value="localProxy" ${src==='localProxy'?'selected':''}>本地反代</option>
-        </select>
-      </label>
-      <div id="rk-cloud" style="display:${showCloud}">
-        <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
-        <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
-      </div>
-      <div id="rk-proxy" style="display:${showProxy}">
-        <label class="wm-row">本地反代路径<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://localhost:8080/vec/v1/rerank"/></label>
-        <div class="wm-hint">自建本地反代地址。支持：<code>http://localhost:8080/vec</code>（自动补 /vec/v1/rerank）、裸地址自动补 /v1/rerank、<code>?method=GET</code> 走 GET 模式。</div>
-      </div>
+      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank 或 http://127.0.0.1:8080/vec/v1/rerank"/></label>
+      <div class="wm-hint">直接填任意服务的 Base URL，自动适配：<br/>· 本地反代/同源代理：<code>http://127.0.0.1:8080/vec</code>（自动补 /v1/rerank）<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1/rerank</code></div>
+      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选（本地反代留空）"/></label>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>

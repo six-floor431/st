@@ -5,22 +5,26 @@
 (function () {
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
-  // 取酒馆官方 generateRaw 入口。扩展脚本运行时，酒馆会把 generateRaw
-  // 注入到当前脚本的全局作用域（与参考项目 iframe 版的 generateRaw 同一套 API）。
-  function getGenerateRaw() {
-    if (typeof window.generateRaw === 'function') return window.generateRaw;
+  // 取酒馆官方 generate / generateRaw 入口。
+  // 优先使用 window.generate（ST 原生，最稳，内容一定能进入请求）；
+  // 回退到 generateRaw（自定义提示词顺序）。
+  function getGenerate() {
+    if (typeof window.generate === 'function') return window.generate;
     try {
       const ST = window.SillyTavern;
       if (ST && typeof ST.getContext === 'function') {
         const ctx = ST.getContext();
-        if (ctx && typeof ctx.generateRaw === 'function') return ctx.generateRaw;
+        if (ctx && typeof ctx.generate === 'function') return ctx.generate;
       }
-      if (ST && typeof ST.generateRaw === 'function') return ST.generateRaw;
+      if (ST && typeof ST.generate === 'function') return ST.generate;
     } catch (e) { /* ignore */ }
+    if (typeof window.generateRaw === 'function') return window.generateRaw;
     return null;
   }
 
-  // 由 profile 组装酒馆 custom_api 配置（custom 来源时）
+  // 由 profile 组装酒馆 custom_api 配置。
+  // 需求1：直接填 Base URL 自适应任意厂家（OpenAI/DeepSeek/火山引擎等），
+  // 不再有「厂家下拉」，只传 apiurl+key+model，source 统一用 openai（ST 按 OpenAI 兼容协议请求）。
   function buildCustomApi(p) {
     if (!p) return undefined;
     const api = {};
@@ -28,6 +32,7 @@
     if (p.apiUrl) api.apiurl = p.apiUrl.trim();
     if (p.apiKey) api.key = p.apiKey.trim();
     if (p.model) api.model = p.model.trim();
+    if (api.apiurl || api.apikey || api.model || api.proxy_preset) api.source = 'openai';
     return (api.proxy_preset || api.apiurl || api.model) ? api : undefined;
   }
 
@@ -87,11 +92,8 @@
     return [];
   }
 
-  // 核心：调用酒馆 generateRaw，提示词完全由调用方控制。
-  // 严格对齐 @types/function/generate.d.ts 的 GenerateRawConfig 签名：
-  //   - 必须有 user_input（否则内容为空）
-  //   - ordered_prompts: 自定义提示词数组（system/user/assistant），相当于自定义预设
-  //   - max_tokens/temperature 等参数放在 custom_api 内（local 下也用 custom_api 覆盖 max_tokens）
+  // 核心：调用酒馆 generate（ST 原生，最稳），通过 injects 注入自定义 system 提示词，
+  // user_input 放用户内容，保证内容一定真正进入请求（修复此前 generateRaw 导致 context 全空的 bug）。
   // 支持两种签名（向后兼容）：
   //   新：complete(messages, opts)  —— messages: [{role:'system'|'user', content}]
   //   旧：complete(systemText, userText, settings, opts)
@@ -108,37 +110,44 @@
     }
     opts = opts || {};
     const profile = opts.profile || { source: 'local' };
-    const gr = getGenerateRaw();
+    const gr = getGenerate();
     if (!gr) {
-      throw new Error('酒馆 generateRaw 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
+      throw new Error('酒馆 generate 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
     }
-    // 拆分提示词：把 user 角色的内容作为 user_input（generateRaw 必需的顶层字段），
-    // 其余（system 等）作为 ordered_prompts 前置。这样不会发空 content，也不会把对话历史带进来。
+    // 拆出 user_input（最后一条 user 内容）和 system 提示词（其余角色），
+    // system 提示词通过 injects 注入，保证 100% 进入请求体。
     const userMsg = (messages || []).filter((m) => m.role === 'user').pop();
     const user_input = (userMsg && userMsg.content) || (opts.fallbackUserInput || '');
-    const ordered_prompts = (messages || [])
+    const systemPrompts = (messages || [])
       .filter((m) => m.role !== 'user' || m !== userMsg)
-      .map((m) => ({ role: m.role || 'system', content: m.content || '' }));
+      .map((m) => String(m.content || ''))
+      .filter(Boolean);
+    const injects = systemPrompts.map((content) => ({
+      position: 'in_chat',
+      depth: 0,
+      role: 'system',
+      content,
+      should_scan: false,
+    }));
 
     // 输出 token 上限：优先本次 opts.maxTokens，否则统一配置 profile.maxTokens，再兜底 512
     const maxTokens = opts.maxTokens || profile.maxTokens || 512;
     const temperature = opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3);
 
-    // custom_api：用于覆盖 max_tokens/temperature（避免被酒馆全局 233333 之类的值拖慢测试/摘要）
-    // 参考 @types：local 下不传 apiurl/key/proxy_preset 时，酒馆仍用当前 ST 源，仅应用 max_tokens 覆盖。
+    // custom_api：直接填 BaseURL 时让酒馆用该源；未填则用酒馆当前对话源，仅覆盖 max_tokens
     const custom_api = Object.assign(
       {},
       buildCustomApi(profile) || {},
       { max_tokens: maxTokens, temperature: temperature }
     );
-    // local 且未配置任何代理/URL/模型时，移除 source 字段，让酒馆严格使用当前对话源（只覆盖 max_tokens）
-    if (profile.source === 'local' && !custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
+    // 未填任何 BaseURL/模型/预设时，移除 source，让酒馆严格用当前对话源
+    if (!custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
       delete custom_api.source;
     }
 
     const config = {
       user_input,
-      ordered_prompts,
+      injects,
       should_stream: false,
       should_silence: opts.should_silence != null ? opts.should_silence : true,
       // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
@@ -178,5 +187,5 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
+  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerate, resolvePrefix, getPresetPromptItems, listPresetNames };
 })();

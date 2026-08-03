@@ -28,14 +28,9 @@
     return /[?&]method=GET/i.test(urlOrPath || '') || /[?&]get=1\b/i.test(urlOrPath || '');
   }
 
-  // 按来源解析 rerank 实际请求地址
+  // 直接按 Base URL 解析 rerank 实际请求地址（自适应任意 OpenAI 兼容 / 本地反代）
   function resolveRerankUrl(s) {
-    const src = s.rerankSource || 'cloud';
-    if (src === 'localProxy') {
-      // 用户自建本地反代：proxyPath 智能补全为完整 rerank 地址
-      return buildRerankUrl(s.rerankProxyPath) || '';
-    }
-    return normalize(s.rerankBaseUrl) || 'https://api.siliconflow.cn/v1/rerank';
+    return buildRerankUrl(normalize(s.rerankBaseUrl) || '');
   }
 
   async function rerank(query, documents, rawSettings, options) {

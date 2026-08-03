@@ -59,12 +59,8 @@
   async function embed(text, settings) {
     settings = settings || WM.Settings.load();
     if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
-    // 判断向量是否真正可用：兼容 cloud(用 embeddingBaseUrl) / 本地反代 / Ollama(用 embeddingProxyPath)
-    const hasEndpoint =
-      !!settings.embeddingBaseUrl ||
-      settings.embeddingSource === 'localProxy' && !!settings.embeddingProxyPath ||
-      settings.embeddingSource === 'ollama';
-    if (!hasEndpoint) return null;
+    // 向量可用条件：填了 Base URL 即可（本地反代/云端/Ollama 都走 BaseURL 直填）
+    if (!settings.embeddingBaseUrl) return null;
     try { return await WM.EmbeddingClient.embed(text, settings); } catch (e) { return null; }
   }
 

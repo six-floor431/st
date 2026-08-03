@@ -53,23 +53,15 @@
     return /[?&]method=GET/i.test(urlOrPath || '') || /[?&]get=1\b/i.test(urlOrPath || '');
   }
 
-  // 按来源解析 embedding 实际请求地址
+  // 直接按 Base URL 解析 embedding 实际请求地址（自适应任意 OpenAI 兼容 / 本地反代 / Gemini）
   function resolveEmbedUrl(s) {
-    const src = s.embeddingSource || 'cloud';
-    if (src === 'ollama') {
-      // 本地 Ollama（OpenAI 兼容接口）
-      return { url: buildEmbedUrl(s.embeddingProxyPath || 'http://127.0.0.1:11434'), provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
-    }
-    if (src === 'localProxy') {
-      // 用户自建本地反代：proxyPath 智能补全为完整 embeddings 地址
-      return { url: buildEmbedUrl(s.embeddingProxyPath) || '', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
-    }
-    // cloud：用填写的 Base URL（OpenAI 兼容 / Gemini 按 host 推断）
-    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || 'https://api.siliconflow.cn/v1';
+    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || '';
+    if (!base) return { url: '', provider: 'compatible', model: s.embeddingModel || '' };
+    // Gemini 特殊 host 直接走 gemini 协议
     if (/generativelanguage\.googleapis\.com/i.test(base)) {
       return { url: base, provider: 'gemini', model: s.embeddingModel || s.model || 'text-embedding-004' };
     }
-    // 经 buildEmbedUrl 智能补全 /embeddings 后缀（用户可能填 /v1 或已完整地址）
+    // 其余一律按 OpenAI 兼容：buildEmbedUrl 智能补全 /embeddings 后缀（用户可能填 /v1 或已完整地址）
     return { url: buildEmbedUrl(base), provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3' };
   }
 
