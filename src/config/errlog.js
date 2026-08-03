@@ -53,5 +53,23 @@
   async function clear() { await persist([]); }
   function last() { const l = load(); return l.length ? l[l.length - 1] : null; }
 
-  WM.ErrLog = { add, get, clear, last };
+  // 导出为 JSON 字符串（便于下载/复制排查）
+  function exportJSON() {
+    const list = load();
+    return JSON.stringify({ type: 'warmmemo_errors', exportedAt: Date.now(), count: list.length, items: list }, null, 2);
+  }
+  // 导出为可读文本（便于直接粘贴到聊天/工单）
+  function toText() {
+    const list = load();
+    if (!list.length) return '（暂无错误记录）';
+    return list.slice().reverse().map((it) => {
+      const t = new Date(it.ts).toLocaleString('zh-CN');
+      let s = `[${it.scope}] ${t}\n${it.message}`;
+      if (it.extra) s += `\n上下文: ${JSON.stringify(it.extra)}`;
+      if (it.stack) s += `\n栈: ${it.stack}`;
+      return s;
+    }).join('\n\n' + '-'.repeat(40) + '\n\n');
+  }
+
+  WM.ErrLog = { add, get, clear, last, exportJSON, toText };
 })();

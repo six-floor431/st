@@ -36,7 +36,7 @@
     }));
   }
 
-  // 带重试的 LLM 调用：失败重试 3 次，每次间隔 1 秒
+  // 带重试的 LLM 调用：失败重试 3 次，指数退避（1s→2s→4s）
   async function callLLM(systemText, userText, settings, opts) {
     opts = opts || {};
     const maxRetry = opts.maxRetry != null ? opts.maxRetry : 3;
@@ -50,9 +50,10 @@
       } catch (e) {
         lastErr = e;
         if (attempt < maxRetry) {
-          // 失败一次后等 1 秒再重试
-          if (WM.ErrLog) await WM.ErrLog.add('llm', e, { phase: opts.phase || 'unknown', attempt, willRetry: true });
-          await new Promise((r) => setTimeout(r, 1000));
+          // 指数退避，避免 LLM 长时间挂起时卡死
+          const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+          if (WM.ErrLog) await WM.ErrLog.add('llm', e, { phase: opts.phase || 'unknown', attempt, willRetry: true, backoffMs: backoff });
+          await new Promise((r) => setTimeout(r, backoff));
         }
       }
     }
@@ -60,45 +61,61 @@
     throw lastErr || new Error('LLM 调用失败');
   }
 
+  // ── 防重入锁：上一段总结没跑完，不启动下一段（避免并行四项重叠） ──
+  let _summarizing = false;
+  function isSummarizing() { return _summarizing; }
+
   // 触发一次完整总结（含关系/剧情/世界观/物品并行提炼）
   // range: 可选 [start,end] 楼层区间，用于 UI 展示
-  async function triggerSummary(settings) {
+  // opts.forceEnd: 到达聊天末尾时强制收尾（即便不足一段也总结剩余楼层）
+  async function triggerSummary(settings, opts) {
+    opts = opts || {};
     settings = settings || {};
     const auto = settings.autoSummaryMode || 'new';
     if (!settings.autoSummaryEnabled) return false;
 
+    // 防重入：上一段未跑完直接跳过，避免并行四项重叠
+    if (_summarizing) return false;
+    _summarizing = true;
+
     // 计算要总结的区间
     let range, total;
-    const msgs = getRecentMessages(1000);
-    total = msgs.length;
-    if (auto === 'new') {
-      // 只总结新增楼层：从 summaryPointer 之后到最新
-      const ptr = WM.MemoryStore.getSummaryPointer();
-      if (ptr >= total) return false;
-      range = [ptr + 1, total];
-    } else if (auto === 'count') {
-      const win = Math.max(5, settings.autoSummaryCount || 20);
-      const from = Math.max(0, total - win);
-      range = [from + 1, total];
-    } else if (auto === 'range') {
-      const start = Math.max(1, settings.autoSummaryStart || 1);
-      let end = settings.autoSummaryEnd;
-      if (end == null || end < 0) end = total;
-      end = Math.min(end, total);
-      if (start > end) return false;
-      range = [start, end];
-    } else if (auto === 'floor') {
-      // 楼层区间模式：每 autoSummaryFloor 层触发一段（1-20,21-40,...），需攒满一段才触发
-      const floor = Math.max(1, settings.autoSummaryFloor || 20);
-      const ptr = WM.MemoryStore.getSummaryPointer();
-      const segEnd = Math.floor(ptr / floor) * floor + floor; // 下一段的结束楼层
-      if (total < segEnd) return false; // 还没攒够一整段，等待
-      const start = ptr + 1;
-      const end = Math.min(total, segEnd);
-      range = [start, end];
-    } else {
-      return false;
-    }
+    try {
+      const msgs = getRecentMessages(1000);
+      total = msgs.length;
+      if (auto === 'new') {
+        // 只总结新增楼层：从 summaryPointer 之后到最新
+        const ptr = WM.MemoryStore.getSummaryPointer();
+        if (ptr >= total) return false;
+        range = [ptr + 1, total];
+      } else if (auto === 'count') {
+        const win = Math.max(5, settings.autoSummaryCount || 20);
+        const from = Math.max(0, total - win);
+        range = [from + 1, total];
+      } else if (auto === 'range') {
+        const start = Math.max(1, settings.autoSummaryStart || 1);
+        let end = settings.autoSummaryEnd;
+        if (end == null || end < 0) end = total;
+        end = Math.min(end, total);
+        if (start > end) return false;
+        range = [start, end];
+      } else if (auto === 'floor') {
+        // 楼层区间模式：每 autoSummaryFloor 层触发一段（1-20,21-40,...）
+        const floor = Math.max(1, settings.autoSummaryFloor || 20);
+        const ptr = WM.MemoryStore.getSummaryPointer();
+        const segEnd = Math.floor(ptr / floor) * floor + floor; // 下一段的结束楼层
+        if (opts.forceEnd) {
+          // 末尾收尾：聊天已到末尾，仍有未总结楼层则强制收尾（即使不足一段）
+          if (ptr >= total) return false; // 已全部总结完
+          if (total < segEnd) range = [ptr + 1, total];
+          else range = [ptr + 1, Math.min(total, segEnd)];
+        } else {
+          if (total < segEnd) return false; // 还没攒够一整段，等待
+          range = [ptr + 1, Math.min(total, segEnd)];
+        }
+      } else {
+        return false;
+      }
     const recent = msgs.slice(range[0] - 1, range[1]);
     if (!recent.length) return false;
 
@@ -190,11 +207,14 @@
     // 并行执行 + 全部失败收集
     const results = await Promise.allSettled(tasks);
     const failures = [];
+    const successes = [];
     results.forEach((r, i) => {
       if (r.status === 'rejected') {
         const scope = labels[i];
         failures.push({ scope, err: r.reason });
         if (WM.ErrLog) WM.ErrLog.add(scope, r.reason, { range }).catch(() => {});
+      } else if (r.value && !r.value.skipped) {
+        successes.push(r.value.kind);
       }
     });
 
@@ -204,9 +224,12 @@
       if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('所有并行任务失败'), { range, reason });
       WM.UI && WM.UI.toast && WM.UI.toast('提炼全部失败，见「错误报告」：\n' + reason, 'error');
     } else if (failures.length > 0) {
-      // 部分失败 → 仅上报，不阻断
-      const reason = failures.map((f) => '【' + f.scope + '】' + (f.err && f.err.message ? f.err.message : f.err)).join('；');
-      WM.UI && WM.UI.toast && WM.UI.toast('部分提炼失败：' + reason, 'warn');
+      // 部分失败 → 明确标注成功/失败项，便于用户感知
+      const okList = successes.join('、') || '无';
+      const failList = failures.map((f) => f.scope).join('、');
+      const detail = '成功：' + okList + '；失败：' + failList;
+      if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('部分并行任务失败'), { range, ok: successes, fail: failures.map((f) => f.scope), detail }).catch(() => {});
+      WM.UI && WM.UI.toast && WM.UI.toast('部分提炼失败 → ' + detail, 'warn');
     }
 
     // 触发面板与记忆刷新
@@ -215,6 +238,9 @@
       ok: true,
       range,
       count: recent.length,
+      partial: failures.length > 0,
+      successes,
+      failures: failures.map((f) => f.scope),
       results: {
         relations: (WM.MemoryStore.getRelations() || []).length,
         plots: (WM.MemoryStore.getPlots() || []).length,
@@ -222,8 +248,11 @@
         items: (WM.MemoryStore.getItems ? WM.MemoryStore.getItems() : []).length,
       },
     };
+  } finally {
+    _summarizing = false; // 无论成功/失败/提前 return，都释放防重入锁
   }
+}
 
   // 兼容旧 UI 调用名
-  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages };
+  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages, isSummarizing };
 })();

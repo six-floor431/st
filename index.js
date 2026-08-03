@@ -243,7 +243,25 @@
       const l = load();
       return l.length ? l[l.length - 1] : null;
     }
-    WM.ErrLog = { add, get, clear, last };
+    function exportJSON() {
+      const list = load();
+      return JSON.stringify({ type: "warmmemo_errors", exportedAt: Date.now(), count: list.length, items: list }, null, 2);
+    }
+    function toText() {
+      const list = load();
+      if (!list.length) return "\uFF08\u6682\u65E0\u9519\u8BEF\u8BB0\u5F55\uFF09";
+      return list.slice().reverse().map((it) => {
+        const t = new Date(it.ts).toLocaleString("zh-CN");
+        let s = `[${it.scope}] ${t}
+${it.message}`;
+        if (it.extra) s += `
+\u4E0A\u4E0B\u6587: ${JSON.stringify(it.extra)}`;
+        if (it.stack) s += `
+\u6808: ${it.stack}`;
+        return s;
+      }).join("\n\n" + "-".repeat(40) + "\n\n");
+    }
+    WM.ErrLog = { add, get, clear, last, exportJSON, toText };
   })();
 
   // src/config/memory-store.js
@@ -1124,150 +1142,176 @@ ${recent}
         } catch (e) {
           lastErr = e;
           if (attempt < maxRetry) {
-            if (WM.ErrLog) await WM.ErrLog.add("llm", e, { phase: opts.phase || "unknown", attempt, willRetry: true });
-            await new Promise((r) => setTimeout(r, 1e3));
+            const backoff = Math.min(1e3 * Math.pow(2, attempt - 1), 8e3);
+            if (WM.ErrLog) await WM.ErrLog.add("llm", e, { phase: opts.phase || "unknown", attempt, willRetry: true, backoffMs: backoff });
+            await new Promise((r) => setTimeout(r, backoff));
           }
         }
       }
       if (WM.ErrLog) await WM.ErrLog.add("llm", lastErr || new Error("\u672A\u77E5LLM\u5931\u8D25"), { phase: opts.phase || "unknown", attempt: maxRetry, willRetry: false });
       throw lastErr || new Error("LLM \u8C03\u7528\u5931\u8D25");
     }
-    async function triggerSummary(settings) {
+    let _summarizing = false;
+    function isSummarizing() {
+      return _summarizing;
+    }
+    async function triggerSummary(settings, opts) {
+      opts = opts || {};
       settings = settings || {};
       const auto = settings.autoSummaryMode || "new";
       if (!settings.autoSummaryEnabled) return false;
+      if (_summarizing) return false;
+      _summarizing = true;
       let range, total;
-      const msgs = getRecentMessages(1e3);
-      total = msgs.length;
-      if (auto === "new") {
-        const ptr = WM.MemoryStore.getSummaryPointer();
-        if (ptr >= total) return false;
-        range = [ptr + 1, total];
-      } else if (auto === "count") {
-        const win = Math.max(5, settings.autoSummaryCount || 20);
-        const from = Math.max(0, total - win);
-        range = [from + 1, total];
-      } else if (auto === "range") {
-        const start = Math.max(1, settings.autoSummaryStart || 1);
-        let end = settings.autoSummaryEnd;
-        if (end == null || end < 0) end = total;
-        end = Math.min(end, total);
-        if (start > end) return false;
-        range = [start, end];
-      } else if (auto === "floor") {
-        const floor = Math.max(1, settings.autoSummaryFloor || 20);
-        const ptr = WM.MemoryStore.getSummaryPointer();
-        const segEnd = Math.floor(ptr / floor) * floor + floor;
-        if (total < segEnd) return false;
-        const start = ptr + 1;
-        const end = Math.min(total, segEnd);
-        range = [start, end];
-      } else {
-        return false;
-      }
-      const recent = msgs.slice(range[0] - 1, range[1]);
-      if (!recent.length) return false;
-      const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
-      const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
-      const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
-      const summaryTpl = settings.prompts && settings.prompts.summary;
-      const sys = fillTemplate(summaryTpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
-      let summaryText = "";
       try {
-        summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
-        await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
-        await WM.MemoryStore.setSummaryPointer(range[1]);
-      } catch (e) {
-        if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
-        WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
-        return { ok: false, range, reason: e && e.message ? e.message : String(e) };
-      }
-      const tasks = [];
-      const labels = [];
-      tasks.push((async () => {
-        const tpl = settings.prompts && settings.prompts.relations;
-        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
-        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
-        let parsed = [];
+        const msgs = getRecentMessages(1e3);
+        total = msgs.length;
+        if (auto === "new") {
+          const ptr = WM.MemoryStore.getSummaryPointer();
+          if (ptr >= total) return false;
+          range = [ptr + 1, total];
+        } else if (auto === "count") {
+          const win = Math.max(5, settings.autoSummaryCount || 20);
+          const from = Math.max(0, total - win);
+          range = [from + 1, total];
+        } else if (auto === "range") {
+          const start = Math.max(1, settings.autoSummaryStart || 1);
+          let end = settings.autoSummaryEnd;
+          if (end == null || end < 0) end = total;
+          end = Math.min(end, total);
+          if (start > end) return false;
+          range = [start, end];
+        } else if (auto === "floor") {
+          const floor = Math.max(1, settings.autoSummaryFloor || 20);
+          const ptr = WM.MemoryStore.getSummaryPointer();
+          const segEnd = Math.floor(ptr / floor) * floor + floor;
+          if (opts.forceEnd) {
+            if (ptr >= total) return false;
+            if (total < segEnd) range = [ptr + 1, total];
+            else range = [ptr + 1, Math.min(total, segEnd)];
+          } else {
+            if (total < segEnd) return false;
+            range = [ptr + 1, Math.min(total, segEnd)];
+          }
+        } else {
+          return false;
+        }
+        const recent = msgs.slice(range[0] - 1, range[1]);
+        if (!recent.length) return false;
+        const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
+        const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
+        const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
+        const summaryTpl = settings.prompts && settings.prompts.summary;
+        const sys = fillTemplate(summaryTpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+        let summaryText = "";
         try {
-          const arr = JSON.parse(out);
-          if (Array.isArray(arr)) parsed = arr;
+          summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
+          await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
+          await WM.MemoryStore.setSummaryPointer(range[1]);
         } catch (e) {
-          parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-            const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-            return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: "", label: "" };
+          if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
+          return { ok: false, range, reason: e && e.message ? e.message : String(e) };
+        }
+        const tasks = [];
+        const labels = [];
+        tasks.push((async () => {
+          const tpl = settings.prompts && settings.prompts.relations;
+          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
+          let parsed = [];
+          try {
+            const arr = JSON.parse(out);
+            if (Array.isArray(arr)) parsed = arr;
+          } catch (e) {
+            parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+              const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+              return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: "", label: "" };
+            });
+          }
+          await WM.MemoryStore.setRelations(parsed);
+          return { kind: "relations", ok: true };
+        })());
+        labels.push("relations");
+        tasks.push((async () => {
+          const tpl = settings.prompts && settings.prompts.plot;
+          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries, relations: relationsText });
+          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u5F53\u524D\u5267\u60C5\u7EBF\uFF08\u6807\u9898\uFF5C\u6458\u8981\uFF0C\u6BCF\u884C\u4E00\u6761\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
+          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+          for (const ln of lines) {
+            const idx = ln.indexOf("\uFF5C");
+            const idx2 = ln.indexOf("|");
+            const sep = idx >= 0 ? idx : idx2;
+            if (sep >= 0) await WM.MemoryStore.addPlot(ln.slice(0, sep).trim(), ln.slice(sep + 1).trim(), "active");
+            else await WM.MemoryStore.addPlot(ln, "", "active");
+          }
+          return { kind: "plot", ok: true };
+        })());
+        labels.push("plot");
+        tasks.push((async () => {
+          const world = await WM.Worldbook.inferWorldview(settings, { recent });
+          if (world && world.trim()) await WM.MemoryStore.setWorld(world);
+          return { kind: "worldview", ok: true };
+        })());
+        labels.push("worldview");
+        tasks.push((async () => {
+          const tpl = settings.prompts && settings.prompts.itemExtract;
+          if (!tpl) return { kind: "items", ok: true, skipped: true };
+          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n") });
+          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+          for (const ln of lines) {
+            const parts = ln.split(/[｜|]/);
+            if (parts[0] && parts[0].trim()) await WM.MemoryStore.addItem(parts[0].trim(), parts[1] ? parts[1].trim() : "", parts[2] ? parts[2].trim() : "");
+          }
+          return { kind: "items", ok: true };
+        })());
+        labels.push("items");
+        const results = await Promise.allSettled(tasks);
+        const failures = [];
+        const successes = [];
+        results.forEach((r, i) => {
+          if (r.status === "rejected") {
+            const scope = labels[i];
+            failures.push({ scope, err: r.reason });
+            if (WM.ErrLog) WM.ErrLog.add(scope, r.reason, { range }).catch(() => {
+            });
+          } else if (r.value && !r.value.skipped) {
+            successes.push(r.value.kind);
+          }
+        });
+        if (failures.length === results.length && failures.length > 0) {
+          const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
+          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u6240\u6709\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, reason });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
+        } else if (failures.length > 0) {
+          const okList = successes.join("\u3001") || "\u65E0";
+          const failList = failures.map((f) => f.scope).join("\u3001");
+          const detail = "\u6210\u529F\uFF1A" + okList + "\uFF1B\u5931\u8D25\uFF1A" + failList;
+          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u90E8\u5206\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, ok: successes, fail: failures.map((f) => f.scope), detail }).catch(() => {
           });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u63D0\u70BC\u5931\u8D25 \u2192 " + detail, "warn");
         }
-        await WM.MemoryStore.setRelations(parsed);
-        return { kind: "relations", ok: true };
-      })());
-      labels.push("relations");
-      tasks.push((async () => {
-        const tpl = settings.prompts && settings.prompts.plot;
-        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries, relations: relationsText });
-        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u5F53\u524D\u5267\u60C5\u7EBF\uFF08\u6807\u9898\uFF5C\u6458\u8981\uFF0C\u6BCF\u884C\u4E00\u6761\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
-        const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
-        for (const ln of lines) {
-          const idx = ln.indexOf("\uFF5C");
-          const idx2 = ln.indexOf("|");
-          const sep = idx >= 0 ? idx : idx2;
-          if (sep >= 0) await WM.MemoryStore.addPlot(ln.slice(0, sep).trim(), ln.slice(sep + 1).trim(), "active");
-          else await WM.MemoryStore.addPlot(ln, "", "active");
-        }
-        return { kind: "plot", ok: true };
-      })());
-      labels.push("plot");
-      tasks.push((async () => {
-        const world = await WM.Worldbook.inferWorldview(settings, { recent });
-        if (world && world.trim()) await WM.MemoryStore.setWorld(world);
-        return { kind: "worldview", ok: true };
-      })());
-      labels.push("worldview");
-      tasks.push((async () => {
-        const tpl = settings.prompts && settings.prompts.itemExtract;
-        if (!tpl) return { kind: "items", ok: true, skipped: true };
-        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n") });
-        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
-        const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
-        for (const ln of lines) {
-          const parts = ln.split(/[｜|]/);
-          if (parts[0] && parts[0].trim()) await WM.MemoryStore.addItem(parts[0].trim(), parts[1] ? parts[1].trim() : "", parts[2] ? parts[2].trim() : "");
-        }
-        return { kind: "items", ok: true };
-      })());
-      labels.push("items");
-      const results = await Promise.allSettled(tasks);
-      const failures = [];
-      results.forEach((r, i) => {
-        if (r.status === "rejected") {
-          const scope = labels[i];
-          failures.push({ scope, err: r.reason });
-          if (WM.ErrLog) WM.ErrLog.add(scope, r.reason, { range }).catch(() => {
-          });
-        }
-      });
-      if (failures.length === results.length && failures.length > 0) {
-        const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
-        if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u6240\u6709\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, reason });
-        WM.UI && WM.UI.toast && WM.UI.toast("\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
-      } else if (failures.length > 0) {
-        const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B");
-        WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF1A" + reason, "warn");
+        if (WM.UI && WM.UI.refresh) WM.UI.refresh();
+        return {
+          ok: true,
+          range,
+          count: recent.length,
+          partial: failures.length > 0,
+          successes,
+          failures: failures.map((f) => f.scope),
+          results: {
+            relations: (WM.MemoryStore.getRelations() || []).length,
+            plots: (WM.MemoryStore.getPlots() || []).length,
+            world: !!(WM.MemoryStore.getWorld() || "").trim(),
+            items: (WM.MemoryStore.getItems ? WM.MemoryStore.getItems() : []).length
+          }
+        };
+      } finally {
+        _summarizing = false;
       }
-      if (WM.UI && WM.UI.refresh) WM.UI.refresh();
-      return {
-        ok: true,
-        range,
-        count: recent.length,
-        results: {
-          relations: (WM.MemoryStore.getRelations() || []).length,
-          plots: (WM.MemoryStore.getPlots() || []).length,
-          world: !!(WM.MemoryStore.getWorld() || "").trim(),
-          items: (WM.MemoryStore.getItems ? WM.MemoryStore.getItems() : []).length
-        }
-      };
     }
-    WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages };
+    WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages, isSummarizing };
   })();
 
   // src/config/relations.js
@@ -2263,10 +2307,35 @@ ${it.desc || ""}` }));
         </details>`;
         }
         pane += `</div>`;
-        pane += `<div class="wm-row"><button id="err-clear" class="wm-btn">\u6E05\u7A7A\u672C\u62A5\u544A</button></div>`;
+        pane += `<div class="wm-row">
+        <button id="err-copy" class="wm-btn">\u590D\u5236\u4E3A\u6587\u672C</button>
+        <button id="err-download" class="wm-btn">\u5BFC\u51FA JSON</button>
+        <button id="err-clear" class="wm-btn">\u6E05\u7A7A\u672C\u62A5\u544A</button>
+      </div>`;
       }
       pane += `</div>`;
       setTimeout(() => {
+        const copyBtn = document.getElementById("err-copy");
+        if (copyBtn) copyBtn.onclick = () => {
+          const txt = WM.ErrLog && WM.ErrLog.toText ? WM.ErrLog.toText() : "";
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(() => toast("\u5DF2\u590D\u5236\u9519\u8BEF\u62A5\u544A\u5230\u526A\u8D34\u677F"), () => toast("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u62E9"));
+          } else {
+            toast("\u5F53\u524D\u73AF\u5883\u4E0D\u652F\u6301\u526A\u8D34\u677F");
+          }
+        };
+        const dlBtn = document.getElementById("err-download");
+        if (dlBtn) dlBtn.onclick = () => {
+          const json = WM.ErrLog && WM.ErrLog.exportJSON ? WM.ErrLog.exportJSON() : "{}";
+          const blob = new Blob([json], { type: "application/json" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "warmmemo_errors_" + Date.now() + ".json";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+        };
         const btn = document.getElementById("err-clear");
         if (btn) btn.onclick = async () => {
           if (WM.ErrLog && WM.ErrLog.clear) {
@@ -2302,12 +2371,18 @@ ${it.desc || ""}` }));
       _lastAutoAt = now;
       setTimeout(async () => {
         try {
-          const r = await WM.Summary.triggerSummary(s);
+          let r = await WM.Summary.triggerSummary(s);
+          if (r === false && s.autoSummaryMode === "floor") {
+            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+            const ptr = WM.MemoryStore.getSummaryPointer();
+            if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
+          }
           if (r && r.ok) {
             if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
               await WM.FloorHider.hideUntil(r.range[1]);
             }
-            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09`);
+            const extra = r.partial ? "\uFF08\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
+            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09${extra}`);
           } else if (r && !r.ok) {
             toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u603B\u7ED3\u672A\u6267\u884C\uFF08${r.reason}\uFF09`);
           }

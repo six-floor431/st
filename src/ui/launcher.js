@@ -780,10 +780,33 @@
         </details>`;
       }
       pane += `</div>`;
-      pane += `<div class="wm-row"><button id="err-clear" class="wm-btn">清空本报告</button></div>`;
+      pane += `<div class="wm-row">
+        <button id="err-copy" class="wm-btn">复制为文本</button>
+        <button id="err-download" class="wm-btn">导出 JSON</button>
+        <button id="err-clear" class="wm-btn">清空本报告</button>
+      </div>`;
     }
     pane += `</div>`;
     setTimeout(() => {
+      const copyBtn = document.getElementById('err-copy');
+      if (copyBtn) copyBtn.onclick = () => {
+        const txt = (WM.ErrLog && WM.ErrLog.toText) ? WM.ErrLog.toText() : '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(() => toast('已复制错误报告到剪贴板'), () => toast('复制失败，请手动选择'));
+        } else {
+          toast('当前环境不支持剪贴板');
+        }
+      };
+      const dlBtn = document.getElementById('err-download');
+      if (dlBtn) dlBtn.onclick = () => {
+        const json = (WM.ErrLog && WM.ErrLog.exportJSON) ? WM.ErrLog.exportJSON() : '{}';
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'warmmemo_errors_' + Date.now() + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(a.href);
+      };
       const btn = document.getElementById('err-clear');
       if (btn) btn.onclick = async () => {
         if (WM.ErrLog && WM.ErrLog.clear) { await WM.ErrLog.clear(); renderCfg(s); }
@@ -822,12 +845,20 @@
     // 因此这里不需要长延时等待流式，只留极小缓冲让 chat 元数据稳定。
     setTimeout(async () => {
       try {
-        const r = await WM.Summary.triggerSummary(s);
+        // 先按常规触发（floor 模式需攒满一段）
+        let r = await WM.Summary.triggerSummary(s);
+        // 末尾收尾：floor 模式下聊到末尾但不足一段时，强制总结剩余楼层
+        if (r === false && s.autoSummaryMode === 'floor') {
+          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+          const ptr = WM.MemoryStore.getSummaryPointer();
+          if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
+        }
         if (r && r.ok) {
           if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
             await WM.FloorHider.hideUntil(r.range[1]);
           }
-          toast(`🌿 温记：已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）`);
+          const extra = r.partial ? '（部分提炼失败，见错误报告）' : '';
+          toast(`🌿 温记：已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）${extra}`);
         } else if (r && !r.ok) {
           toast(`🌿 温记：总结未执行（${r.reason}）`);
         }
