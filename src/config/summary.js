@@ -14,7 +14,9 @@
     settings = settings || WM.Settings.load();
     opts = opts || {};
     const profile = (settings.llmConfig) || { source: 'local' };
-    const prompt = [{ role: 'system', content: system }, { role: 'user', content: user }];
+    // 预设前置：拼在我们自己可编辑的提示词「之前」
+    const prefix = WM.LLMClient.resolvePrefix(settings);
+    const prompt = [...prefix, { role: 'system', content: system }, { role: 'user', content: user }];
     const out = await WM.LLMClient.complete(prompt, {
       temperature: opts.temperature != null ? opts.temperature : 0.3,
       max_tokens: opts.maxTokens || 700,

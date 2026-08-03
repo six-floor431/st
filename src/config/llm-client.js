@@ -31,6 +31,38 @@
     return (api.proxy_preset || api.apiurl || api.model) ? api : undefined;
   }
 
+  // 取酒馆已保存预设的提示词内容（作为「预设前置」用）
+  function getPresetPromptItems(name) {
+    if (!name) return [];
+    let getPreset = null;
+    if (typeof window.getPreset === 'function') getPreset = window.getPreset;
+    else if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+      try { const ctx = window.SillyTavern.getContext(); if (ctx && typeof ctx.getPreset === 'function') getPreset = ctx.getPreset; } catch (e) {}
+    }
+    if (!getPreset) return [];
+    let preset;
+    try { preset = getPreset(name); } catch (e) { return []; }
+    const prompts = (preset && preset.prompts) || [];
+    return prompts
+      .filter((p) => p && p.enabled !== false && p.content && String(p.content).trim().length > 0)
+      .map((p) => ({ role: p.role || 'system', content: String(p.content) }));
+  }
+
+  // 解析「预设前置」：返回拼在用户提示词之前的前缀 prompt 列表
+  // settings.presetPrefix: { mode:'none'|'import'|'preset', importText, presetName }
+  function resolvePrefix(settings) {
+    const pp = (settings && settings.presetPrefix) || null;
+    if (!pp || pp.mode === 'none') return [];
+    if (pp.mode === 'import') {
+      const t = (pp.importText || '').trim();
+      return t ? [{ role: 'system', content: t }] : [];
+    }
+    if (pp.mode === 'preset') {
+      return getPresetPromptItems(pp.presetName);
+    }
+    return [];
+  }
+
   // 核心：只调用 LLM 本体，提示词完全由调用方控制
   // messages: [{role:'system'|'user', content}]
   async function complete(messages, opts) {
@@ -76,5 +108,5 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw };
+  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw, resolvePrefix, getPresetPromptItems };
 })();

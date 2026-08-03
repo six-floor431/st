@@ -460,6 +460,15 @@
   // 统一的 LLM 调用配置（所有功能共用这一个）
   function renderLlmConfig(s) {
     const c = s.llmConfig || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
+    const pp = s.presetPrefix || { mode: 'none', importText: '', presetName: '' };
+    let presetNames = [];
+    try {
+      const gpn = (typeof window.getPresetNames === 'function') ? window.getPresetNames
+        : (window.SillyTavern && typeof window.SillyTavern.getContext === 'function'
+            ? (() => { try { return window.SillyTavern.getContext().getPresetNames; } catch (e) { return null; } })()
+            : null);
+      if (gpn) presetNames = gpn() || [];
+    } catch (e) { presetNames = []; }
     return `
       <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
         <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。选择 <b>本地酒馆</b> 即用酒馆当前对话源；选择 <b>自定义配置</b> 可指定代理预设或独立 API。配完可点「测试连接」验证可用性。</div>
@@ -475,6 +484,26 @@
           <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini"/></label>
+        </div>
+        <div class="wm-divider"></div>
+        <div class="wm-h" style="margin-top:0">预设前置（拼在我们提示词之前）</div>
+        <div class="wm-hint">可选。开启后，会在我们自己编写的提示词<b>前面</b>拼接一段「前置」。<b>导入</b>：直接粘贴/编辑文本；<b>调用酒馆预设</b>：直接引用酒馆里已保存的预设（取其启用的提示词）。</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0">
+          <label><input type="radio" name="pp-mode" value="none" ${pp.mode==='none'?'checked':''}/> 不使用</label>
+          <label><input type="radio" name="pp-mode" value="import" ${pp.mode==='import'?'checked':''}/> 导入文本</label>
+          <label><input type="radio" name="pp-mode" value="preset" ${pp.mode==='preset'?'checked':''}/> 调用酒馆预设</label>
+        </div>
+        <div id="pp-import" style="${pp.mode==='import'?'':'display:none'};margin-top:6px">
+          <label class="wm-row" style="flex-direction:column;align-items:stretch">前置文本（可编辑）
+            <textarea id="pp-import-text" rows="4" style="width:100%;font-family:monospace">${escapeHtml(pp.importText||'')}</textarea>
+          </label>
+        </div>
+        <div id="pp-preset" style="${pp.mode==='preset'?'':'display:none'};margin-top:6px">
+          <label class="wm-row">酒馆已保存预设
+            <select id="pp-preset-name">
+              ${(presetNames||[]).map((n)=>`<option value="${escapeHtml(n)}" ${n===pp.presetName?'selected':''}>${escapeHtml(n)}</option>`).join('') || '<option value="">（无可用预设）</option>'}
+            </select>
+          </label>
         </div>
       </div>`;
   }
@@ -519,6 +548,17 @@
     const customBox = body.querySelector('#llm-custom');
     srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
 
+    // 预设前置 mode 切换显示
+    const ppImport = body.querySelector('#pp-import');
+    const ppPreset = body.querySelector('#pp-preset');
+    body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
+      r.onchange = () => {
+        const m = body.querySelector('input[name="pp-mode"]:checked').value;
+        ppImport.style.display = m === 'import' ? '' : 'none';
+        ppPreset.style.display = m === 'preset' ? '' : 'none';
+      };
+    });
+
     // 保存
     body.querySelector('#c-save').onclick = () => {
       s.llmConfig = {
@@ -527,6 +567,11 @@
         apiUrl: body.querySelector('#llm-url').value.trim(),
         apiKey: body.querySelector('#llm-key').value.trim(),
         model: body.querySelector('#llm-model').value.trim(),
+      };
+      s.presetPrefix = {
+        mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none',
+        importText: body.querySelector('#pp-import-text').value,
+        presetName: body.querySelector('#pp-preset-name') ? body.querySelector('#pp-preset-name').value : '',
       };
       s.vectorEnabled = body.querySelector('#c-vec').checked;
       s.rerankEnabled = body.querySelector('#c-rerank').checked;

@@ -55,6 +55,15 @@
         apiKey: "",
         model: ""
       },
+      // 预设前置：拼在我们自己可编辑的提示词「之前」
+      //   mode: 'none'   => 不使用
+      //   mode: 'import' => 用 importText 作为前置（用户自己粘贴/编辑）
+      //   mode: 'preset' => 调用酒馆里已经保存的预设（presetName），取其 enabled 且有内容的提示词作为前置
+      presetPrefix: {
+        mode: "none",
+        importText: "",
+        presetName: ""
+      },
       lorebookName: "WarmMemo",
       // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
       // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
@@ -432,6 +441,39 @@ ${it.desc || ""}`.trim(),
       if (p.model) api.model = p.model.trim();
       return api.proxy_preset || api.apiurl || api.model ? api : void 0;
     }
+    function getPresetPromptItems(name) {
+      if (!name) return [];
+      let getPreset = null;
+      if (typeof window.getPreset === "function") getPreset = window.getPreset;
+      else if (window.SillyTavern && typeof window.SillyTavern.getContext === "function") {
+        try {
+          const ctx = window.SillyTavern.getContext();
+          if (ctx && typeof ctx.getPreset === "function") getPreset = ctx.getPreset;
+        } catch (e) {
+        }
+      }
+      if (!getPreset) return [];
+      let preset;
+      try {
+        preset = getPreset(name);
+      } catch (e) {
+        return [];
+      }
+      const prompts = preset && preset.prompts || [];
+      return prompts.filter((p) => p && p.enabled !== false && p.content && String(p.content).trim().length > 0).map((p) => ({ role: p.role || "system", content: String(p.content) }));
+    }
+    function resolvePrefix(settings) {
+      const pp = settings && settings.presetPrefix || null;
+      if (!pp || pp.mode === "none") return [];
+      if (pp.mode === "import") {
+        const t = (pp.importText || "").trim();
+        return t ? [{ role: "system", content: t }] : [];
+      }
+      if (pp.mode === "preset") {
+        return getPresetPromptItems(pp.presetName);
+      }
+      return [];
+    }
     async function complete(messages, opts) {
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
@@ -471,7 +513,7 @@ ${it.desc || ""}`.trim(),
         return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw };
+    WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw, resolvePrefix, getPresetPromptItems };
   })();
 
   // src/config/vector-store.js
@@ -948,7 +990,8 @@ ${recent}
       settings = settings || WM.Settings.load();
       opts = opts || {};
       const profile = settings.llmConfig || { source: "local" };
-      const prompt = [{ role: "system", content: system }, { role: "user", content: user }];
+      const prefix = WM.LLMClient.resolvePrefix(settings);
+      const prompt = [...prefix, { role: "system", content: system }, { role: "user", content: user }];
       const out = await WM.LLMClient.complete(prompt, {
         temperature: opts.temperature != null ? opts.temperature : 0.3,
         max_tokens: opts.maxTokens || 700,
@@ -1813,6 +1856,20 @@ ${it.desc || ""}` }));
     }
     function renderLlmConfig(s) {
       const c = s.llmConfig || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
+      const pp = s.presetPrefix || { mode: "none", importText: "", presetName: "" };
+      let presetNames = [];
+      try {
+        const gpn = typeof window.getPresetNames === "function" ? window.getPresetNames : window.SillyTavern && typeof window.SillyTavern.getContext === "function" ? (() => {
+          try {
+            return window.SillyTavern.getContext().getPresetNames;
+          } catch (e) {
+            return null;
+          }
+        })() : null;
+        if (gpn) presetNames = gpn() || [];
+      } catch (e) {
+        presetNames = [];
+      }
       return `
       <div class="wm-card"><div class="wm-h">LLM \u8C03\u7528\u914D\u7F6E\uFF08\u7EDF\u4E00\uFF09</div>
         <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1\uFF09\u5171\u7528\u8FD9\u4E00\u4E2A LLM \u914D\u7F6E\u3002\u9009\u62E9 <b>\u672C\u5730\u9152\u9986</b> \u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\uFF1B\u9009\u62E9 <b>\u81EA\u5B9A\u4E49\u914D\u7F6E</b> \u53EF\u6307\u5B9A\u4EE3\u7406\u9884\u8BBE\u6216\u72EC\u7ACB API\u3002\u914D\u5B8C\u53EF\u70B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u9A8C\u8BC1\u53EF\u7528\u6027\u3002</div>
@@ -1828,6 +1885,26 @@ ${it.desc || ""}` }));
           <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
+        </div>
+        <div class="wm-divider"></div>
+        <div class="wm-h" style="margin-top:0">\u9884\u8BBE\u524D\u7F6E\uFF08\u62FC\u5728\u6211\u4EEC\u63D0\u793A\u8BCD\u4E4B\u524D\uFF09</div>
+        <div class="wm-hint">\u53EF\u9009\u3002\u5F00\u542F\u540E\uFF0C\u4F1A\u5728\u6211\u4EEC\u81EA\u5DF1\u7F16\u5199\u7684\u63D0\u793A\u8BCD<b>\u524D\u9762</b>\u62FC\u63A5\u4E00\u6BB5\u300C\u524D\u7F6E\u300D\u3002<b>\u5BFC\u5165</b>\uFF1A\u76F4\u63A5\u7C98\u8D34/\u7F16\u8F91\u6587\u672C\uFF1B<b>\u8C03\u7528\u9152\u9986\u9884\u8BBE</b>\uFF1A\u76F4\u63A5\u5F15\u7528\u9152\u9986\u91CC\u5DF2\u4FDD\u5B58\u7684\u9884\u8BBE\uFF08\u53D6\u5176\u542F\u7528\u7684\u63D0\u793A\u8BCD\uFF09\u3002</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0">
+          <label><input type="radio" name="pp-mode" value="none" ${pp.mode === "none" ? "checked" : ""}/> \u4E0D\u4F7F\u7528</label>
+          <label><input type="radio" name="pp-mode" value="import" ${pp.mode === "import" ? "checked" : ""}/> \u5BFC\u5165\u6587\u672C</label>
+          <label><input type="radio" name="pp-mode" value="preset" ${pp.mode === "preset" ? "checked" : ""}/> \u8C03\u7528\u9152\u9986\u9884\u8BBE</label>
+        </div>
+        <div id="pp-import" style="${pp.mode === "import" ? "" : "display:none"};margin-top:6px">
+          <label class="wm-row" style="flex-direction:column;align-items:stretch">\u524D\u7F6E\u6587\u672C\uFF08\u53EF\u7F16\u8F91\uFF09
+            <textarea id="pp-import-text" rows="4" style="width:100%;font-family:monospace">${escapeHtml(pp.importText || "")}</textarea>
+          </label>
+        </div>
+        <div id="pp-preset" style="${pp.mode === "preset" ? "" : "display:none"};margin-top:6px">
+          <label class="wm-row">\u9152\u9986\u5DF2\u4FDD\u5B58\u9884\u8BBE
+            <select id="pp-preset-name">
+              ${(presetNames || []).map((n) => `<option value="${escapeHtml(n)}" ${n === pp.presetName ? "selected" : ""}>${escapeHtml(n)}</option>`).join("") || '<option value="">\uFF08\u65E0\u53EF\u7528\u9884\u8BBE\uFF09</option>'}
+            </select>
+          </label>
         </div>
       </div>`;
     }
@@ -1870,6 +1947,15 @@ ${it.desc || ""}` }));
       srcSel.onchange = () => {
         customBox.style.display = srcSel.value === "custom" ? "" : "none";
       };
+      const ppImport = body.querySelector("#pp-import");
+      const ppPreset = body.querySelector("#pp-preset");
+      body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
+        r.onchange = () => {
+          const m = body.querySelector('input[name="pp-mode"]:checked').value;
+          ppImport.style.display = m === "import" ? "" : "none";
+          ppPreset.style.display = m === "preset" ? "" : "none";
+        };
+      });
       body.querySelector("#c-save").onclick = () => {
         s.llmConfig = {
           source: body.querySelector("#llm-src").value,
@@ -1877,6 +1963,11 @@ ${it.desc || ""}` }));
           apiUrl: body.querySelector("#llm-url").value.trim(),
           apiKey: body.querySelector("#llm-key").value.trim(),
           model: body.querySelector("#llm-model").value.trim()
+        };
+        s.presetPrefix = {
+          mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || "none",
+          importText: body.querySelector("#pp-import-text").value,
+          presetName: body.querySelector("#pp-preset-name") ? body.querySelector("#pp-preset-name").value : ""
         };
         s.vectorEnabled = body.querySelector("#c-vec").checked;
         s.rerankEnabled = body.querySelector("#c-rerank").checked;

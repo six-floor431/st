@@ -48,6 +48,15 @@
       apiKey: '',
       model: '',
     },
+    // 预设前置：拼在我们自己可编辑的提示词「之前」
+    //   mode: 'none'   => 不使用
+    //   mode: 'import' => 用 importText 作为前置（用户自己粘贴/编辑）
+    //   mode: 'preset' => 调用酒馆里已经保存的预设（presetName），取其 enabled 且有内容的提示词作为前置
+    presetPrefix: {
+      mode: 'none',
+      importText: '',
+      presetName: '',
+    },
     lorebookName: 'WarmMemo',     // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
     // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
     takeoverEmbedding: false,     // 接管向量检索：开启后注入用我们自己的 embedding 相似度召回
