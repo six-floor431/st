@@ -932,6 +932,23 @@ ${it.message}`;
       if (!u) return u;
       return u.replace("0.0.0.0", "127.0.0.1").replace(/\/+$/, "");
     }
+    function buildEmbedUrl(rawPath) {
+      let u = normalizeBaseUrl(rawPath) || "";
+      if (!u) return "";
+      let query = "";
+      const qi = u.indexOf("?");
+      if (qi >= 0) {
+        query = u.slice(qi);
+        u = u.slice(0, qi);
+      }
+      if (/v1\/embeddings$/i.test(u)) {
+      } else if (/\/v1\/?$/i.test(u)) u += "/embeddings";
+      else if (/\/embeddings$/i.test(u)) {
+      } else if (/\/vec\/?$/i.test(u)) u += "/v1/embeddings";
+      else if (/\/vec\/v1\/?$/i.test(u)) u += "/embeddings";
+      else u += "/v1/embeddings";
+      return u + query;
+    }
     function resolveOpenAiUrl(base) {
       base = normalizeBaseUrl(base) || "";
       return base.replace(/\/?v1\/?$/, "") + "/v1/embeddings";
@@ -940,13 +957,16 @@ ${it.message}`;
       base = normalizeBaseUrl(base) || "";
       return base + "/models/" + model + ":embedContent";
     }
+    function isGetMode(urlOrPath) {
+      return /[?&]method=GET/i.test(urlOrPath || "") || /[?&]get=1\b/i.test(urlOrPath || "");
+    }
     function resolveEmbedUrl(s) {
       const src = s.embeddingSource || "cloud";
       if (src === "ollama") {
-        return { url: normalizeBaseUrl(s.embeddingProxyPath) || "http://127.0.0.1:11434/v1/embeddings", provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
+        return { url: buildEmbedUrl(s.embeddingProxyPath || "http://127.0.0.1:11434"), provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
       }
       if (src === "localProxy") {
-        return { url: normalizeBaseUrl(s.embeddingProxyPath) || "", provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
+        return { url: buildEmbedUrl(s.embeddingProxyPath) || "", provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
       }
       const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "https://api.siliconflow.cn/v1";
       if (/generativelanguage\.googleapis\.com/i.test(base)) {
@@ -977,10 +997,22 @@ ${it.message}`;
         return out.length === 1 ? out[0] : out;
       }
       const url = resolveOpenAiUrl(base);
-      const r = await fetch(url, {
-        method: "POST",
-        headers: Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {}),
-        body: JSON.stringify({ model, input })
+      const useGet = isGetMode(url);
+      const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
+      let finalUrl = url;
+      let body;
+      if (useGet) {
+        const q = new URL(finalUrl, location.href);
+        q.searchParams.set("model", model);
+        if (!Array.isArray(texts)) q.searchParams.set("input", texts);
+        finalUrl = q.toString();
+      } else {
+        body = JSON.stringify({ model, input });
+      }
+      const r = await fetch(finalUrl, {
+        method: useGet ? "GET" : "POST",
+        headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
+        body
       });
       const j = await r.json();
       if (!j.data) throw new Error("embedding \u8FD4\u56DE\u5F02\u5E38: " + JSON.stringify(j).slice(0, 200));
@@ -1006,10 +1038,30 @@ ${it.message}`;
       if (!url) return url;
       return url.replace("0.0.0.0", "127.0.0.1").replace(/\/+$/, "");
     }
+    function buildRerankUrl(rawPath) {
+      let u = normalize(rawPath) || "";
+      if (!u) return "";
+      let query = "";
+      const qi = u.indexOf("?");
+      if (qi >= 0) {
+        query = u.slice(qi);
+        u = u.slice(0, qi);
+      }
+      if (/v1\/rerank$/i.test(u)) {
+      } else if (/\/v1\/?$/i.test(u)) u += "/rerank";
+      else if (/\/rerank$/i.test(u)) {
+      } else if (/\/vec\/?$/i.test(u)) u += "/v1/rerank";
+      else if (/\/vec\/v1\/?$/i.test(u)) u += "/rerank";
+      else u += "/v1/rerank";
+      return u + query;
+    }
+    function isGetMode(urlOrPath) {
+      return /[?&]method=GET/i.test(urlOrPath || "") || /[?&]get=1\b/i.test(urlOrPath || "");
+    }
     function resolveRerankUrl(s) {
       const src = s.rerankSource || "cloud";
       if (src === "localProxy") {
-        return normalize(s.rerankProxyPath) || "";
+        return buildRerankUrl(s.rerankProxyPath) || "";
       }
       return normalize(s.rerankBaseUrl) || "https://api.siliconflow.cn/v1/rerank";
     }
@@ -1021,20 +1073,34 @@ ${it.message}`;
       const key = s.rerankApiKey || "";
       const docs = (documents || []).filter((d) => d && String(d).trim());
       if (!docs.length) return [];
+      const useGet = isGetMode(url);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), s.timeoutMs || 3e3);
       try {
-        const r = await fetch(url, {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {}),
-          body: JSON.stringify({
+        let finalUrl = url;
+        let body;
+        const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
+        if (useGet) {
+          const q = new URL(finalUrl, location.href);
+          q.searchParams.set("model", model);
+          q.searchParams.set("query", query);
+          docs.forEach((d, i) => q.searchParams.set("documents[" + i + "]", d));
+          q.searchParams.set("top_n", String(docs.length));
+          finalUrl = q.toString();
+        } else {
+          body = JSON.stringify({
             model,
             query,
             documents: docs,
             top_n: docs.length,
             return_documents: false
-          })
+          });
+        }
+        const r = await fetch(finalUrl, {
+          method: useGet ? "GET" : "POST",
+          signal: ctrl.signal,
+          headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
+          body
         });
         const j = await r.json();
         const scoreMap = {};
@@ -3022,8 +3088,8 @@ ${p.summary || ""}`.trim() });
         <div class="wm-hint">\u4F7F\u7528\u672C\u5730 Ollama \u7684 OpenAI \u517C\u5BB9\u63A5\u53E3\uFF08\u9ED8\u8BA4 http://127.0.0.1:11434/v1\uFF09\u3002</div>
       </div>
       <div id="emb-proxy" style="display:${showProxy}">
-        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://127.0.0.1:8080/v1/embeddings"/></label>
-        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\uFF08\u542B\u5B8C\u6574\u8DEF\u5F84\uFF09\u3002\u4E24\u4E2A\u670D\u52A1\u53EF\u5404\u81EA\u51B3\u5B9A\u662F\u5426\u8D70\u672C\u5730\u53CD\u4EE3\u3002</div>
+        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://localhost:8080/vec/v1/embeddings"/></label>
+        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\u3002\u652F\u6301\u591A\u79CD\u7EA6\u5B9A\uFF1A<br/>\xB7 \u540C\u6E90\u4EE3\u7406(Caddy \u7B49)\uFF1A<code>http://localhost:8080/vec</code>\uFF08\u81EA\u52A8\u8865\u4E3A /vec/v1/embeddings\uFF09<br/>\xB7 \u88F8\u5730\u5740\uFF1A<code>http://127.0.0.1:8080</code>\uFF08\u81EA\u52A8\u8865 /v1/embeddings\uFF09<br/>\xB7 \u53EA\u63A5\u53D7 GET \u7684\u53CD\u4EE3\u8282\u70B9\uFF1A\u5728\u5730\u5740\u540E\u52A0 <code>?method=GET</code></div>
       </div>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
@@ -3048,8 +3114,8 @@ ${p.summary || ""}`.trim() });
         <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
       </div>
       <div id="rk-proxy" style="display:${showProxy}">
-        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://127.0.0.1:8080/v1/rerank"/></label>
-        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\uFF08\u542B\u5B8C\u6574\u8DEF\u5F84\uFF09\u3002</div>
+        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://localhost:8080/vec/v1/rerank"/></label>
+        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\u3002\u652F\u6301\uFF1A<code>http://localhost:8080/vec</code>\uFF08\u81EA\u52A8\u8865 /vec/v1/rerank\uFF09\u3001\u88F8\u5730\u5740\u81EA\u52A8\u8865 /v1/rerank\u3001<code>?method=GET</code> \u8D70 GET \u6A21\u5F0F\u3002</div>
       </div>
       <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>

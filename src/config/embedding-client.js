@@ -16,6 +16,28 @@
     return u.replace('0.0.0.0', '127.0.0.1').replace(/\/+$/, '');
   }
 
+  // 把用户填写的「本地反代路径」智能补全为可用的 embeddings 请求地址。
+  // 适配多种反代约定：
+  //   - 同源代理(Caddy 等)：http://localhost:8080/vec  ->  http://localhost:8080/vec/v1/embeddings
+  //   - 裸 host：http://127.0.0.1:8080                  ->  http://127.0.0.1:8080/v1/embeddings
+  //   - 已含 /v1 或 /v1/embeddings：原样保留
+  //   - 七七八八的变体：http://x/v1/embeddings?method=GET 之类
+  function buildEmbedUrl(rawPath) {
+    let u = normalizeBaseUrl(rawPath) || '';
+    if (!u) return '';
+    // 若用户把 query 写在路径里（如 ?method=GET），拆出保留
+    let query = '';
+    const qi = u.indexOf('?');
+    if (qi >= 0) { query = u.slice(qi); u = u.slice(0, qi); }
+    if (/v1\/embeddings$/i.test(u)) { /* 已完整 */ }
+    else if (/\/v1\/?$/i.test(u)) u += '/embeddings';
+    else if (/\/embeddings$/i.test(u)) { /* 已是 embeddings 路径但无 v1，保留 */ }
+    else if (/\/vec\/?$/i.test(u)) u += '/v1/embeddings'; // 同源代理常见：/vec -> /vec/v1/embeddings
+    else if (/\/vec\/v1\/?$/i.test(u)) u += '/embeddings';
+    else u += '/v1/embeddings'; // 默认补齐
+    return u + query;
+  }
+
   function resolveOpenAiUrl(base) {
     base = normalizeBaseUrl(base) || '';
     return base.replace(/\/?v1\/?$/, '') + '/v1/embeddings';
@@ -26,16 +48,21 @@
     return base + '/models/' + model + ':embedContent';
   }
 
+  // 是否用 GET 发送（部分本地反代/同源代理节点只接受 GET，再由中间层转 POST）
+  function isGetMode(urlOrPath) {
+    return /[?&]method=GET/i.test(urlOrPath || '') || /[?&]get=1\b/i.test(urlOrPath || '');
+  }
+
   // 按来源解析 embedding 实际请求地址
   function resolveEmbedUrl(s) {
     const src = s.embeddingSource || 'cloud';
     if (src === 'ollama') {
       // 本地 Ollama（OpenAI 兼容接口）
-      return { url: normalizeBaseUrl(s.embeddingProxyPath) || 'http://127.0.0.1:11434/v1/embeddings', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
+      return { url: buildEmbedUrl(s.embeddingProxyPath || 'http://127.0.0.1:11434'), provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
     }
     if (src === 'localProxy') {
-      // 用户自建本地反代：proxyPath 即完整地址
-      return { url: normalizeBaseUrl(s.embeddingProxyPath) || '', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
+      // 用户自建本地反代：proxyPath 智能补全为完整 embeddings 地址
+      return { url: buildEmbedUrl(s.embeddingProxyPath) || '', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
     }
     // cloud：用填写的 Base URL（OpenAI 兼容 / Gemini 按 host 推断）
     const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || 'https://api.siliconflow.cn/v1';
@@ -70,12 +97,25 @@
       return out.length === 1 ? out[0] : out;
     }
 
-    // OpenAI 兼容
+    // OpenAI 兼容（支持本地反代/同源代理的 GET 模式）
     const url = resolveOpenAiUrl(base);
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
-      body: JSON.stringify({ model, input }),
+    const useGet = isGetMode(url);
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
+    let finalUrl = url;
+    let body;
+    if (useGet) {
+      // GET 模式：参数放 query，兼容只接受 GET 的本地反代节点
+      const q = new URL(finalUrl, location.href);
+      q.searchParams.set('model', model);
+      if (!Array.isArray(texts)) q.searchParams.set('input', texts);
+      finalUrl = q.toString();
+    } else {
+      body = JSON.stringify({ model, input });
+    }
+    const r = await fetch(finalUrl, {
+      method: useGet ? 'GET' : 'POST',
+      headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
+      body,
     });
     const j = await r.json();
     if (!j.data) throw new Error('embedding 返回异常: ' + JSON.stringify(j).slice(0, 200));

@@ -8,12 +8,32 @@
     return url.replace('0.0.0.0', '127.0.0.1').replace(/\/+$/, '');
   }
 
+  // 智能补全 rerank 地址：兼容 /vec 同源代理、裸 host、已含 /v1/rerank 等多种形式
+  function buildRerankUrl(rawPath) {
+    let u = normalize(rawPath) || '';
+    if (!u) return '';
+    let query = '';
+    const qi = u.indexOf('?');
+    if (qi >= 0) { query = u.slice(qi); u = u.slice(0, qi); }
+    if (/v1\/rerank$/i.test(u)) { /* 已完整 */ }
+    else if (/\/v1\/?$/i.test(u)) u += '/rerank';
+    else if (/\/rerank$/i.test(u)) { /* 已是 rerank 路径 */ }
+    else if (/\/vec\/?$/i.test(u)) u += '/v1/rerank'; // 同源代理：/vec -> /vec/v1/rerank
+    else if (/\/vec\/v1\/?$/i.test(u)) u += '/rerank';
+    else u += '/v1/rerank';
+    return u + query;
+  }
+
+  function isGetMode(urlOrPath) {
+    return /[?&]method=GET/i.test(urlOrPath || '') || /[?&]get=1\b/i.test(urlOrPath || '');
+  }
+
   // 按来源解析 rerank 实际请求地址
   function resolveRerankUrl(s) {
     const src = s.rerankSource || 'cloud';
     if (src === 'localProxy') {
-      // 用户自建本地反代：proxyPath 即完整地址
-      return normalize(s.rerankProxyPath) || '';
+      // 用户自建本地反代：proxyPath 智能补全为完整 rerank 地址
+      return buildRerankUrl(s.rerankProxyPath) || '';
     }
     return normalize(s.rerankBaseUrl) || 'https://api.siliconflow.cn/v1/rerank';
   }
@@ -27,20 +47,34 @@
     const docs = (documents || []).filter((d) => d && String(d).trim());
     if (!docs.length) return [];
 
+    const useGet = isGetMode(url);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), s.timeoutMs || 3000);
     try {
-      const r = await fetch(url, {
-        method: 'POST',
-        signal: ctrl.signal,
-        headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}),
-        body: JSON.stringify({
+      let finalUrl = url;
+      let body;
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
+      if (useGet) {
+        const q = new URL(finalUrl, location.href);
+        q.searchParams.set('model', model);
+        q.searchParams.set('query', query);
+        docs.forEach((d, i) => q.searchParams.set('documents[' + i + ']', d));
+        q.searchParams.set('top_n', String(docs.length));
+        finalUrl = q.toString();
+      } else {
+        body = JSON.stringify({
           model,
           query,
           documents: docs,
           top_n: docs.length,
           return_documents: false,
-        }),
+        });
+      }
+      const r = await fetch(finalUrl, {
+        method: useGet ? 'GET' : 'POST',
+        signal: ctrl.signal,
+        headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
+        body,
       });
       const j = await r.json();
       // 返回与 documents 同序的 score 数组

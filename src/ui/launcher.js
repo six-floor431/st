@@ -1117,8 +1117,8 @@
         <div class="wm-hint">使用本地 Ollama 的 OpenAI 兼容接口（默认 http://127.0.0.1:11434/v1）。</div>
       </div>
       <div id="emb-proxy" style="display:${showProxy}">
-        <label class="wm-row">本地反代路径<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://127.0.0.1:8080/v1/embeddings"/></label>
-        <div class="wm-hint">自建本地反代地址（含完整路径）。两个服务可各自决定是否走本地反代。</div>
+        <label class="wm-row">本地反代路径<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://localhost:8080/vec/v1/embeddings"/></label>
+        <div class="wm-hint">自建本地反代地址。支持多种约定：<br/>· 同源代理(Caddy 等)：<code>http://localhost:8080/vec</code>（自动补为 /vec/v1/embeddings）<br/>· 裸地址：<code>http://127.0.0.1:8080</code>（自动补 /v1/embeddings）<br/>· 只接受 GET 的反代节点：在地址后加 <code>?method=GET</code></div>
       </div>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
@@ -1145,8 +1145,8 @@
         <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
       </div>
       <div id="rk-proxy" style="display:${showProxy}">
-        <label class="wm-row">本地反代路径<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://127.0.0.1:8080/v1/rerank"/></label>
-        <div class="wm-hint">自建本地反代地址（含完整路径）。</div>
+        <label class="wm-row">本地反代路径<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://localhost:8080/vec/v1/rerank"/></label>
+        <div class="wm-hint">自建本地反代地址。支持：<code>http://localhost:8080/vec</code>（自动补 /vec/v1/rerank）、裸地址自动补 /v1/rerank、<code>?method=GET</code> 走 GET 模式。</div>
       </div>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
