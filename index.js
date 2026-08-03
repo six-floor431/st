@@ -2801,58 +2801,68 @@ ${p.summary || ""}`.trim() });
       });
       syncPp();
     }
-    function syncPaneToSettings(body, s) {
+    function syncPaneToSettings(body, s, scope) {
       const q = (sel) => body.querySelector(sel);
-      if (q("#llm-src")) {
-        s.llmConfig = {
-          source: q("#llm-src").value,
-          proxyPreset: q("#llm-preset").value.trim(),
-          apiUrl: q("#llm-url").value.trim(),
-          apiKey: q("#llm-key").value.trim(),
-          model: q("#llm-model").value.trim(),
-          maxTokens: Math.max(50, parseInt(q("#llm-maxtok").value, 10) || 700)
-        };
-        s.presetPrefix = {
-          mode: (q('input[name="pp-mode"]:checked') || {}).value || "none",
-          importText: q("#pp-import-text") ? q("#pp-import-text").value : "",
-          presetName: q("#pp-preset-name") ? q("#pp-preset-name").value : ""
-        };
-        s.prompts = {
-          summary: q("#pprompt-summary") ? q("#pprompt-summary").value : s.prompts.summary,
-          relations: q("#pprompt-relations") ? q("#pprompt-relations").value : s.prompts.relations,
-          plot: q("#pprompt-plot") ? q("#pprompt-plot").value : s.prompts.plot,
-          worldview: q("#pprompt-worldview") ? q("#pprompt-worldview").value : s.prompts.worldview
-        };
+      if (!scope || scope === "llm") {
+        if (q("#llm-src")) {
+          s.llmConfig = {
+            source: q("#llm-src").value,
+            proxyPreset: q("#llm-preset").value.trim(),
+            apiUrl: q("#llm-url").value.trim(),
+            apiKey: q("#llm-key").value.trim(),
+            model: q("#llm-model").value.trim(),
+            maxTokens: Math.max(50, parseInt(q("#llm-maxtok").value, 10) || 700)
+          };
+          s.presetPrefix = {
+            mode: (q('input[name="pp-mode"]:checked') || {}).value || "none",
+            importText: q("#pp-import-text") ? q("#pp-import-text").value : "",
+            presetName: q("#pp-preset-name") ? q("#pp-preset-name").value : ""
+          };
+          s.prompts = {
+            summary: q("#pprompt-summary") ? q("#pprompt-summary").value : s.prompts.summary,
+            relations: q("#pprompt-relations") ? q("#pprompt-relations").value : s.prompts.relations,
+            plot: q("#pprompt-plot") ? q("#pprompt-plot").value : s.prompts.plot,
+            worldview: q("#pprompt-worldview") ? q("#pprompt-worldview").value : s.prompts.worldview
+          };
+        }
       }
-      if (q("#c-inj")) {
-        s.injectMemories = q("#c-inj").checked;
-        s.injectWorld = q("#c-injw").checked;
+      if (!scope || scope === "mem") {
+        if (q("#c-inj")) {
+          s.injectMemories = q("#c-inj").checked;
+          s.injectWorld = q("#c-injw").checked;
+        }
       }
-      if (q("#c-vec")) {
-        s.vectorEnabled = q("#c-vec").checked;
+      if (!scope || scope === "vec") {
+        if (q("#c-vec")) {
+          s.vectorEnabled = q("#c-vec").checked;
+        }
+        if (q("#c-emb-src")) {
+          s.embeddingSource = q("#c-emb-src").value;
+          s.embeddingBaseUrl = q("#c-emb-url") ? q("#c-emb-url").value : s.embeddingBaseUrl;
+          s.embeddingApiKey = q("#c-emb-key") ? q("#c-emb-key").value : s.embeddingApiKey;
+          s.embeddingModel = q("#c-emb-model") ? q("#c-emb-model").value : s.embeddingModel;
+          s.embeddingProxyPath = q("#c-emb-proxy") ? q("#c-emb-proxy").value : s.embeddingProxyPath;
+          s.takeoverEmbedding = q("#c-take-emb") ? q("#c-take-emb").checked : s.takeoverEmbedding;
+        }
       }
-      if (q("#c-emb-src")) {
-        s.embeddingSource = q("#c-emb-src").value;
-        s.embeddingBaseUrl = q("#c-emb-url") ? q("#c-emb-url").value : s.embeddingBaseUrl;
-        s.embeddingApiKey = q("#c-emb-key") ? q("#c-emb-key").value : s.embeddingApiKey;
-        s.embeddingModel = q("#c-emb-model") ? q("#c-emb-model").value : s.embeddingModel;
-        s.embeddingProxyPath = q("#c-emb-proxy") ? q("#c-emb-proxy").value : s.embeddingProxyPath;
-        s.takeoverEmbedding = q("#c-take-emb") ? q("#c-take-emb").checked : s.takeoverEmbedding;
+      if (!scope || scope === "rerank") {
+        if (q("#c-rerank")) {
+          s.rerankEnabled = q("#c-rerank").checked;
+        }
+        if (q("#c-rk-src")) {
+          s.rerankSource = q("#c-rk-src").value;
+          s.rerankBaseUrl = q("#c-rk-url") ? q("#c-rk-url").value : s.rerankBaseUrl;
+          s.rerankApiKey = q("#c-rk-key") ? q("#c-rk-key").value : s.rerankApiKey;
+          s.rerankModel = q("#c-rk-model") ? q("#c-rk-model").value : s.rerankModel;
+          s.rerankProxyPath = q("#c-rk-proxy") ? q("#c-rk-proxy").value : s.rerankProxyPath;
+          s.takeoverRerank = q("#c-take-re") ? q("#c-take-re").checked : s.takeoverRerank;
+        }
       }
-      if (q("#c-rerank")) {
-        s.rerankEnabled = q("#c-rerank").checked;
-      }
-      if (q("#c-rk-src")) {
-        s.rerankSource = q("#c-rk-src").value;
-        s.rerankBaseUrl = q("#c-rk-url") ? q("#c-rk-url").value : s.rerankBaseUrl;
-        s.rerankApiKey = q("#c-rk-key") ? q("#c-rk-key").value : s.rerankApiKey;
-        s.rerankModel = q("#c-rk-model") ? q("#c-rk-model").value : s.rerankModel;
-        s.rerankProxyPath = q("#c-rk-proxy") ? q("#c-rk-proxy").value : s.rerankProxyPath;
-        s.takeoverRerank = q("#c-take-re") ? q("#c-take-re").checked : s.takeoverRerank;
-      }
-      if (q("#c-lore")) {
-        s.lorebookName = q("#c-lore").value.trim();
-        s.worldToLorebook = q("#c-wlore").checked;
+      if (!scope || scope === "lore") {
+        if (q("#c-lore")) {
+          s.lorebookName = q("#c-lore").value.trim();
+          s.worldToLorebook = q("#c-wlore").checked;
+        }
       }
     }
     function bindPaneEvents(body, s) {
@@ -2903,16 +2913,18 @@ ${p.summary || ""}`.trim() });
       }
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = () => {
-        syncPaneToSettings(body, s);
+        const scope = WM._cfgTab || "llm";
+        syncPaneToSettings(body, s, scope);
         WM.Settings.save(s);
-        if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
-        toast("\u{1F33F} \u8BBE\u7F6E\u5DF2\u4FDD\u5B58");
+        if (scope === "lore" && WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+        const labelMap = { llm: "LLM \u8C03\u7528", mem: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165", vec: "\u5411\u91CF(Embedding)", rerank: "\u91CD\u6392\u5E8F(Rerank)", lore: "\u4E16\u754C\u4E66", err: "\u9519\u8BEF\u62A5\u544A" };
+        toast("\u{1F33F} \u5DF2\u4FDD\u5B58\u300C" + (labelMap[scope] || scope) + "\u300D\u8BBE\u7F6E");
       };
       const testBtn = body.querySelector("#c-test");
       if (testBtn) testBtn.onclick = async () => {
-        syncPaneToSettings(body, s);
+        const scope = WM._cfgTab || "llm";
+        syncPaneToSettings(body, s, scope);
         const box = body.querySelector("#c-test-result");
-        const tmpLlm = s.llmConfig || { source: "local" };
         const tmp = Object.assign({}, s);
         box.innerHTML = '<div class="wm-test-item">\u23F3 \u6D4B\u8BD5\u4E2D\u2026</div>';
         const rows = [];
@@ -2920,34 +2932,58 @@ ${p.summary || ""}`.trim() });
           const ok = r && r.success;
           rows.push(`<div class="wm-test-item ${ok ? "wm-ok" : "wm-bad"}">${ok ? "\u2705" : "\u274C"} ${name}${ok ? "\uFF1A" + (detail || "") : "\uFF1A" + (r && r.error || "\u5931\u8D25")}</div>`);
         };
-        try {
-          const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
-          add("LLM(" + (tmpLlm.source === "local" ? "\u672C\u5730\u9152\u9986" : "\u81EA\u5B9A\u4E49") + ")", r, "");
-        } catch (e) {
-          add("LLM(\u7EDF\u4E00\u914D\u7F6E)", { success: false }, String(e.message || e));
-        }
-        try {
-          const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
-          if (wbOk) {
-            const b = await WM.Worldbook.ensureLorebook();
-            add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: b }, b ? "\u5DF2\u5C31\u7EEA\uFF1A" + WM.Worldbook.targetName() : "");
-          } else add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, "TavernHelper \u4E0D\u53EF\u7528");
-        } catch (e) {
-          add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
-        }
-        try {
-          const embTestable = tmp.embeddingSource === "ollama" || tmp.embeddingSource === "localProxy" ? !!tmp.embeddingProxyPath : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
-          if (embTestable) add("Embedding(\u5411\u91CF)", await WM.EmbeddingClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.embeddingSource || "cloud"));
-          else add("Embedding(\u5411\u91CF)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
-        } catch (e) {
-          add("Embedding(\u5411\u91CF)", { success: false }, String(e.message || e));
-        }
-        try {
-          const rkTestable = tmp.rerankSource === "localProxy" ? !!tmp.rerankProxyPath : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
-          if (rkTestable) add("Rerank(\u91CD\u6392)", await WM.RerankClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.rerankSource || "cloud"));
-          else add("Rerank(\u91CD\u6392)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
-        } catch (e) {
-          add("Rerank(\u91CD\u6392)", { success: false }, String(e.message || e));
+        const testLlm = async () => {
+          const tmpLlm = tmp.llmConfig || { source: "local" };
+          try {
+            const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
+            add("LLM(" + (tmpLlm.source === "local" ? "\u672C\u5730\u9152\u9986" : "\u81EA\u5B9A\u4E49") + ")", r, "");
+          } catch (e) {
+            add("LLM(\u7EDF\u4E00\u914D\u7F6E)", { success: false }, String(e.message || e));
+          }
+        };
+        const testWorld = async () => {
+          try {
+            const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
+            if (wbOk) {
+              const b = await WM.Worldbook.ensureLorebook();
+              add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: b }, b ? "\u5DF2\u5C31\u7EEA\uFF1A" + WM.Worldbook.targetName() : "");
+            } else add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, "TavernHelper \u4E0D\u53EF\u7528");
+          } catch (e) {
+            add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
+          }
+        };
+        const testEmb = async () => {
+          try {
+            const embTestable = tmp.embeddingSource === "ollama" || tmp.embeddingSource === "localProxy" ? !!tmp.embeddingProxyPath : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
+            if (embTestable) add("Embedding(\u5411\u91CF)", await WM.EmbeddingClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.embeddingSource || "cloud"));
+            else add("Embedding(\u5411\u91CF)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
+          } catch (e) {
+            add("Embedding(\u5411\u91CF)", { success: false }, String(e.message || e));
+          }
+        };
+        const testRk = async () => {
+          try {
+            const rkTestable = tmp.rerankSource === "localProxy" ? !!tmp.rerankProxyPath : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
+            if (rkTestable) add("Rerank(\u91CD\u6392)", await WM.RerankClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.rerankSource || "cloud"));
+            else add("Rerank(\u91CD\u6392)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
+          } catch (e) {
+            add("Rerank(\u91CD\u6392)", { success: false }, String(e.message || e));
+          }
+        };
+        if (scope === "llm") {
+          await testLlm();
+          await testWorld();
+        } else if (scope === "mem") {
+          await testWorld();
+        } else if (scope === "vec") {
+          await testEmb();
+        } else if (scope === "rerank") {
+          await testRk();
+        } else if (scope === "lore") {
+          await testWorld();
+        } else {
+          await testLlm();
+          await testWorld();
         }
         box.innerHTML = rows.join("");
       };

@@ -898,58 +898,69 @@
   }
 
   // 把当前已渲染面板内的输入值同步回 s（保证切面板不丢未保存的改动）
-  function syncPaneToSettings(body, s) {
+  // scope 为空时同步所有已渲染面板；传具体 key（如 'vec'）时只同步该二级标签对应的字段
+  function syncPaneToSettings(body, s, scope) {
     const q = (sel) => body.querySelector(sel);
-    if (q('#llm-src')) {
-      s.llmConfig = {
-        source: q('#llm-src').value,
-        proxyPreset: q('#llm-preset').value.trim(),
-        apiUrl: q('#llm-url').value.trim(),
-        apiKey: q('#llm-key').value.trim(),
-        model: q('#llm-model').value.trim(),
-        maxTokens: Math.max(50, parseInt(q('#llm-maxtok').value, 10) || 700),
-      };
-      s.presetPrefix = {
-        mode: (q('input[name="pp-mode"]:checked') || {}).value || 'none',
-        importText: q('#pp-import-text') ? q('#pp-import-text').value : '',
-        presetName: q('#pp-preset-name') ? q('#pp-preset-name').value : '',
-      };
-      s.prompts = {
-        summary: q('#pprompt-summary') ? q('#pprompt-summary').value : s.prompts.summary,
-        relations: q('#pprompt-relations') ? q('#pprompt-relations').value : s.prompts.relations,
-        plot: q('#pprompt-plot') ? q('#pprompt-plot').value : s.prompts.plot,
-        worldview: q('#pprompt-worldview') ? q('#pprompt-worldview').value : s.prompts.worldview,
-      };
+    if (!scope || scope === 'llm') {
+      if (q('#llm-src')) {
+        s.llmConfig = {
+          source: q('#llm-src').value,
+          proxyPreset: q('#llm-preset').value.trim(),
+          apiUrl: q('#llm-url').value.trim(),
+          apiKey: q('#llm-key').value.trim(),
+          model: q('#llm-model').value.trim(),
+          maxTokens: Math.max(50, parseInt(q('#llm-maxtok').value, 10) || 700),
+        };
+        s.presetPrefix = {
+          mode: (q('input[name="pp-mode"]:checked') || {}).value || 'none',
+          importText: q('#pp-import-text') ? q('#pp-import-text').value : '',
+          presetName: q('#pp-preset-name') ? q('#pp-preset-name').value : '',
+        };
+        s.prompts = {
+          summary: q('#pprompt-summary') ? q('#pprompt-summary').value : s.prompts.summary,
+          relations: q('#pprompt-relations') ? q('#pprompt-relations').value : s.prompts.relations,
+          plot: q('#pprompt-plot') ? q('#pprompt-plot').value : s.prompts.plot,
+          worldview: q('#pprompt-worldview') ? q('#pprompt-worldview').value : s.prompts.worldview,
+        };
+      }
     }
-    if (q('#c-inj')) {
-      s.injectMemories = q('#c-inj').checked;
-      s.injectWorld = q('#c-injw').checked;
+    if (!scope || scope === 'mem') {
+      if (q('#c-inj')) {
+        s.injectMemories = q('#c-inj').checked;
+        s.injectWorld = q('#c-injw').checked;
+      }
     }
-    if (q('#c-vec')) {
-      s.vectorEnabled = q('#c-vec').checked;
+    if (!scope || scope === 'vec') {
+      if (q('#c-vec')) {
+        s.vectorEnabled = q('#c-vec').checked;
+      }
+      if (q('#c-emb-src')) {
+        s.embeddingSource = q('#c-emb-src').value;
+        s.embeddingBaseUrl = q('#c-emb-url') ? q('#c-emb-url').value : s.embeddingBaseUrl;
+        s.embeddingApiKey = q('#c-emb-key') ? q('#c-emb-key').value : s.embeddingApiKey;
+        s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
+        s.embeddingProxyPath = q('#c-emb-proxy') ? q('#c-emb-proxy').value : s.embeddingProxyPath;
+        s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
+      }
     }
-    if (q('#c-emb-src')) {
-      s.embeddingSource = q('#c-emb-src').value;
-      s.embeddingBaseUrl = q('#c-emb-url') ? q('#c-emb-url').value : s.embeddingBaseUrl;
-      s.embeddingApiKey = q('#c-emb-key') ? q('#c-emb-key').value : s.embeddingApiKey;
-      s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
-      s.embeddingProxyPath = q('#c-emb-proxy') ? q('#c-emb-proxy').value : s.embeddingProxyPath;
-      s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
+    if (!scope || scope === 'rerank') {
+      if (q('#c-rerank')) {
+        s.rerankEnabled = q('#c-rerank').checked;
+      }
+      if (q('#c-rk-src')) {
+        s.rerankSource = q('#c-rk-src').value;
+        s.rerankBaseUrl = q('#c-rk-url') ? q('#c-rk-url').value : s.rerankBaseUrl;
+        s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
+        s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
+        s.rerankProxyPath = q('#c-rk-proxy') ? q('#c-rk-proxy').value : s.rerankProxyPath;
+        s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
+      }
     }
-    if (q('#c-rerank')) {
-      s.rerankEnabled = q('#c-rerank').checked;
-    }
-    if (q('#c-rk-src')) {
-      s.rerankSource = q('#c-rk-src').value;
-      s.rerankBaseUrl = q('#c-rk-url') ? q('#c-rk-url').value : s.rerankBaseUrl;
-      s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
-      s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
-      s.rerankProxyPath = q('#c-rk-proxy') ? q('#c-rk-proxy').value : s.rerankProxyPath;
-      s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
-    }
-    if (q('#c-lore')) {
-      s.lorebookName = q('#c-lore').value.trim();
-      s.worldToLorebook = q('#c-wlore').checked;
+    if (!scope || scope === 'lore') {
+      if (q('#c-lore')) {
+        s.lorebookName = q('#c-lore').value.trim();
+        s.worldToLorebook = q('#c-wlore').checked;
+      }
     }
   }
 
@@ -1003,21 +1014,24 @@
       rkSrc.onchange = sync; sync();
     }
 
-    // 保存：把当前面板值同步进 s 后整体保存
+    // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
     if (saveBtn) saveBtn.onclick = () => {
-      syncPaneToSettings(body, s);
+      const scope = WM._cfgTab || 'llm';
+      syncPaneToSettings(body, s, scope);
       WM.Settings.save(s);
-      if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
-      toast('🌿 设置已保存');
+      if (scope === 'lore' && WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+      const labelMap = { llm: 'LLM 调用', mem: '记忆与注入', vec: '向量(Embedding)', rerank: '重排序(Rerank)', lore: '世界书', err: '错误报告' };
+      toast('🌿 已保存「' + (labelMap[scope] || scope) + '」设置');
     };
 
-    // 测试连接：验证统一 LLM 配置 + 世界书 + 向量/重排
+    // 测试连接：仅验证「当前二级标签」对应的服务，避免全部一起测
     const testBtn = body.querySelector('#c-test');
     if (testBtn) testBtn.onclick = async () => {
-      syncPaneToSettings(body, s);
+      const scope = WM._cfgTab || 'llm';
+      // 先把当前面板最新输入同步进 s，确保测试用的是刚填的值
+      syncPaneToSettings(body, s, scope);
       const box = body.querySelector('#c-test-result');
-      const tmpLlm = s.llmConfig || { source: 'local' };
       const tmp = Object.assign({}, s);
       box.innerHTML = '<div class="wm-test-item">⏳ 测试中…</div>';
       const rows = [];
@@ -1025,27 +1039,43 @@
         const ok = r && r.success;
         rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
       };
-      try {
-        const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
-        add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
-      } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
-      try {
-        const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
-        if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
-        else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
-      } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
-      try {
-        const embTestable = tmp.embeddingSource === 'ollama' || tmp.embeddingSource === 'localProxy'
-          ? !!(tmp.embeddingProxyPath)
-          : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
-        if (embTestable) add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '来源=' + (tmp.embeddingSource || 'cloud'));
-        else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
-      } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
-      try {
-        const rkTestable = tmp.rerankSource === 'localProxy' ? !!(tmp.rerankProxyPath) : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
-        if (rkTestable) add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '来源=' + (tmp.rerankSource || 'cloud'));
-        else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
-      } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
+      const testLlm = async () => {
+        const tmpLlm = tmp.llmConfig || { source: 'local' };
+        try {
+          const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
+          add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
+        } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
+      };
+      const testWorld = async () => {
+        try {
+          const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
+          if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
+          else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
+        } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
+      };
+      const testEmb = async () => {
+        try {
+          const embTestable = tmp.embeddingSource === 'ollama' || tmp.embeddingSource === 'localProxy'
+            ? !!(tmp.embeddingProxyPath)
+            : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
+          if (embTestable) add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '来源=' + (tmp.embeddingSource || 'cloud'));
+          else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+        } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
+      };
+      const testRk = async () => {
+        try {
+          const rkTestable = tmp.rerankSource === 'localProxy' ? !!(tmp.rerankProxyPath) : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
+          if (rkTestable) add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '来源=' + (tmp.rerankSource || 'cloud'));
+          else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+        } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
+      };
+      // 按当前二级标签决定测哪些
+      if (scope === 'llm') { await testLlm(); await testWorld(); }
+      else if (scope === 'mem') { await testWorld(); }
+      else if (scope === 'vec') { await testEmb(); }
+      else if (scope === 'rerank') { await testRk(); }
+      else if (scope === 'lore') { await testWorld(); }
+      else { await testLlm(); await testWorld(); } // err 等其它：默认测 LLM+世界书
       box.innerHTML = rows.join('');
     };
   }
