@@ -1706,16 +1706,19 @@ ${recent}
         }
       }
       const auto = settings.autoSummaryMode || "new";
-      if (!settings.autoSummaryEnabled) return false;
-      if (_summarizing) return false;
+      if (!settings.autoSummaryEnabled) return { ok: false, reason: "\u81EA\u52A8\u603B\u7ED3\u672A\u5F00\u542F" };
+      if (_summarizing) return { ok: false, reason: "\u4E0A\u4E00\u6BB5\u603B\u7ED3\u4ECD\u5728\u8FD0\u884C\uFF0C\u8BF7\u7A0D\u5019" };
       _summarizing = true;
       let range, total;
       try {
         const msgs = getRecentMessages(1e3);
         total = msgs.length;
-        if (auto === "new") {
+        if (!total) return { ok: false, range: [0, 0], reason: "\u5F53\u524D\u5BF9\u8BDD\u6CA1\u6709\u53EF\u603B\u7ED3\u7684\u697C\u5C42\uFF08\u8BF7\u5148\u6709\u5BF9\u8BDD\u5185\u5BB9\uFF09" };
+        if (opts.forceAll) {
+          range = [1, total];
+        } else if (auto === "new") {
           const ptr = WM.MemoryStore.getSummaryPointer();
-          if (ptr >= total) return false;
+          if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: "\u6CA1\u6709\u65B0\u589E\u697C\u5C42\u9700\u8981\u603B\u7ED3\uFF08\u5DF2\u603B\u7ED3\u5230\u6700\u65B0\uFF09" };
           range = [ptr + 1, total];
         } else if (auto === "count") {
           const win = Math.max(5, settings.autoSummaryCount || 20);
@@ -1726,25 +1729,25 @@ ${recent}
           let end = settings.autoSummaryEnd;
           if (end == null || end < 0) end = total;
           end = Math.min(end, total);
-          if (start > end) return false;
+          if (start > end) return { ok: false, range: [start, end], reason: "\u533A\u95F4\u8D77\u59CB\u5927\u4E8E\u7ED3\u675F" };
           range = [start, end];
         } else if (auto === "floor") {
           const floor = Math.max(1, settings.autoSummaryFloor || 20);
           const ptr = WM.MemoryStore.getSummaryPointer();
           const segEnd = Math.floor(ptr / floor) * floor + floor;
           if (opts.forceEnd) {
-            if (ptr >= total) return false;
+            if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: "\u5DF2\u5168\u90E8\u603B\u7ED3\u5B8C\uFF0C\u65E0\u65B0\u589E\u697C\u5C42" };
             if (total < segEnd) range = [ptr + 1, total];
             else range = [ptr + 1, Math.min(total, segEnd)];
           } else {
-            if (total < segEnd) return false;
+            if (total < segEnd) return { ok: false, range: [ptr + 1, Math.min(total, segEnd)], reason: "\u5C1A\u672A\u6512\u6EE1\u4E00\u6BB5\uFF0C\u6682\u4E0D\u603B\u7ED3" };
             range = [ptr + 1, Math.min(total, segEnd)];
           }
         } else {
-          return false;
+          return { ok: false, range: [0, 0], reason: "\u672A\u77E5\u7684\u81EA\u52A8\u603B\u7ED3\u6A21\u5F0F\uFF1A" + auto };
         }
         const recent = msgs.slice(range[0] - 1, range[1]);
-        if (!recent.length) return false;
+        if (!recent.length) return { ok: false, range, reason: "\u8BA1\u7B97\u51FA\u7684\u603B\u7ED3\u533A\u95F4\u4E3A\u7A7A" };
         const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
         const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
         const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
@@ -2441,8 +2444,12 @@ ${p.summary || ""}`.trim() });
         st.textContent = "\u603B\u7ED3\u4E2D\u2026";
         try {
           const fresh = WM.Settings.load();
-          const r = await WM.Summary.runSummary(fresh);
-          st.textContent = r.ok ? `\u2713 \u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u5173\u7CFB${r.results.relations} \u5267\u60C5${r.results.plots} \u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}` : "\u2717 " + (r.reason || "\u5931\u8D25");
+          const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+          if (r && r.ok) {
+            st.textContent = `\u2713 \u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u5173\u7CFB${r.results.relations} \u5267\u60C5${r.results.plots} \u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}`;
+          } else {
+            st.textContent = "\u2717 " + (r && r.reason ? r.reason : "\u5931\u8D25");
+          }
         } catch (e) {
           st.textContent = "\u2717 " + (e.message || e);
         }
@@ -3503,7 +3510,7 @@ ${p.summary || ""}`.trim() });
       setTimeout(async () => {
         try {
           let r = await WM.Summary.triggerSummary(s);
-          if (r === false && s.autoSummaryMode === "floor") {
+          if (r && !r.ok && s.autoSummaryMode === "floor") {
             const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
             const ptr = WM.MemoryStore.getSummaryPointer();
             if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
@@ -3543,7 +3550,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-llm-reasoning-fallback";
+  window.WarmMemo.version = "fix-summary-forced-run";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

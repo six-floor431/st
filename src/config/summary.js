@@ -77,10 +77,10 @@
       try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
     }
     const auto = settings.autoSummaryMode || 'new';
-    if (!settings.autoSummaryEnabled) return false;
+    if (!settings.autoSummaryEnabled) return { ok: false, reason: '自动总结未开启' };
 
     // 防重入：上一段未跑完直接跳过，避免并行四项重叠
-    if (_summarizing) return false;
+    if (_summarizing) return { ok: false, reason: '上一段总结仍在运行，请稍候' };
     _summarizing = true;
 
     // 计算要总结的区间
@@ -88,10 +88,14 @@
     try {
       const msgs = getRecentMessages(1000);
       total = msgs.length;
-      if (auto === 'new') {
+      if (!total) return { ok: false, range: [0, 0], reason: '当前对话没有可总结的楼层（请先有对话内容）' };
+      if (opts.forceAll) {
+        // 「立即总结」按钮专用：无视模式与指针，强制总结全部楼层，确保一定发起 LLM 调用
+        range = [1, total];
+      } else if (auto === 'new') {
         // 只总结新增楼层：从 summaryPointer 之后到最新
         const ptr = WM.MemoryStore.getSummaryPointer();
-        if (ptr >= total) return false;
+        if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: '没有新增楼层需要总结（已总结到最新）' };
         range = [ptr + 1, total];
       } else if (auto === 'count') {
         const win = Math.max(5, settings.autoSummaryCount || 20);
@@ -102,7 +106,7 @@
         let end = settings.autoSummaryEnd;
         if (end == null || end < 0) end = total;
         end = Math.min(end, total);
-        if (start > end) return false;
+        if (start > end) return { ok: false, range: [start, end], reason: '区间起始大于结束' };
         range = [start, end];
       } else if (auto === 'floor') {
         // 楼层区间模式：每 autoSummaryFloor 层触发一段（1-20,21-40,...）
@@ -111,18 +115,18 @@
         const segEnd = Math.floor(ptr / floor) * floor + floor; // 下一段的结束楼层
         if (opts.forceEnd) {
           // 末尾收尾：聊天已到末尾，仍有未总结楼层则强制收尾（即使不足一段）
-          if (ptr >= total) return false; // 已全部总结完
+          if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: '已全部总结完，无新增楼层' }; // 已全部总结完
           if (total < segEnd) range = [ptr + 1, total];
           else range = [ptr + 1, Math.min(total, segEnd)];
         } else {
-          if (total < segEnd) return false; // 还没攒够一整段，等待
+          if (total < segEnd) return { ok: false, range: [ptr + 1, Math.min(total, segEnd)], reason: '尚未攒满一段，暂不总结' }; // 还没攒够一整段，等待
           range = [ptr + 1, Math.min(total, segEnd)];
         }
       } else {
-        return false;
+        return { ok: false, range: [0, 0], reason: '未知的自动总结模式：' + auto };
       }
     const recent = msgs.slice(range[0] - 1, range[1]);
-    if (!recent.length) return false;
+    if (!recent.length) return { ok: false, range, reason: '计算出的总结区间为空' };
 
     // 关系/剧情/世界观/物品 的可复用上下文
     const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `· ${s.title}：${s.text}`).join('\n');

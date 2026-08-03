@@ -282,10 +282,13 @@
       try {
         // 强制重新读取已保存设置，避免用到面板打开时的旧配置（未保存的 BaseURL 不会漏）
         const fresh = WM.Settings.load();
-        const r = await WM.Summary.runSummary(fresh);
-        st.textContent = r.ok
-          ? `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}），关系${r.results.relations} 剧情${r.results.plots} 世界${r.results.world ? '✓' : '×'} 物品${r.results.items}`
-          : '✗ ' + (r.reason || '失败');
+        // 「立即总结」= 强制总结全部楼层（无视自动模式与指针），确保一定发起 LLM 调用
+        const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+        if (r && r.ok) {
+          st.textContent = `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}），关系${r.results.relations} 剧情${r.results.plots} 世界${r.results.world ? '✓' : '×'} 物品${r.results.items}`;
+        } else {
+          st.textContent = '✗ ' + (r && r.reason ? r.reason : '失败');
+        }
       } catch (e) {
         st.textContent = '✗ ' + (e.message || e);
       }
@@ -1338,7 +1341,7 @@
         // 先按常规触发（floor 模式需攒满一段）
         let r = await WM.Summary.triggerSummary(s);
         // 末尾收尾：floor 模式下聊到末尾但不足一段时，强制总结剩余楼层
-        if (r === false && s.autoSummaryMode === 'floor') {
+        if (r && !r.ok && s.autoSummaryMode === 'floor') {
           const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
           const ptr = WM.MemoryStore.getSummaryPointer();
           if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
@@ -1352,7 +1355,7 @@
         } else if (r && !r.ok) {
           toast(`🌿 温记：总结未执行（${r.reason}）`);
         }
-        // r 为 false：未到触发区间（如 floor 模式下还没攒够一层），静默跳过
+        // r 为 falsy：未到触发区间（如 floor 模式下还没攒够一层），静默跳过
       } catch (e) {
         toast(`🌿 温记：总结失败 - ${e.message || e}`);
       }
