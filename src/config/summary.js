@@ -161,68 +161,70 @@
     const tasks = [];
     const labels = [];
 
-    // 关系
-    tasks.push((async () => {
-      const tpl = settings.prompts && settings.prompts.relations;
-      const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-      const out = await callLLM(s, '请输出角色之间的关系（每行 人物A → 人物B：关系）：', settings, { temperature: 0.3, phase: 'relations' });
-      let parsed = [];
-      try {
-        const arr = JSON.parse(out);
-        if (Array.isArray(arr)) parsed = arr;
-      } catch (e) {
-        parsed = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-          const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-          return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: '', label: '' };
-        });
-      }
-      await WM.MemoryStore.setRelations(parsed);
-      return { kind: 'relations', ok: true };
-    })());
-    labels.push('relations');
-
-    // 剧情：时间｜标题｜内容｜状态
-    tasks.push((async () => {
-      const tpl = settings.prompts && settings.prompts.plot;
-      const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
-      const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
-      // 宽松状态识别：把各种说法归一为 active/done/abandon
-      function normStatus(raw) {
-        if (!raw) return 'active';
-        const t = String(raw).replace(/[【】\[\]（）()]/g, '').trim();
-        if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return 'done';
-        if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return 'abandon';
-        if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return 'active';
-        // 含关键词兜底
-        if (/(完结|完成|结束|告一段落)/.test(t)) return 'done';
-        if (/(废弃|放弃|停止|作废|取消)/.test(t)) return 'abandon';
-        return 'active';
-      }
-      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
-        .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l)); // 滤掉表头/分隔线
-      for (const ln of lines) {
-        const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
-        if (!parts.length) continue;
-        if (parts.length >= 4) {
-          const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? '' : parts[0];
-          await WM.MemoryStore.addPlot({
-            time,
-            title: parts[1] || '',
-            summary: parts[2] || '',
-            status: normStatus(parts[3]),
+    // 关系（受 autoRelation 开关控制；关闭则不跑，保留用户手动编辑的关系）
+    if (settings.autoRelation !== false) {
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.relations;
+        const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
+        const out = await callLLM(s, '请输出角色之间的关系（每行 人物A → 人物B：关系）：', settings, { temperature: 0.3, phase: 'relations' });
+        let parsed = [];
+        try {
+          const arr = JSON.parse(out);
+          if (Array.isArray(arr)) parsed = arr;
+        } catch (e) {
+          parsed = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+            const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+            return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: '', label: '' };
           });
-        } else if (parts.length === 3) {
-          // 标题｜内容｜状态（缺时间列）
-          await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: normStatus(parts[2]) });
-        } else if (parts.length === 2) {
-          await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: 'active' });
-        } else if (parts[0]) {
-          await WM.MemoryStore.addPlot({ title: parts[0], summary: '', status: 'active' });
         }
-      }
-      return { kind: 'plot', ok: true };
-    })());
-    labels.push('plot');
+        await WM.MemoryStore.setRelations(parsed);
+        return { kind: 'relations', ok: true };
+      })());
+      labels.push('relations');
+    }
+
+    // 剧情：时间｜标题｜内容｜状态（受 autoPlot 开关控制；标题去重避免重复追加）
+    if (settings.autoPlot !== false) {
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.plot;
+        const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
+        const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
+        // 宽松状态识别：把各种说法归一为 active/done/abandon
+        function normStatus(raw) {
+          if (!raw) return 'active';
+          const t = String(raw).replace(/[【】\[\]（）()]/g, '').trim();
+          if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return 'done';
+          if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return 'abandon';
+          if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return 'active';
+          // 含关键词兜底
+          if (/(完结|完成|结束|告一段落)/.test(t)) return 'done';
+          if (/(废弃|放弃|停止|作废|取消)/.test(t)) return 'abandon';
+          return 'active';
+        }
+        const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+          .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l)); // 滤掉表头/分隔线
+        for (const ln of lines) {
+          const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
+          if (!parts.length) continue;
+          let time = '', title = '', summary = '', status = 'active';
+          if (parts.length >= 4) {
+            time = /^(未标注|无|未知|-)$/.test(parts[0]) ? '' : parts[0];
+            title = parts[1] || ''; summary = parts[2] || ''; status = normStatus(parts[3]);
+          } else if (parts.length === 3) {
+            title = parts[0]; summary = parts[1]; status = normStatus(parts[2]);
+          } else if (parts.length === 2) {
+            title = parts[0]; summary = parts[1];
+          } else { title = parts[0]; }
+          if (!title) continue;
+          // 标题去重：已存在同名剧情则更新，否则新增，避免每次总结重复追加
+          const exist = (WM.MemoryStore.getPlots() || []).find((p) => p.title === title);
+          if (exist) await WM.MemoryStore.updatePlot(exist.id, { time, title, summary, status });
+          else await WM.MemoryStore.addPlot({ time, title, summary, status });
+        }
+        return { kind: 'plot', ok: true };
+      })());
+      labels.push('plot');
+    }
 
     // 世界观：解析结构化输出 → worldMeta + worldSections
     if (settings.autoWorld !== false) {

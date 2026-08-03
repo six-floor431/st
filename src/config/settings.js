@@ -68,8 +68,8 @@
     injectWorld: true,
 
     // 扩展自带提示词（均可编辑）。保留 {{变量}} 占位符，运行时被真实数据替换：
-    //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系
-    //   {{plot}} 剧情线   {{worldview}} 世界观   {{current}} 当前对话   {{title}} 聊天标题
+    //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系   {{plot}} 剧情线
+    // 注：世界观走独立推断函数（inferWorldview），不通过模板占位符注入。
     prompts: {
       summary: '你是我的专属记录员。请基于「最近对话」，按「时间顺序」提炼出「关键事实、约定、状态变化、人名/地点/组织、未完成的承诺或待办」。不要编造，不确定就写“未知”。仅输出条目，每条一行，不超过 12 条。\n\n【最近对话】\n{{recent}}',
       relations: '你是关系分析师。请基于「历史总结」和「最近对话」，分析「我（用户）与角色之间」的关系状态、亲密度、张力、未解心结。输出结构化条目，每条一行。\n\n【历史总结】\n{{historySummary}}\n\n【最近对话】\n{{recent}}',

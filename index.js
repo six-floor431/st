@@ -82,8 +82,8 @@
       // 是否注入记忆到上下文
       injectWorld: true,
       // 扩展自带提示词（均可编辑）。保留 {{变量}} 占位符，运行时被真实数据替换：
-      //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系
-      //   {{plot}} 剧情线   {{worldview}} 世界观   {{current}} 当前对话   {{title}} 聊天标题
+      //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系   {{plot}} 剧情线
+      // 注：世界观走独立推断函数（inferWorldview），不通过模板占位符注入。
       prompts: {
         summary: "\u4F60\u662F\u6211\u7684\u4E13\u5C5E\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u6309\u300C\u65F6\u95F4\u987A\u5E8F\u300D\u63D0\u70BC\u51FA\u300C\u5173\u952E\u4E8B\u5B9E\u3001\u7EA6\u5B9A\u3001\u72B6\u6001\u53D8\u5316\u3001\u4EBA\u540D/\u5730\u70B9/\u7EC4\u7EC7\u3001\u672A\u5B8C\u6210\u7684\u627F\u8BFA\u6216\u5F85\u529E\u300D\u3002\u4E0D\u8981\u7F16\u9020\uFF0C\u4E0D\u786E\u5B9A\u5C31\u5199\u201C\u672A\u77E5\u201D\u3002\u4EC5\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\uFF0C\u4E0D\u8D85\u8FC7 12 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         relations: "\u4F60\u662F\u5173\u7CFB\u5206\u6790\u5E08\u3002\u8BF7\u57FA\u4E8E\u300C\u5386\u53F2\u603B\u7ED3\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u5206\u6790\u300C\u6211\uFF08\u7528\u6237\uFF09\u4E0E\u89D2\u8272\u4E4B\u95F4\u300D\u7684\u5173\u7CFB\u72B6\u6001\u3001\u4EB2\u5BC6\u5EA6\u3001\u5F20\u529B\u3001\u672A\u89E3\u5FC3\u7ED3\u3002\u8F93\u51FA\u7ED3\u6784\u5316\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5386\u53F2\u603B\u7ED3\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
@@ -1820,61 +1820,70 @@ ${recent}
         }
         const tasks = [];
         const labels = [];
-        tasks.push((async () => {
-          const tpl = settings.prompts && settings.prompts.relations;
-          const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
-          let parsed = [];
-          try {
-            const arr = JSON.parse(out);
-            if (Array.isArray(arr)) parsed = arr;
-          } catch (e) {
-            parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-              const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-              return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: "", label: "" };
-            });
-          }
-          await WM.MemoryStore.setRelations(parsed);
-          return { kind: "relations", ok: true };
-        })());
-        labels.push("relations");
-        tasks.push((async () => {
-          const tpl = settings.prompts && settings.prompts.plot;
-          const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
-          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
-          function normStatus(raw) {
-            if (!raw) return "active";
-            const t = String(raw).replace(/[【】\[\]（）()]/g, "").trim();
-            if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return "done";
-            if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return "abandon";
-            if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return "active";
-            if (/(完结|完成|结束|告一段落)/.test(t)) return "done";
-            if (/(废弃|放弃|停止|作废|取消)/.test(t)) return "abandon";
-            return "active";
-          }
-          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
-          for (const ln of lines) {
-            const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
-            if (!parts.length) continue;
-            if (parts.length >= 4) {
-              const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
-              await WM.MemoryStore.addPlot({
-                time,
-                title: parts[1] || "",
-                summary: parts[2] || "",
-                status: normStatus(parts[3])
+        if (settings.autoRelation !== false) {
+          tasks.push((async () => {
+            const tpl = settings.prompts && settings.prompts.relations;
+            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
+            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
+            let parsed = [];
+            try {
+              const arr = JSON.parse(out);
+              if (Array.isArray(arr)) parsed = arr;
+            } catch (e) {
+              parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+                const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+                return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: "", label: "" };
               });
-            } else if (parts.length === 3) {
-              await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: normStatus(parts[2]) });
-            } else if (parts.length === 2) {
-              await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: "active" });
-            } else if (parts[0]) {
-              await WM.MemoryStore.addPlot({ title: parts[0], summary: "", status: "active" });
             }
-          }
-          return { kind: "plot", ok: true };
-        })());
-        labels.push("plot");
+            await WM.MemoryStore.setRelations(parsed);
+            return { kind: "relations", ok: true };
+          })());
+          labels.push("relations");
+        }
+        if (settings.autoPlot !== false) {
+          tasks.push((async () => {
+            const tpl = settings.prompts && settings.prompts.plot;
+            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
+            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
+            function normStatus(raw) {
+              if (!raw) return "active";
+              const t = String(raw).replace(/[【】\[\]（）()]/g, "").trim();
+              if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return "done";
+              if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return "abandon";
+              if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return "active";
+              if (/(完结|完成|结束|告一段落)/.test(t)) return "done";
+              if (/(废弃|放弃|停止|作废|取消)/.test(t)) return "abandon";
+              return "active";
+            }
+            const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
+            for (const ln of lines) {
+              const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
+              if (!parts.length) continue;
+              let time = "", title = "", summary = "", status = "active";
+              if (parts.length >= 4) {
+                time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
+                title = parts[1] || "";
+                summary = parts[2] || "";
+                status = normStatus(parts[3]);
+              } else if (parts.length === 3) {
+                title = parts[0];
+                summary = parts[1];
+                status = normStatus(parts[2]);
+              } else if (parts.length === 2) {
+                title = parts[0];
+                summary = parts[1];
+              } else {
+                title = parts[0];
+              }
+              if (!title) continue;
+              const exist = (WM.MemoryStore.getPlots() || []).find((p) => p.title === title);
+              if (exist) await WM.MemoryStore.updatePlot(exist.id, { time, title, summary, status });
+              else await WM.MemoryStore.addPlot({ time, title, summary, status });
+            }
+            return { kind: "plot", ok: true };
+          })());
+          labels.push("plot");
+        }
         if (settings.autoWorld !== false) {
           tasks.push((async () => {
             const world = await WM.Worldbook.inferWorldview(settings, { recent });
@@ -1989,24 +1998,6 @@ ${recent}
   (function() {
     "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
-    async function extractRelations(memoryText, settings) {
-      if (!memoryText || !memoryText.trim()) return [];
-      const tpl = settings && settings.prompts && settings.prompts.relations || "\u4ECE\u4E0B\u9762\u7684\u300C\u6709\u6E29\u5EA6\u8BB0\u5FC6\u300D\u4E2D\uFF0C\u62BD\u53D6\u5B9E\u4F53\uFF08\u89D2\u8272\u3001\u7528\u6237\u3001\u5730\u70B9\u3001\u4E8B\u7269\uFF09\u4E4B\u95F4\u7684\u5173\u7CFB\u3002\n\u8981\u6C42\uFF1A\u6BCF\u884C\u4E00\u4E2A\u4E09\u5143\u7EC4\uFF0C\u683C\u5F0F\u4E25\u683C\u4E3A \u5B9E\u4F53A|\u5173\u7CFB|\u5B9E\u4F53B|\u6743\u91CD(1-5)\u3002\n\u6743\u91CD\u8868\u793A\u5173\u7CFB\u5F3A\u5EA6/\u4E92\u52A8\u9891\u7387\u3002\u53EA\u62BD\u53D6\u660E\u786E\u63D0\u5230\u6216\u660E\u663E\u6697\u793A\u7684\u5173\u7CFB\u3002\u6700\u591A 18 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}";
-      const sys = WM.Summary.fillTemplate(tpl, { recent: memoryText, historySummary: memoryText });
-      try {
-        const raw = await WM.Summary.callLLM(sys, memoryText, settings, {});
-        if (!raw) return [];
-        return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
-          const parts = l.split("|").map((x) => x.trim());
-          const [from, label, to, w] = parts;
-          const weight = Math.max(1, Math.min(5, parseInt(w, 10) || 2));
-          return from && to ? { from, label: label || "\u5173\u8054", to, weight } : null;
-        }).filter(Boolean);
-      } catch (e) {
-        console.warn("[WarmMemo] \u5173\u7CFB\u62BD\u53D6\u5931\u8D25", e);
-        return [];
-      }
-    }
     function mergeRelations(oldList, newList) {
       const map = /* @__PURE__ */ new Map();
       oldList.forEach((r) => map.set(r.from + "" + r.to + "" + r.label, r));
@@ -2017,65 +2008,6 @@ ${recent}
         else map.set(k, Object.assign({}, r));
       });
       return Array.from(map.values());
-    }
-    function forceLayout(nodes, edges, W, H) {
-      const cx = W / 2, cy = H / 2;
-      nodes.forEach((n, i) => {
-        const a = i / nodes.length * Math.PI * 2;
-        n.x = cx + 90 * Math.cos(a);
-        n.y = cy + 90 * Math.sin(a);
-        n.vx = 0;
-        n.vy = 0;
-      });
-      for (let step = 0; step < 220; step++) {
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const a = nodes[i], b = nodes[j];
-            let dx = a.x - b.x, dy = a.y - b.y;
-            let d2 = dx * dx + dy * dy + 0.01;
-            const f = 900 / d2;
-            const d = Math.sqrt(d2);
-            const fx = dx / d * f, fy = dy / d * f;
-            a.vx += fx;
-            a.vy += fy;
-            b.vx -= fx;
-            b.vy -= fy;
-          }
-        }
-        edges.forEach((e) => {
-          const a = nodes.find((n) => n.id === e.from), b = nodes.find((n) => n.id === e.to);
-          if (!a || !b) return;
-          const w = Number.isFinite(e.weight) ? e.weight : 2;
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-          const target = 70 - w * 6;
-          const f = (d - target) * 0.02;
-          const fx = dx / d * f, fy = dy / d * f;
-          a.vx += fx;
-          a.vy += fy;
-          b.vx -= fx;
-          b.vy -= fy;
-        });
-        nodes.forEach((n) => {
-          n.vx += (cx - n.x) * 4e-3;
-          n.vy += (cy - n.y) * 4e-3;
-          n.vx *= 0.85;
-          n.vy *= 0.85;
-          n.x += n.vx;
-          n.y += n.vy;
-          n.x = Math.max(14, Math.min(W - 14, n.x));
-          n.y = Math.max(14, Math.min(H - 14, n.y));
-        });
-      }
-      const hasBad = nodes.some((n) => !Number.isFinite(n.x) || !Number.isFinite(n.y));
-      if (hasBad) {
-        nodes.forEach((n, i) => {
-          const a = i / nodes.length * Math.PI * 2;
-          n.x = cx + 110 * Math.cos(a);
-          n.y = cy + 110 * Math.sin(a);
-        });
-      }
-      return nodes;
     }
     function groupByPerson(relations) {
       if (!relations || !Array.isArray(relations.pairs)) return [];
@@ -2095,7 +2027,7 @@ ${recent}
         return { person, keys: [person], text: lines.join("\u3001") };
       });
     }
-    WM.Relations = { extractRelations, mergeRelations, forceLayout, groupByPerson };
+    WM.Relations = { mergeRelations, groupByPerson };
   })();
 
   // src/config/injection.js
@@ -3688,7 +3620,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-relgraph-centered-and-plot-status-and-mem-tab";
+  window.WarmMemo.version = "audit-fix-switches-and-plot-dedup";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
