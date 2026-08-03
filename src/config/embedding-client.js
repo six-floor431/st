@@ -81,6 +81,7 @@
     const key = s.embeddingApiKey || s.apiKey || '';
     const provider = info.provider;
     const input = Array.isArray(texts) ? texts : [texts];
+    WM._lastEmbedResolve = { source: s.embeddingSource, url: base, model, provider };
 
     if (provider === 'gemini') {
       // Gemini 逐条（无批量接口）
@@ -115,6 +116,10 @@
     } else {
       body = JSON.stringify({ model, input });
     }
+    // 诊断追踪：把本次实际请求原样记录，供 F12 Console 与测试详情查看
+    const reqTrace = { url: finalUrl, method: useGet ? 'GET' : 'POST', model, bodyPreview: body ? body.slice(0, 200) : '(无body)' };
+    WM._lastEmbedReq = reqTrace;
+    try { console.log('[WarmMemo] Embedding 实际请求：', reqTrace); } catch (e) {}
     let r;
     try {
       r = await fetch(finalUrl, {
@@ -148,9 +153,9 @@
     const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
     try {
       const v = await embed('test', settings);
-      return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver };
+      return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
     } catch (e) {
-      return { success: false, error: String(e.message || e), version: ver };
+      return { success: false, error: String(e.message || e), version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
     }
   }
 

@@ -1004,6 +1004,7 @@ ${it.message}`;
       const key = s.embeddingApiKey || s.apiKey || "";
       const provider = info.provider;
       const input = Array.isArray(texts) ? texts : [texts];
+      WM._lastEmbedResolve = { source: s.embeddingSource, url: base, model, provider };
       if (provider === "gemini") {
         const out = [];
         for (const t of input) {
@@ -1030,6 +1031,12 @@ ${it.message}`;
         finalUrl = q.toString();
       } else {
         body = JSON.stringify({ model, input });
+      }
+      const reqTrace = { url: finalUrl, method: useGet ? "GET" : "POST", model, bodyPreview: body ? body.slice(0, 200) : "(\u65E0body)" };
+      WM._lastEmbedReq = reqTrace;
+      try {
+        console.log("[WarmMemo] Embedding \u5B9E\u9645\u8BF7\u6C42\uFF1A", reqTrace);
+      } catch (e) {
       }
       let r;
       try {
@@ -1062,9 +1069,9 @@ ${it.message}`;
       const ver = window.WarmMemo && window.WarmMemo.version || "?";
       try {
         const v = await embed("test", settings);
-        return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver };
+        return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
       } catch (e) {
-        return { success: false, error: String(e.message || e), version: ver };
+        return { success: false, error: String(e.message || e), version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
       }
     }
     WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };
