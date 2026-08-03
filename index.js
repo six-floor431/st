@@ -777,29 +777,30 @@ ${it.message}`;
       if (!gr) {
         throw new Error("\u9152\u9986 generateRaw \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
       }
-      const ordered_prompts = (messages || []).map((m) => ({ role: m.role || "user", content: m.content || "" }));
+      const userMsg = (messages || []).filter((m) => m.role === "user").pop();
+      const user_input = userMsg && userMsg.content || (opts.fallbackUserInput || "");
+      const ordered_prompts = (messages || []).filter((m) => m.role !== "user" || m !== userMsg).map((m) => ({ role: m.role || "system", content: m.content || "" }));
       const maxTokens = opts.maxTokens || profile.maxTokens || 512;
+      const temperature = opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3;
+      const custom_api = Object.assign(
+        {},
+        buildCustomApi(profile) || {},
+        { max_tokens: maxTokens, temperature }
+      );
+      if (profile.source === "local" && !custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
+        delete custom_api.source;
+      }
       const config = {
+        user_input,
         ordered_prompts,
         should_stream: false,
-        // 注意：酒馆 generateRaw 的字段名是 max_tokens（不是 max_new_tokens），
-        // 写错会导致被全局对话设置的超大 max_tokens 覆盖，测试/摘要会巨慢。
-        max_tokens: maxTokens,
-        // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
-        temperature: opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3,
+        should_silence: opts.should_silence != null ? opts.should_silence : true,
         // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
         max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
-        should_silence: opts.should_silence != null ? opts.should_silence : true
+        custom_api
       };
-      if (profile.source === "custom") {
-        const custom_api = buildCustomApi(profile);
-        if (!custom_api) {
-          throw new Error("\u81EA\u5B9A\u4E49\u6765\u6E90\u672A\u914D\u7F6E\uFF08\u9700\u586B\u4EE3\u7406\u9884\u8BBE\u6216 URL/Key/\u6A21\u578B\uFF09");
-        }
-        config.custom_api = custom_api;
-      }
       const out = await gr(config);
-      const text = typeof out === "string" ? out : out && out.reply ? out.reply : String(out || "");
+      const text = typeof out === "string" ? out : out && out.content ? out.content : out && out.reply ? out.reply : String(out || "");
       return text ? String(text).trim() : "";
     }
     async function testConnection(opts) {

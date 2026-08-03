@@ -87,7 +87,11 @@
     return [];
   }
 
-  // 核心：只调用 LLM 本体，提示词完全由调用方控制
+  // 核心：调用酒馆 generateRaw，提示词完全由调用方控制。
+  // 严格对齐 @types/function/generate.d.ts 的 GenerateRawConfig 签名：
+  //   - 必须有 user_input（否则内容为空）
+  //   - ordered_prompts: 自定义提示词数组（system/user/assistant），相当于自定义预设
+  //   - max_tokens/temperature 等参数放在 custom_api 内（local 下也用 custom_api 覆盖 max_tokens）
   // 支持两种签名（向后兼容）：
   //   新：complete(messages, opts)  —— messages: [{role:'system'|'user', content}]
   //   旧：complete(systemText, userText, settings, opts)
@@ -108,31 +112,41 @@
     if (!gr) {
       throw new Error('酒馆 generateRaw 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
     }
-    const ordered_prompts = (messages || []).map((m) => ({ role: m.role || 'user', content: m.content || '' }));
-    // 输出 token 上限：优先用本次 opts.maxTokens，否则用统一配置 profile.maxTokens（所有功能共用），再兜底 512
+    // 拆分提示词：把 user 角色的内容作为 user_input（generateRaw 必需的顶层字段），
+    // 其余（system 等）作为 ordered_prompts 前置。这样不会发空 content，也不会把对话历史带进来。
+    const userMsg = (messages || []).filter((m) => m.role === 'user').pop();
+    const user_input = (userMsg && userMsg.content) || (opts.fallbackUserInput || '');
+    const ordered_prompts = (messages || [])
+      .filter((m) => m.role !== 'user' || m !== userMsg)
+      .map((m) => ({ role: m.role || 'system', content: m.content || '' }));
+
+    // 输出 token 上限：优先本次 opts.maxTokens，否则统一配置 profile.maxTokens，再兜底 512
     const maxTokens = opts.maxTokens || profile.maxTokens || 512;
+    const temperature = opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3);
+
+    // custom_api：用于覆盖 max_tokens/temperature（避免被酒馆全局 233333 之类的值拖慢测试/摘要）
+    // 参考 @types：local 下不传 apiurl/key/proxy_preset 时，酒馆仍用当前 ST 源，仅应用 max_tokens 覆盖。
+    const custom_api = Object.assign(
+      {},
+      buildCustomApi(profile) || {},
+      { max_tokens: maxTokens, temperature: temperature }
+    );
+    // local 且未配置任何代理/URL/模型时，移除 source 字段，让酒馆严格使用当前对话源（只覆盖 max_tokens）
+    if (profile.source === 'local' && !custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
+      delete custom_api.source;
+    }
+
     const config = {
+      user_input,
       ordered_prompts,
       should_stream: false,
-      // 注意：酒馆 generateRaw 的字段名是 max_tokens（不是 max_new_tokens），
-      // 写错会导致被全局对话设置的超大 max_tokens 覆盖，测试/摘要会巨慢。
-      max_tokens: maxTokens,
-      // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
-      temperature: opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3),
+      should_silence: opts.should_silence != null ? opts.should_silence : true,
       // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
       max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
-      should_silence: opts.should_silence != null ? opts.should_silence : true,
+      custom_api,
     };
-    if (profile.source === 'custom') {
-      const custom_api = buildCustomApi(profile);
-      if (!custom_api) {
-        throw new Error('自定义来源未配置（需填代理预设或 URL/Key/模型）');
-      }
-      config.custom_api = custom_api;
-    }
-    // local：不传 custom_api，用酒馆当前对话源
     const out = await gr(config);
-    const text = typeof out === 'string' ? out : (out && out.reply) ? out.reply : String(out || '');
+    const text = typeof out === 'string' ? out : (out && out.content) ? out.content : (out && out.reply) ? out.reply : String(out || '');
     // 清理：去首尾空白、去常见代码围栏，保证返回内容准确干净
     return text ? String(text).trim() : '';
   }
