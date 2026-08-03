@@ -55,7 +55,7 @@
     return true;
   }
 
-  // 计算文本向量（若 embedding 已配置），否则返回 null
+  // 计算文本向量（若 embedding 已配置），否则返回 null。支持单条字符串或字符串数组（批量）。
   async function embed(text, settings) {
     settings = settings || WM.Settings.load();
     if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
@@ -66,6 +66,22 @@
       settings.embeddingSource === 'ollama';
     if (!hasEndpoint) return null;
     try { return await WM.EmbeddingClient.embed(text, settings); } catch (e) { return null; }
+  }
+
+  // 批量计算向量：把多条文本一次性发给 embedding 服务（一次请求），避免逐条 N 次请求。
+  // 返回与 texts 同序的向量数组（失败项为 null）。
+  async function embedBatch(texts, settings) {
+    const list = (texts || []).filter((t) => t && String(t).trim());
+    if (!list.length) return [];
+    const out = new Array(texts.length).fill(null);
+    const vecs = await embed(list, settings); // EmbeddingClient.embed 支持数组输入
+    if (Array.isArray(vecs)) {
+      let k = 0;
+      for (let i = 0; i < texts.length; i++) {
+        if (texts[i] && String(texts[i]).trim()) { out[i] = vecs[k++]; }
+      }
+    }
+    return out;
   }
 
   // 检索：对 memories 数组，按 query 文本返回 topK 个最相关记忆条目
@@ -80,22 +96,32 @@
     const stored = await getAll();
     const map = {};
     stored.forEach((r) => (map[r.id] = r.vector));
-    // 为新记忆补向量
-    for (const m of memories) {
-      if (!map[m.id]) {
-        const v = await embed(m.text, settings);
-        if (v) { await put({ id: m.id, text: m.text, vector: v, ts: Date.now() }); map[m.id] = v; }
+    // 为新记忆补向量（批量一次请求，避免逐条 N 次调用）。
+    // 维度与当前模型不一致的旧缓存也视为缺失，需重算，避免模型更换后全部失效。
+    const missing = memories.filter((m) => m && m.id != null && (!map[m.id] || map[m.id].length !== vec.length));
+    if (missing.length) {
+      const vecs = await embedBatch(missing.map((m) => m.text), settings);
+      for (let i = 0; i < missing.length; i++) {
+        if (vecs[i]) { await put({ id: missing[i].id, text: missing[i].text, vector: vecs[i], ts: Date.now() }); map[missing[i].id] = vecs[i]; }
       }
     }
     let scored = memories
-      .map((m) => ({ m, score: map[m.id] ? cosine(vec, map[m.id]) : -1 }))
-      .filter((x) => x.score > 0.1)
+      .map((m) => ({ m, score: (map[m.id] && map[m.id].length === vec.length) ? cosine(vec, map[m.id]) : -1 }))
       .sort((a, b) => b.score - a.score);
-    if (settings.rerankEnabled && WM.RerankClient && WM.RerankClient.rerank) {
+    // 弱相关剔除：仅在过滤后仍有候选时才丢弃 score<=0.1 的条目，避免阈值把结果清空导致静默回退
+    const strong = scored.filter((x) => x.score > 0.1);
+    if (strong.length) scored = strong;
+    if ((settings.rerankEnabled || settings.takeoverRerank) && WM.RerankClient && WM.RerankClient.rerank) {
       const docs = scored.map((x) => x.m.text);
       try { console.log('[WarmMemo] 已真正调用重排序 rerank，文档数=', docs.length); } catch (e) {}
       const rs = await WM.RerankClient.rerank(query, docs, settings, {});
-      if (rs) { scored.forEach((x, i) => (x.score = rs[i])); scored.sort((a, b) => b.score - a.score); }
+      // 仅当 rerank 真正返回有效分数（长度一致且至少有一条 > 0）时才覆盖，否则保留 cosine 排序
+      if (rs && rs.length === docs.length && rs.some((x) => x > 0)) {
+        scored.forEach((x, i) => (x.score = rs[i]));
+        scored.sort((a, b) => b.score - a.score);
+      } else {
+        try { console.log('[WarmMemo] rerank 未返回有效分数，保留余弦相似度排序'); } catch (e) {}
+      }
     }
     return scored.slice(0, topK || 12).map((x) => x.m);
   }

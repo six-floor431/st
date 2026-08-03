@@ -899,6 +899,21 @@ ${it.message}`;
         return null;
       }
     }
+    async function embedBatch(texts, settings) {
+      const list = (texts || []).filter((t) => t && String(t).trim());
+      if (!list.length) return [];
+      const out = new Array(texts.length).fill(null);
+      const vecs = await embed(list, settings);
+      if (Array.isArray(vecs)) {
+        let k = 0;
+        for (let i = 0; i < texts.length; i++) {
+          if (texts[i] && String(texts[i]).trim()) {
+            out[i] = vecs[k++];
+          }
+        }
+      }
+      return out;
+    }
     async function search(memories, query, topK) {
       _lastQuery = query || "";
       const settings = WM.Settings.load();
@@ -922,26 +937,34 @@ ${it.message}`;
       const stored = await getAll();
       const map = {};
       stored.forEach((r) => map[r.id] = r.vector);
-      for (const m of memories) {
-        if (!map[m.id]) {
-          const v = await embed(m.text, settings);
-          if (v) {
-            await put({ id: m.id, text: m.text, vector: v, ts: Date.now() });
-            map[m.id] = v;
+      const missing = memories.filter((m) => m && m.id != null && (!map[m.id] || map[m.id].length !== vec.length));
+      if (missing.length) {
+        const vecs = await embedBatch(missing.map((m) => m.text), settings);
+        for (let i = 0; i < missing.length; i++) {
+          if (vecs[i]) {
+            await put({ id: missing[i].id, text: missing[i].text, vector: vecs[i], ts: Date.now() });
+            map[missing[i].id] = vecs[i];
           }
         }
       }
-      let scored = memories.map((m) => ({ m, score: map[m.id] ? cosine(vec, map[m.id]) : -1 })).filter((x) => x.score > 0.1).sort((a, b) => b.score - a.score);
-      if (settings.rerankEnabled && WM.RerankClient && WM.RerankClient.rerank) {
+      let scored = memories.map((m) => ({ m, score: map[m.id] && map[m.id].length === vec.length ? cosine(vec, map[m.id]) : -1 })).sort((a, b) => b.score - a.score);
+      const strong = scored.filter((x) => x.score > 0.1);
+      if (strong.length) scored = strong;
+      if ((settings.rerankEnabled || settings.takeoverRerank) && WM.RerankClient && WM.RerankClient.rerank) {
         const docs = scored.map((x) => x.m.text);
         try {
           console.log("[WarmMemo] \u5DF2\u771F\u6B63\u8C03\u7528\u91CD\u6392\u5E8F rerank\uFF0C\u6587\u6863\u6570=", docs.length);
         } catch (e) {
         }
         const rs = await WM.RerankClient.rerank(query, docs, settings, {});
-        if (rs) {
+        if (rs && rs.length === docs.length && rs.some((x) => x > 0)) {
           scored.forEach((x, i) => x.score = rs[i]);
           scored.sort((a, b) => b.score - a.score);
+        } else {
+          try {
+            console.log("[WarmMemo] rerank \u672A\u8FD4\u56DE\u6709\u6548\u5206\u6570\uFF0C\u4FDD\u7559\u4F59\u5F26\u76F8\u4F3C\u5EA6\u6392\u5E8F");
+          } catch (e) {
+          }
         }
       }
       return scored.slice(0, topK || 12).map((x) => x.m);
@@ -1188,16 +1211,18 @@ ${it.message}`;
         });
         return docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
       } catch (e) {
-        console.warn("[WarmMemo] rerank \u5931\u8D25\uFF0C\u56DE\u9000\u539F\u5E8F", e);
-        return docs.map(() => 0);
+        console.warn("[WarmMemo] rerank \u5931\u8D25\uFF0C\u8FD4\u56DE null\uFF08\u7531\u8C03\u7528\u65B9\u4FDD\u7559\u539F\u6392\u5E8F\uFF09", e);
+        return null;
       } finally {
         clearTimeout(timer);
       }
     }
     async function testConnection(rawSettings) {
       try {
-        const scores = await rerank("test", ["a", "b"], rawSettings, { topN: 2 });
-        return { success: Array.isArray(scores) };
+        const s = Object.assign({}, rawSettings, { rerankEnabled: true });
+        const scores = await rerank("test", ["a", "b"], s, { topN: 2 });
+        if (scores === null) return { success: false, error: "rerank \u8FD4\u56DE null\uFF08\u670D\u52A1\u4E0D\u53EF\u8FBE\u6216\u5730\u5740/\u5B57\u6BB5\u9519\u8BEF\uFF09" };
+        return { success: Array.isArray(scores) && scores.length === 2 };
       } catch (e) {
         return { success: false, error: String(e.message || e) };
       }
@@ -1963,7 +1988,7 @@ ${p.summary || ""}`.trim() });
       });
       return cands;
     }
-    function buildMemoryBlock() {
+    async function buildMemoryBlock() {
       const settings = WM.Settings.load();
       if (settings.injectMemories === false && settings.injectWorld === false) return "";
       const mem = WM.MemoryStore.getMemories();
@@ -1971,7 +1996,7 @@ ${p.summary || ""}`.trim() });
       if (settings.injectMemories !== false && mem.length) {
         let picked = mem;
         if (settings.vectorEnabled && WM.VectorStore && WM.VectorStore.lastQuery && WM.VectorStore.enabled) {
-          picked = WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
+          picked = await WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
         } else {
           picked = mem.slice(-Math.min(20, mem.length));
         }
@@ -1981,7 +2006,7 @@ ${p.summary || ""}`.trim() });
       const candidates = collectCandidates();
       if (settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore) {
         const q = WM.VectorStore.lastQuery || "";
-        const ranked = q ? WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
+        const ranked = q ? await WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
         const parts2 = [memBlock];
         if (settings.injectMemories !== false && ranked.length) {
           parts2.push("\u3010\u6E29\u8BB0\u53EC\u56DE\uFF08\u5411\u91CF\u63A5\u7BA1\uFF09\u3011\n" + ranked.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
@@ -2005,9 +2030,15 @@ ${p.summary || ""}`.trim() });
         return;
       }
       const readyEvent = getReadyEventName();
-      es.on(readyEvent, (event) => {
+      es.on(readyEvent, async (event) => {
         try {
-          const block = buildMemoryBlock();
+          const evtChat = event && event.detail && event.detail.chat;
+          if (Array.isArray(evtChat) && evtChat.length) {
+            const userMsgs = evtChat.filter((m) => m && m.role === "user");
+            const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : "";
+            if (lastUser && WM.VectorStore) WM.VectorStore.lastQuery = String(lastUser).slice(0, 2e3);
+          }
+          const block = await buildMemoryBlock();
           if (!block) return;
           const chat = event && event.detail && event.detail.chat;
           if (!Array.isArray(chat) || !chat.length) return;

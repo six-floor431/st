@@ -70,7 +70,7 @@
     return cands;
   }
 
-  function buildMemoryBlock() {
+  async function buildMemoryBlock() {
     const settings = WM.Settings.load();
     if (settings.injectMemories === false && settings.injectWorld === false) return '';
 
@@ -80,7 +80,8 @@
     if (settings.injectMemories !== false && mem.length) {
       let picked = mem;
       if (settings.vectorEnabled && WM.VectorStore && WM.VectorStore.lastQuery && WM.VectorStore.enabled) {
-        picked = WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
+        // 注意：search 是异步的，必须 await，否则 picked 会是 Promise 导致后续 .map 出错
+        picked = await WM.VectorStore.search(mem, WM.VectorStore.lastQuery, 12);
       } else {
         picked = mem.slice(-Math.min(20, mem.length));
       }
@@ -93,7 +94,7 @@
     // 情况 A：开启向量接管 → 用我们的 VectorStore 对候选召回 topK（替代酒馆原生向量检索）
     if (settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore) {
       const q = WM.VectorStore.lastQuery || '';
-      const ranked = q ? WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
+      const ranked = q ? await WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
       const parts = [memBlock];
       if (settings.injectMemories !== false && ranked.length) {
         parts.push('【温记召回（向量接管）】\n' + ranked.map((c) => '· [' + c.type + '] ' + c.text).join('\n'));
@@ -125,9 +126,17 @@
       return;
     }
     const readyEvent = getReadyEventName();
-    es.on(readyEvent, (event) => {
+    es.on(readyEvent, async (event) => {
       try {
-        const block = buildMemoryBlock();
+        // 从事件中提取「当前用户最新输入」作为向量检索/重排的查询文本。
+        // 这是真搜索的关键：必须把 query 写进 VectorStore.lastQuery，否则检索永远走回退分支。
+        const evtChat = event && event.detail && event.detail.chat;
+        if (Array.isArray(evtChat) && evtChat.length) {
+          const userMsgs = evtChat.filter((m) => m && m.role === 'user');
+          const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : '';
+          if (lastUser && WM.VectorStore) WM.VectorStore.lastQuery = String(lastUser).slice(0, 2000);
+        }
+        const block = await buildMemoryBlock();
         if (!block) return;
         const chat = event && event.detail && event.detail.chat;
         if (!Array.isArray(chat) || !chat.length) return;

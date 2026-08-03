@@ -98,8 +98,8 @@
       });
       return docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
     } catch (e) {
-      console.warn('[WarmMemo] rerank 失败，回退原序', e);
-      return docs.map(() => 0);
+      console.warn('[WarmMemo] rerank 失败，返回 null（由调用方保留原排序）', e);
+      return null;
     } finally {
       clearTimeout(timer);
     }
@@ -107,8 +107,11 @@
 
   async function testConnection(rawSettings) {
     try {
-      const scores = await rerank('test', ['a', 'b'], rawSettings, { topN: 2 });
-      return { success: Array.isArray(scores) };
+      // 测试时临时启用，确保真正去请求一次验证连通性
+      const s = Object.assign({}, rawSettings, { rerankEnabled: true });
+      const scores = await rerank('test', ['a', 'b'], s, { topN: 2 });
+      if (scores === null) return { success: false, error: 'rerank 返回 null（服务不可达或地址/字段错误）' };
+      return { success: Array.isArray(scores) && scores.length === 2 };
     } catch (e) {
       return { success: false, error: String(e.message || e) };
     }
