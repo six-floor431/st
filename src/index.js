@@ -4,11 +4,12 @@
 
 // 构建版本标记：每次发布时同步修改，用于确认酒馆加载的是否为最新版
 window.WarmMemo = window.WarmMemo || {};
-window.WarmMemo.version = 'graph-nan-fix';
+window.WarmMemo.version = 'direct-fetch-no-local + debug-panel';
 
 import './config/settings.js';
 import './config/storage.js';
 import './config/errlog.js';
+import './config/debug-log.js';
 import './config/memory-store.js';
 import './config/llm-client.js';
 import './config/vector-store.js';

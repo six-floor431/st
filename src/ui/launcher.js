@@ -69,6 +69,7 @@
         <button data-tab="plot">剧情线</button>
         <button data-tab="item">物品</button>
         <button data-tab="world">世界设定</button>
+        <button data-tab="dbg">调试</button>
         <button data-tab="cfg">设置</button>
       </div>
       <div class="wm-body"></div>`;
@@ -154,6 +155,7 @@
     if (tab === 'plot') return renderPlot(body);
     if (tab === 'item') return renderItem(body);
     if (tab === 'world') return renderWorld(body);
+    if (tab === 'dbg') return renderDebug(body);
     if (tab === 'cfg') return renderCfg(body);
   }
 
@@ -773,7 +775,7 @@
 
   // 统一的 LLM 调用配置（所有功能共用这一个）
   function renderPaneLlm(s) {
-    const c = s.llmConfig || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
+    const c = s.llmConfig || { source: 'local', apiUrl: '', apiKey: '', model: '' };
     const pp = s.presetPrefix || { mode: 'none', importText: '', presetName: '' };
     const prompts = s.prompts || {};
     // 读取酒馆已保存预设名（修复：getPresetNames 是酒馆注入的顶层全局函数）
@@ -799,13 +801,12 @@
       </div>`;
     return `
       <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
-        <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。<b>留空</b>即用酒馆当前对话源；<b>填了 Base URL</b> 则直接调用该地址（自适应 OpenAI / DeepSeek / 火山引擎 等任意兼容服务，无需选厂家）。配完可点「测试连接」验证可用性。</div>
+        <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。<b>必须填写 Base URL</b>（直接调用该地址，自适应 OpenAI / DeepSeek / 火山引擎 等任意 OpenAI 兼容服务，无需选厂家）。配完可点「测试连接」验证可用性。</div>
         <div id="llm-custom" style="margin-top:6px">
           <label class="wm-row">Base URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1、https://ark.cn-beijing.volces.com/api/v3、https://api.deepseek.com/v1"/></label>
           <div class="wm-hint">直接填任意厂家的 Base URL 即可，自动按 OpenAI 兼容协议请求（火山引擎填 <code>https://ark.cn-beijing.volces.com/api/v3</code>，DeepSeek 填 <code>https://api.deepseek.com/v1</code>）。</div>
-          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-...（本地酒馆源可留空）"/></label>
+          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
-          <label class="wm-row">代理预设名(可选)<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="留空则用上方 URL（酒馆代理预设名）"/></label>
           <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能（总结/关系/剧情/世界观）共用，模型会在该范围内完整输出</span></label>
         </div>
         <div class="wm-divider"></div>
@@ -833,6 +834,96 @@
         <div class="wm-hint">下面四套提示词负责「总结 / 关系 / 剧情 / 世界观」的具体写法，<b>直接改即可生效</b>。可保留 <code>{{recent}}</code> 等占位符，运行时会自动替换成真实数据。</div>
         ${promptHtml}
       </div>`;
+  }
+
+  // ── 调试面板：分别查看 LLM / Embedding / Rerank 的「请求 message」与「AI 输出结果」 ──
+  function renderDebug(body) {
+    body.innerHTML = `
+      <div class="wm-card">
+        <div class="wm-h">调用调试（请求 / 结果）</div>
+        <div class="wm-hint">分别记录 LLM、向量(Embedding)、重排序(Rerank) 三类调用的<b>请求内容</b>与<b>AI 返回结果</b>，互不混合。每次实际调用自动记录，最多保留 ${WM.DebugLog ? WM.DebugLog.MAX : 30} 条。</div>
+        <div class="wm-debug-toolbar">
+          <button class="wm-btn" data-dbg="llm">LLM</button>
+          <button class="wm-btn" data-dbg="embedding">向量</button>
+          <button class="wm-btn" data-dbg="rerank">重排序</button>
+          <button class="wm-btn wm-btn-ghost" id="dbg-clear">清空全部</button>
+          <button class="wm-btn wm-btn-ghost" id="dbg-refresh">刷新</button>
+        </div>
+        <div id="dbg-llm" class="wm-debug-sec"></div>
+        <div id="dbg-embedding" class="wm-debug-sec"></div>
+        <div id="dbg-rerank" class="wm-debug-sec"></div>
+      </div>`;
+
+    const secs = {
+      llm: body.querySelector('#dbg-llm'),
+      embedding: body.querySelector('#dbg-embedding'),
+      rerank: body.querySelector('#dbg-rerank'),
+    };
+    const titles = { llm: 'LLM 调用', embedding: '向量 Embedding', rerank: '重排序 Rerank' };
+
+    function fmt(v) {
+      if (v === undefined) return '—';
+      if (typeof v === 'string') return v;
+      try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); }
+    }
+    function renderSec(kind) {
+      const el = secs[kind];
+      const logs = WM.DebugLog ? WM.DebugLog.get(kind) : [];
+      if (!logs.length) { el.innerHTML = `<div class="wm-debug-title">${titles[kind]}</div><div class="wm-empty">暂无记录，先去触发一次调用（如点测试连接 / 总结）</div>`; return; }
+      // 倒序：最新在上
+      const html = logs.slice().reverse().map((e) => {
+        const t = new Date(e.ts).toLocaleTimeString();
+        const dirLabel = e.dir === 'request' ? '请求' : (e.dir === 'response' ? '结果' : '错误');
+        const dirCls = e.dir === 'request' ? 'req' : (e.dir === 'response' ? 'res' : 'err');
+        let bodyHtml = '';
+        if (e.dir === 'request') {
+          const d = e.data || {};
+          if (kind === 'llm') {
+            bodyHtml = 'URL: ' + (d.url || '') + '\n模型: ' + (d.model || '') + '\n\n【Messages】\n' +
+              (d.messages || []).map((m) => '[' + m.role + ']\n' + m.content).join('\n\n');
+          } else if (kind === 'embedding') {
+            bodyHtml = 'URL: ' + (d.url || '') + '\n方法: ' + (d.method || 'POST') + '\n模型: ' + (d.model || '') + '\n\n【请求体预览】\n' + (d.bodyPreview || '');
+          } else {
+            bodyHtml = 'URL: ' + (d.url || '') + '\n方法: ' + (d.method || 'POST') + '\n模型: ' + (d.model || '') + '\nQuery: ' + (d.query || '') + '\n\n【Documents】\n' + (Array.isArray(d.documents) ? d.documents.join('\n') : '');
+          }
+        } else if (e.dir === 'response') {
+          const d = e.data || {};
+          if (kind === 'llm') {
+            bodyHtml = '模型: ' + (d.model || '') + '\nfinish_reason: ' + (d.finish_reason || '') + '\nusage: ' + fmt(d.usage) + '\n\n【AI 输出】\n' + (d.output || '');
+          } else if (kind === 'embedding') {
+            bodyHtml = 'HTTP ' + (d.httpStatus || '') + '\n维度: ' + (d.dimension || '') + '\n\n【响应预览】\n' + (d.responsePreview || '');
+          } else {
+            bodyHtml = 'HTTP ' + (d.httpStatus || '') + '\n\n【Scores】\n' + fmt(d.scores) + '\n\n【响应预览】\n' + (d.responsePreview || '');
+          }
+        } else {
+          const d = e.data || {};
+          bodyHtml = '错误: ' + (d.error || '') + (d.httpStatus ? ('\nHTTP ' + d.httpStatus) : '') + (d.response || d.responsePreview ? ('\n\n' + (d.response || d.responsePreview)) : '');
+        }
+        return `<div class="wm-debug-item ${dirCls}">
+          <div class="wm-debug-meta"><span class="wm-debug-dir">${dirLabel}</span><span class="wm-debug-time">${t}</span></div>
+          <pre class="wm-debug-body">${escapeHtml(bodyHtml)}</pre>
+        </div>`;
+      }).join('');
+      el.innerHTML = `<div class="wm-debug-title">${titles[kind]}（${logs.length}）</div>` + html;
+    }
+    function renderAll() { renderSec('llm'); renderSec('embedding'); renderSec('rerank'); }
+
+    body.querySelectorAll('[data-dbg]').forEach((b) => {
+      b.onclick = () => {
+        body.querySelectorAll('[data-dbg]').forEach((x) => x.classList.remove('active'));
+        b.classList.add('active');
+        // 只展开所选类别
+        Object.keys(secs).forEach((k) => { secs[k].style.display = (k === b.dataset.dbg) ? '' : 'none'; });
+        renderSec(b.dataset.dbg);
+      };
+    });
+    body.querySelector('#dbg-clear').onclick = () => { if (WM.DebugLog) WM.DebugLog.clear(); renderAll(); };
+    body.querySelector('#dbg-refresh').onclick = renderAll;
+
+    // 默认展开 LLM
+    body.querySelector('[data-dbg="llm"]').classList.add('active');
+    Object.keys(secs).forEach((k) => { secs[k].style.display = (k === 'llm') ? '' : 'none'; });
+    renderAll();
   }
 
   function renderCfg(body) {
@@ -903,11 +994,10 @@
     const q = (sel) => body.querySelector(sel);
     if (!scope || scope === 'llm') {
       if (q('#llm-url') !== null) {
-        // 留空 apiUrl 视为使用酒馆当前源（source=local），否则用自定义 BaseURL
+        // 直接调用用户填写的 Base URL（OpenAI 兼容协议），不再使用酒馆本地源
         const apiUrl = q('#llm-url').value.trim();
         s.llmConfig = {
           source: apiUrl ? 'custom' : 'local',
-          proxyPreset: q('#llm-preset') ? q('#llm-preset').value.trim() : '',
           apiUrl,
           apiKey: q('#llm-key') ? q('#llm-key').value.trim() : '',
           model: q('#llm-model') ? q('#llm-model').value.trim() : '',
@@ -1022,10 +1112,10 @@
         rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
       };
       const testLlm = async () => {
-        const tmpLlm = tmp.llmConfig || { source: 'local' };
+        const tmpLlm = tmp.llmConfig || {};
         try {
           const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
-          add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
+          add('LLM(' + (tmpLlm.apiUrl ? '自定义 BaseURL' : '未配置') + ')', r, '');
         } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
       };
       const testWorld = async () => {

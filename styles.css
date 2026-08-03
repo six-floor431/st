@@ -817,3 +817,20 @@
 }
 /* label 内的文字不换行挤压勾选框 */
 .wm-row label { flex: 0 1 auto; min-width: 0; }
+
+/* ── 调试面板 ── */
+.wm-debug-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.wm-debug-toolbar .wm-btn { padding: 4px 12px; font-size: 12px; }
+.wm-debug-toolbar .wm-btn.active { background: var(--wm-seal); color: #fff; border-color: var(--wm-seal); }
+.wm-debug-sec { margin-top: 6px; }
+.wm-debug-title { font-family: var(--wm-font-ui); font-weight: 600; font-size: 13px; color: var(--wm-ink); margin: 10px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--wm-line); }
+.wm-debug-item { border: 1px solid var(--wm-line); border-radius: 6px; margin-bottom: 8px; overflow: hidden; background: var(--wm-paper); }
+.wm-debug-item.req { border-left: 3px solid var(--wm-jade); }
+.wm-debug-item.res { border-left: 3px solid var(--wm-seal-soft); }
+.wm-debug-item.err { border-left: 3px solid #c0392b; }
+.wm-debug-meta { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background: var(--wm-paper-2); font-family: var(--wm-font-ui); font-size: 11px; color: var(--wm-ink-soft); }
+.wm-debug-dir { font-weight: 700; }
+.wm-debug-item.req .wm-debug-dir { color: var(--wm-jade); }
+.wm-debug-item.res .wm-debug-dir { color: var(--wm-seal-soft); }
+.wm-debug-item.err .wm-debug-dir { color: #c0392b; }
+.wm-debug-body { margin: 0; padding: 8px 10px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 11.5px; line-height: 1.5; color: var(--wm-ink); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }

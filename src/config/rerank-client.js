@@ -65,6 +65,18 @@
           return_documents: false,
         });
       }
+      // —— 调试记录：请求 message ——
+      if (WM.DebugLog) {
+        WM.DebugLog.logRequest('rerank', {
+          url: finalUrl,
+          method: useGet ? 'GET' : 'POST',
+          model,
+          query,
+          documents: docs,
+          top_n: docs.length,
+          bodyPreview: body ? body.slice(0, 400) : '(GET, 参数在 query)',
+        });
+      }
       let r;
       try {
         r = await fetch(finalUrl, {
@@ -76,22 +88,30 @@
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-        throw new Error(
-          (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
-          ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。'
-        );
+        const hint = (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
+          ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。';
+        if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, error: hint });
+        throw new Error(hint);
       }
       const rawText = await r.text();
-      if (!r.ok) throw new Error('rerank 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+      if (!r.ok) {
+        if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
+        throw new Error('rerank 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+      }
       let j;
       try { j = JSON.parse(rawText); }
-      catch (e) { throw new Error('rerank 返回非 JSON（HTTP ' + r.status + '）：' + rawText.slice(0, 200)); }
+      catch (e) {
+        if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, error: '返回非 JSON', response: rawText.slice(0, 400) });
+        throw new Error('rerank 返回非 JSON（HTTP ' + r.status + '）：' + rawText.slice(0, 200));
+      }
       // 返回与 documents 同序的 score 数组
       const scoreMap = {};
       (j.results || []).forEach((it) => {
         scoreMap[it.index] = it.relevance_score;
       });
-      return docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
+      const scores = docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
+      if (WM.DebugLog) WM.DebugLog.logResponse('rerank', { url: finalUrl, httpStatus: r.status, scores, responsePreview: rawText.slice(0, 400) });
+      return scores;
     } catch (e) {
       console.warn('[WarmMemo] rerank 失败，返回 null（由调用方保留原排序）', e);
       return null;

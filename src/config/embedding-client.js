@@ -108,9 +108,10 @@
     } else {
       body = JSON.stringify({ model, input });
     }
-    // 诊断追踪：把本次实际请求原样记录，供 F12 Console 与测试详情查看
-    const reqTrace = { url: finalUrl, method: useGet ? 'GET' : 'POST', model, bodyPreview: body ? body.slice(0, 200) : '(无body)' };
+    // 诊断追踪：把本次实际请求原样记录，供 F12 Console 与调试面板查看
+    const reqTrace = { url: finalUrl, method: useGet ? 'GET' : 'POST', model, bodyPreview: body ? body.slice(0, 400) : '(无body)' };
     WM._lastEmbedReq = reqTrace;
+    if (WM.DebugLog) WM.DebugLog.logRequest('embedding', reqTrace);
     try { console.log('[WarmMemo] Embedding 实际请求：', reqTrace); } catch (e) {}
     let r;
     try {
@@ -127,16 +128,19 @@
       const hint = isCors
         ? '这是浏览器层面的跨域/CORS 拦截（不是后端问题）。请确认：①地址是同源代理（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434；②反代已返回 access-control-allow-origin 头。'
         : ('网络请求失败：' + msg + '。');
+      if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, error: hint });
       throw new Error('[Embedding 请求失败] 实际请求地址：' + finalUrl + '｜' + hint);
     }
     const rawText = await r.text();
     if (!r.ok) {
+      if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
       throw new Error('[Embedding HTTP ' + r.status + '] 请求地址：' + finalUrl + '｜响应：' + rawText.slice(0, 200));
     }
     let j;
     try { j = JSON.parse(rawText); }
     catch (e) { throw new Error('embedding 返回非 JSON（HTTP ' + r.status + '）：' + rawText.slice(0, 200)); }
     if (!j.data) throw new Error('embedding 返回异常（缺少 data 字段）：' + rawText.slice(0, 200));
+    if (WM.DebugLog) WM.DebugLog.logResponse('embedding', { url: finalUrl, httpStatus: r.status, dimension: Array.isArray(j.data) && j.data[0] && j.data[0].embedding ? j.data[0].embedding.length : 0, responsePreview: rawText.slice(0, 400) });
     const vecs = j.data.map((d) => d.embedding);
     return Array.isArray(texts) ? vecs : vecs[0];
   }

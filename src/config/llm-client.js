@@ -1,102 +1,34 @@
-// LLM 调用封装：只调用酒馆的 LLM 本体，不携带酒馆预设/角色卡/聊天历史。
-// 使用 generateRaw + ordered_prompts（完全自定义提示词），
-// 通过 custom_api 区分来源（local=当前源 / custom=代理预设或自定义URL）。
-// 参考 lolocard-master 的 generateRaw 用法。
+// LLM 调用封装：直接按用户填写的 Base URL 走 OpenAI 兼容 /chat/completions 协议，
+// 不再依赖酒馆的 generateRaw / generate（彻底删掉"本地酒馆源"调用路径）。
+// 只发送我们自己的自定义提示词（system + user），不携带酒馆预设/角色卡/聊天历史。
+// 每次调用都通过 WM.DebugLog 分别记录「请求 message」与「AI 输出结果」。
 (function () {
+  'use strict';
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
-  // 取酒馆官方 generate / generateRaw 入口。
-  // 取 LLM 生成入口。
-  // 优先 generateRaw：它【不携带酒馆预设】，只按我们给的 ordered_prompts 发自定义提示词
-  // （参考 @types：generate 携带酒馆预设，generateRaw 不携带）。这正是"只传自己的提示词、
-  // 不掺酒馆角色卡/预设"的需求。回退到 generate（会带预设，但至少能用）。
-  function getRaw() {
-    if (typeof window.generateRaw === 'function') return window.generateRaw;
-    try {
-      const ST = window.SillyTavern;
-      if (ST && typeof ST.getContext === 'function') {
-        const ctx = ST.getContext();
-        if (ctx && typeof ctx.generateRaw === 'function') return ctx.generateRaw;
-      }
-      if (ST && typeof ST.generateRaw === 'function') return ST.generateRaw;
-    } catch (e) { /* ignore */ }
-    if (typeof window.generate === 'function') return window.generate;
-    return null;
+  function normalizeBaseUrl(u) {
+    if (!u) return '';
+    return String(u).replace('0.0.0.0', '127.0.0.1').replace(/\/+$/, '');
   }
 
-  // 由 profile 组装酒馆 custom_api 配置。
-  // 需求1：直接填 Base URL 自适应任意厂家（OpenAI/DeepSeek/火山引擎等），
-  // 不再有「厂家下拉」，只传 apiurl+key+model，source 统一用 openai（ST 按 OpenAI 兼容协议请求）。
-  function buildCustomApi(p) {
-    if (!p) return undefined;
-    const api = {};
-    if (p.proxyPreset) api.proxy_preset = p.proxyPreset.trim();
-    if (p.apiUrl) api.apiurl = p.apiUrl.trim();
-    if (p.apiKey) api.key = p.apiKey.trim();
-    if (p.model) api.model = p.model.trim();
-    if (api.apiurl || api.apikey || api.model || api.proxy_preset) api.source = 'openai';
-    return (api.proxy_preset || api.apiurl || api.model) ? api : undefined;
+  // 由 profile 解析出完整的 chat completions 地址。
+  // 用户直接填 Base URL（自适应 OpenAI / DeepSeek / 火山引擎等 OpenAI 兼容服务）。
+  // 常见形态：
+  //   https://api.openai.com/v1                       -> .../v1/chat/completions
+  //   https://ark.cn-beijing.volces.com/api/v3        -> .../api/v3/chat/completions
+  //   https://api.deepseek.com/v1                     -> .../v1/chat/completions
+  //   https://x.example.com/v1/chat/completions       -> 原样
+  function resolveUrl(p) {
+    const base = normalizeBaseUrl(p && p.apiUrl) || '';
+    if (!base) return '';
+    if (/chat\/completions$/i.test(base)) return base; // 已完整
+    if (/\/v1\/chat$/i.test(base)) return base + '/completions';
+    if (/\/v1\/?$/i.test(base)) return base + '/chat/completions'; // 标准 /v1
+    // 其余（如火山 /api/v3、或裸 host）统一补齐 /chat/completions
+    return base + '/chat/completions';
   }
 
-  // 酒馆注入的顶层全局函数 getPresetNames() / getPreset(name)
-  // 参考 @types/function/preset.d.ts：它们是 `declare function`（直接挂在 window 上），
-  // 不在 SillyTavern.getContext() 返回的 context 上。所以必须从 window 直接取。
-  function getPresetNamesFn() {
-    if (typeof window.getPresetNames === 'function') return window.getPresetNames;
-    if (window.tavern_events && typeof window.tavern_events.getPresetNames === 'function') return window.tavern_events.getPresetNames;
-    return null;
-  }
-  function getPresetFn() {
-    if (typeof window.getPreset === 'function') return window.getPreset;
-    if (window.tavern_events && typeof window.tavern_events.getPreset === 'function') return window.tavern_events.getPreset;
-    return null;
-  }
-  // 暴露给 UI 取预设名列表
-  function listPresetNames() {
-    const f = getPresetNamesFn();
-    if (typeof f !== 'function') return [];
-    try { return f() || []; } catch (e) { return []; }
-  }
-
-  // preset prompt 的 role 是数字（0=system 1=user 2=assistant 3=neutral 4=system_example）
-  // 转成 generateRaw 需要的字符串
-  function mapRole(r) {
-    if (r === 1) return 'user';
-    if (r === 2) return 'assistant';
-    return 'system'; // 0/3/4 或未知都当 system
-  }
-
-  // 取酒馆已保存预设中「启用且非空」的提示词（作为「预设前置」用）
-  function getPresetPromptItems(name) {
-    if (!name) return [];
-    const getPreset = getPresetFn();
-    if (typeof getPreset !== 'function') return [];
-    let preset;
-    try { preset = getPreset(name); } catch (e) { return []; }
-    const prompts = (preset && preset.prompts) || [];
-    return prompts
-      .filter((p) => p && p.enabled !== false && p.content && String(p.content).trim().length > 0)
-      .map((p) => ({ role: mapRole(p.role), content: String(p.content) }));
-  }
-
-  // 解析「预设前置」：返回拼在用户提示词之前的前缀 prompt 列表
-  // settings.presetPrefix: { mode:'none'|'import'|'preset', importText, presetName }
-  function resolvePrefix(settings) {
-    const pp = (settings && settings.presetPrefix) || null;
-    if (!pp || pp.mode === 'none') return [];
-    if (pp.mode === 'import') {
-      const t = (pp.importText || '').trim();
-      return t ? [{ role: 'system', content: t }] : [];
-    }
-    if (pp.mode === 'preset') {
-      return getPresetPromptItems(pp.presetName);
-    }
-    return [];
-  }
-
-  // 核心：调用酒馆 generateRaw（不携带酒馆预设，只发我们自己的自定义提示词）。
-  // ordered_prompts 里只放：我们自己的 system 提示词 + 必须的 'user_input' 占位符。
-  // 不列 char_description / chat_history 等内置占位符 → 酒馆角色卡/预设不会进入请求。
+  // 核心：直接 fetch 用户配置的 OpenAI 兼容接口。
   // 支持两种签名（向后兼容）：
   //   新：complete(messages, opts)  —— messages: [{role:'system'|'user', content}]
   //   旧：complete(systemText, userText, settings, opts)
@@ -112,70 +44,87 @@
       opts = b || {};
     }
     opts = opts || {};
-    const profile = opts.profile || { source: 'local' };
-    const gr = getRaw();
-    if (!gr) {
-      throw new Error('酒馆 generateRaw 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
+    const profile = opts.profile || {};
+    const url = resolveUrl(profile);
+    if (!url) {
+      throw new Error('未配置 LLM Base URL（请在设置中填写 apiUrl，如 https://api.openai.com/v1）');
     }
-    // 拆出 user_input（最后一条 user 内容）和我们自己的 system 提示词
-    const userMsg = (messages || []).filter((m) => m.role === 'user').pop();
-    const user_input = (userMsg && userMsg.content) || (opts.fallbackUserInput || '');
-    const systemPrompts = (messages || [])
-      .filter((m) => m.role !== 'user' || m !== userMsg)
-      .map((m) => String(m.content || ''))
-      .filter(Boolean);
-
-    // 关键：ordered_prompts 只放我们自己的提示词 + 必须的 'user_input' 占位符。
-    // 不列 char_description/chat_history 等 → 酒馆预设/角色卡不进入请求，只发我们自己的。
-    const ordered_prompts = [];
-    systemPrompts.forEach((content) => ordered_prompts.push({ role: 'system', content }));
-    ordered_prompts.push('user_input'); // 显式放 user_input 占位符，否则用户内容不进请求
-
-    // 输出 token 上限：优先本次 opts.maxTokens，否则统一配置 profile.maxTokens，再兜底 512
-    const maxTokens = opts.maxTokens || profile.maxTokens || 512;
+    const maxTokens = opts.maxTokens || profile.maxTokens || 700;
     const temperature = opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3);
 
-    // custom_api：直接填 BaseURL 时让酒馆用该源；未填则用酒馆当前对话源，仅覆盖 max_tokens
-    const custom_api = Object.assign(
-      {},
-      buildCustomApi(profile) || {},
-      { max_tokens: maxTokens, temperature: temperature }
-    );
-    // 未填任何 BaseURL/模型/预设时，移除 source，让酒馆严格用当前对话源
-    if (!custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
-      delete custom_api.source;
+    // 组装 OpenAI 兼容请求体（只含我们自己的提示词）
+    const body = {
+      model: profile.model || '',
+      messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : (m.role === 'user' ? 'user' : 'system'), content: String(m.content || '') })),
+      max_tokens: maxTokens,
+      temperature: temperature,
+      stream: false,
+    };
+    const headers = { 'Content-Type': 'application/json' };
+    if (profile.apiKey) headers['Authorization'] = 'Bearer ' + profile.apiKey;
+
+    // —— 调试记录：请求 message ——
+    if (WM.DebugLog) {
+      WM.DebugLog.logRequest('llm', {
+        url,
+        model: body.model,
+        messages: body.messages,
+        max_tokens: maxTokens,
+        temperature: temperature,
+      });
     }
 
-    const config = {
-      user_input,
-      ordered_prompts,
-      should_stream: false,
-      should_silence: opts.should_silence != null ? opts.should_silence : true,
-      // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
-      max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
-      custom_api,
-    };
-    const out = await gr(config);
-    const text = typeof out === 'string' ? out : (out && out.content) ? out.content : (out && out.reply) ? out.reply : String(out || '');
-    // 清理：去首尾空白、去常见代码围栏，保证返回内容准确干净
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    } catch (netErr) {
+      const msg = String(netErr && netErr.message ? netErr.message : netErr);
+      if (WM.DebugLog) WM.DebugLog.logError('llm', { url, error: msg });
+      throw new Error('[LLM 请求失败] 地址：' + url + '｜' + msg);
+    }
+    const rawText = await res.text();
+    if (!res.ok) {
+      if (WM.DebugLog) WM.DebugLog.logError('llm', { url, httpStatus: res.status, response: rawText.slice(0, 500) });
+      throw new Error('[LLM HTTP ' + res.status + '] 地址：' + url + '｜响应：' + rawText.slice(0, 500));
+    }
+    let j;
+    try { j = JSON.parse(rawText); }
+    catch (e) { if (WM.DebugLog) WM.DebugLog.logError('llm', { url, error: '返回非 JSON', response: rawText.slice(0, 500) }); throw new Error('[LLM 返回非 JSON] ' + rawText.slice(0, 500)); }
+
+    // 提取输出文本
+    let text = '';
+    if (j && j.choices && j.choices[0]) {
+      text = (j.choices[0].message && j.choices[0].message.content) || j.choices[0].text || '';
+    } else if (typeof j === 'string') {
+      text = j;
+    }
+
+    // —— 调试记录：AI 输出结果 ——
+    if (WM.DebugLog) {
+      WM.DebugLog.logResponse('llm', {
+        url,
+        model: (j && j.model) || body.model,
+        output: String(text || ''),
+        usage: j && j.usage,
+        finish_reason: j && j.choices && j.choices[0] && j.choices[0].finish_reason,
+      });
+    }
     return text ? String(text).trim() : '';
   }
 
-  // 测试连接：完全隔离的一次极简请求，不带入任何聊天历史/角色卡，避免"回答了其他问题"还拖很久
+  // 测试连接：一次极简请求，验证连通性。
   async function testConnection(opts) {
     opts = opts || {};
-    const profile = opts.profile || { source: 'local' };
-    // 超时保护：测试最多等 20s，避免卡死浪费时间
+    const profile = opts.profile || {};
     const timeoutMs = 20000;
     const guard = new Promise((_, reject) => setTimeout(() => reject(new Error('测试超时（' + (timeoutMs / 1000) + 's 无响应）')), timeoutMs));
+    const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
     try {
-      const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
-      console.log('[WarmMemo] ===== 测试连接(LLM) 发起，版本 v' + ver + ' =====');
       const out = await Promise.race([
         complete(
-          [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题，不要使用聊天历史。' },
-           { role: 'user', content: '[WarmMemo测试连接]这是测试连接的，请发「成功」两个字，知不知道？只回复「成功」，不要回复其它任何内容。' }],
-          { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
+          [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题。' },
+           { role: 'user', content: '[WarmMemo测试连接]请只回复「成功」两个字，不要回复其它任何内容。' }],
+          { profile, maxTokens: 8, temperature: 0 }
         ),
         guard,
       ]);
@@ -188,5 +137,5 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, buildCustomApi, getRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
+  WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl };
 })();

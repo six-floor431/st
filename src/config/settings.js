@@ -40,14 +40,12 @@
     ],
     worldToLorebook: true,        // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
     // 统一的 LLM 调用配置（所有功能共用这一个）：
-    //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
-    //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
-    //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
-    //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
-    // 该配置在设置面板可一键「测试连接」验证 API 可用。
+    //   直接按填写的 Base URL 走 OpenAI 兼容 /chat/completions 协议请求，
+    //   不再依赖酒馆的 generateRaw / generate（已彻底移除"本地酒馆源"调用路径）。
+    //   只发送我们自己的自定义提示词（system + user），不携带酒馆预设/角色卡/聊天历史。
+    //   该配置在设置面板可一键「测试连接」验证 API 可用。
     llmConfig: {
       source: 'local',
-      proxyPreset: '',
       apiUrl: '',
       apiKey: '',
       model: '',
@@ -88,7 +86,7 @@
       const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
       // 迁移：旧的 5 份独立 llmProfiles 或旧的 summary* 默认配置 → 单一 llmConfig
       if (!s.llmConfig) {
-        s.llmConfig = { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
+        s.llmConfig = { source: 'local', apiUrl: '', apiKey: '', model: '' };
         const profiles = s.llmProfiles;
         if (profiles && profiles.summary) {
           // 取 summary 那份作为统一配置
@@ -97,7 +95,6 @@
           // 旧默认自定义配置迁移
           s.llmConfig = {
             source: (s.summaryBaseUrl || s.summaryApiKey) ? 'custom' : 'local',
-            proxyPreset: '',
             apiUrl: s.summaryBaseUrl || '',
             apiKey: s.summaryApiKey || '',
             model: s.summaryModel || '',

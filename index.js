@@ -50,14 +50,12 @@
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
       // 统一的 LLM 调用配置（所有功能共用这一个）：
-      //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
-      //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
-      //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
-      //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
-      // 该配置在设置面板可一键「测试连接」验证 API 可用。
+      //   直接按填写的 Base URL 走 OpenAI 兼容 /chat/completions 协议请求，
+      //   不再依赖酒馆的 generateRaw / generate（已彻底移除"本地酒馆源"调用路径）。
+      //   只发送我们自己的自定义提示词（system + user），不携带酒馆预设/角色卡/聊天历史。
+      //   该配置在设置面板可一键「测试连接」验证 API 可用。
       llmConfig: {
         source: "local",
-        proxyPreset: "",
         apiUrl: "",
         apiKey: "",
         model: "",
@@ -100,14 +98,13 @@
         if (!raw) return Object.assign({}, DEFAULTS);
         const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
         if (!s.llmConfig) {
-          s.llmConfig = { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
+          s.llmConfig = { source: "local", apiUrl: "", apiKey: "", model: "" };
           const profiles = s.llmProfiles;
           if (profiles && profiles.summary) {
             s.llmConfig = Object.assign(s.llmConfig, profiles.summary);
           } else if (s.summaryBaseUrl || s.summaryApiKey || s.summaryModel) {
             s.llmConfig = {
               source: s.summaryBaseUrl || s.summaryApiKey ? "custom" : "local",
-              proxyPreset: "",
               apiUrl: s.summaryBaseUrl || "",
               apiKey: s.summaryApiKey || "",
               model: s.summaryModel || ""
@@ -265,6 +262,44 @@ ${it.message}`;
       }).join("\n\n" + "-".repeat(40) + "\n\n");
     }
     WM.ErrLog = { add, get, clear, last, exportJSON, toText };
+  })();
+
+  // src/config/debug-log.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    const MAX = 30;
+    const store = {
+      llm: [],
+      embedding: [],
+      rerank: []
+    };
+    function push(kind, entry) {
+      const arr = store[kind] || (store[kind] = []);
+      arr.push(Object.assign({ ts: Date.now() }, entry));
+      while (arr.length > MAX) arr.shift();
+    }
+    function logRequest(kind, data) {
+      push(kind, { dir: "request", data });
+    }
+    function logResponse(kind, data) {
+      push(kind, { dir: "response", data });
+    }
+    function logError(kind, data) {
+      push(kind, { dir: "error", data });
+    }
+    function get(kind) {
+      return (store[kind] || []).slice();
+    }
+    function clear(kind) {
+      if (kind) store[kind] = [];
+      else {
+        store.llm = [];
+        store.embedding = [];
+        store.rerank = [];
+      }
+    }
+    WM.DebugLog = { logRequest, logResponse, logError, get, clear, MAX };
   })();
 
   // src/config/memory-store.js
@@ -682,79 +717,19 @@ ${it.message}`;
 
   // src/config/llm-client.js
   (function() {
+    "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
-    function getRaw() {
-      if (typeof window.generateRaw === "function") return window.generateRaw;
-      try {
-        const ST = window.SillyTavern;
-        if (ST && typeof ST.getContext === "function") {
-          const ctx = ST.getContext();
-          if (ctx && typeof ctx.generateRaw === "function") return ctx.generateRaw;
-        }
-        if (ST && typeof ST.generateRaw === "function") return ST.generateRaw;
-      } catch (e) {
-      }
-      if (typeof window.generate === "function") return window.generate;
-      return null;
+    function normalizeBaseUrl(u) {
+      if (!u) return "";
+      return String(u).replace("0.0.0.0", "127.0.0.1").replace(/\/+$/, "");
     }
-    function buildCustomApi(p) {
-      if (!p) return void 0;
-      const api = {};
-      if (p.proxyPreset) api.proxy_preset = p.proxyPreset.trim();
-      if (p.apiUrl) api.apiurl = p.apiUrl.trim();
-      if (p.apiKey) api.key = p.apiKey.trim();
-      if (p.model) api.model = p.model.trim();
-      if (api.apiurl || api.apikey || api.model || api.proxy_preset) api.source = "openai";
-      return api.proxy_preset || api.apiurl || api.model ? api : void 0;
-    }
-    function getPresetNamesFn() {
-      if (typeof window.getPresetNames === "function") return window.getPresetNames;
-      if (window.tavern_events && typeof window.tavern_events.getPresetNames === "function") return window.tavern_events.getPresetNames;
-      return null;
-    }
-    function getPresetFn() {
-      if (typeof window.getPreset === "function") return window.getPreset;
-      if (window.tavern_events && typeof window.tavern_events.getPreset === "function") return window.tavern_events.getPreset;
-      return null;
-    }
-    function listPresetNames() {
-      const f = getPresetNamesFn();
-      if (typeof f !== "function") return [];
-      try {
-        return f() || [];
-      } catch (e) {
-        return [];
-      }
-    }
-    function mapRole(r) {
-      if (r === 1) return "user";
-      if (r === 2) return "assistant";
-      return "system";
-    }
-    function getPresetPromptItems(name) {
-      if (!name) return [];
-      const getPreset = getPresetFn();
-      if (typeof getPreset !== "function") return [];
-      let preset;
-      try {
-        preset = getPreset(name);
-      } catch (e) {
-        return [];
-      }
-      const prompts = preset && preset.prompts || [];
-      return prompts.filter((p) => p && p.enabled !== false && p.content && String(p.content).trim().length > 0).map((p) => ({ role: mapRole(p.role), content: String(p.content) }));
-    }
-    function resolvePrefix(settings) {
-      const pp = settings && settings.presetPrefix || null;
-      if (!pp || pp.mode === "none") return [];
-      if (pp.mode === "import") {
-        const t = (pp.importText || "").trim();
-        return t ? [{ role: "system", content: t }] : [];
-      }
-      if (pp.mode === "preset") {
-        return getPresetPromptItems(pp.presetName);
-      }
-      return [];
+    function resolveUrl(p) {
+      const base = normalizeBaseUrl(p && p.apiUrl) || "";
+      if (!base) return "";
+      if (/chat\/completions$/i.test(base)) return base;
+      if (/\/v1\/chat$/i.test(base)) return base + "/completions";
+      if (/\/v1\/?$/i.test(base)) return base + "/chat/completions";
+      return base + "/chat/completions";
     }
     async function complete(a, b, c, d) {
       let messages, opts;
@@ -766,55 +741,82 @@ ${it.message}`;
         opts = b || {};
       }
       opts = opts || {};
-      const profile = opts.profile || { source: "local" };
-      const gr = getRaw();
-      if (!gr) {
-        throw new Error("\u9152\u9986 generateRaw \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
+      const profile = opts.profile || {};
+      const url = resolveUrl(profile);
+      if (!url) {
+        throw new Error("\u672A\u914D\u7F6E LLM Base URL\uFF08\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 apiUrl\uFF0C\u5982 https://api.openai.com/v1\uFF09");
       }
-      const userMsg = (messages || []).filter((m) => m.role === "user").pop();
-      const user_input = userMsg && userMsg.content || (opts.fallbackUserInput || "");
-      const systemPrompts = (messages || []).filter((m) => m.role !== "user" || m !== userMsg).map((m) => String(m.content || "")).filter(Boolean);
-      const ordered_prompts = [];
-      systemPrompts.forEach((content) => ordered_prompts.push({ role: "system", content }));
-      ordered_prompts.push("user_input");
-      const maxTokens = opts.maxTokens || profile.maxTokens || 512;
+      const maxTokens = opts.maxTokens || profile.maxTokens || 700;
       const temperature = opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3;
-      const custom_api = Object.assign(
-        {},
-        buildCustomApi(profile) || {},
-        { max_tokens: maxTokens, temperature }
-      );
-      if (!custom_api.proxy_preset && !custom_api.apiurl && !custom_api.model) {
-        delete custom_api.source;
-      }
-      const config = {
-        user_input,
-        ordered_prompts,
-        should_stream: false,
-        should_silence: opts.should_silence != null ? opts.should_silence : true,
-        // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
-        max_chat_history: opts.max_chat_history != null ? opts.max_chat_history : 0,
-        custom_api
+      const body = {
+        model: profile.model || "",
+        messages: messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : "system", content: String(m.content || "") })),
+        max_tokens: maxTokens,
+        temperature,
+        stream: false
       };
-      const out = await gr(config);
-      const text = typeof out === "string" ? out : out && out.content ? out.content : out && out.reply ? out.reply : String(out || "");
+      const headers = { "Content-Type": "application/json" };
+      if (profile.apiKey) headers["Authorization"] = "Bearer " + profile.apiKey;
+      if (WM.DebugLog) {
+        WM.DebugLog.logRequest("llm", {
+          url,
+          model: body.model,
+          messages: body.messages,
+          max_tokens: maxTokens,
+          temperature
+        });
+      }
+      let res;
+      try {
+        res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      } catch (netErr) {
+        const msg = String(netErr && netErr.message ? netErr.message : netErr);
+        if (WM.DebugLog) WM.DebugLog.logError("llm", { url, error: msg });
+        throw new Error("[LLM \u8BF7\u6C42\u5931\u8D25] \u5730\u5740\uFF1A" + url + "\uFF5C" + msg);
+      }
+      const rawText = await res.text();
+      if (!res.ok) {
+        if (WM.DebugLog) WM.DebugLog.logError("llm", { url, httpStatus: res.status, response: rawText.slice(0, 500) });
+        throw new Error("[LLM HTTP " + res.status + "] \u5730\u5740\uFF1A" + url + "\uFF5C\u54CD\u5E94\uFF1A" + rawText.slice(0, 500));
+      }
+      let j;
+      try {
+        j = JSON.parse(rawText);
+      } catch (e) {
+        if (WM.DebugLog) WM.DebugLog.logError("llm", { url, error: "\u8FD4\u56DE\u975E JSON", response: rawText.slice(0, 500) });
+        throw new Error("[LLM \u8FD4\u56DE\u975E JSON] " + rawText.slice(0, 500));
+      }
+      let text = "";
+      if (j && j.choices && j.choices[0]) {
+        text = j.choices[0].message && j.choices[0].message.content || j.choices[0].text || "";
+      } else if (typeof j === "string") {
+        text = j;
+      }
+      if (WM.DebugLog) {
+        WM.DebugLog.logResponse("llm", {
+          url,
+          model: j && j.model || body.model,
+          output: String(text || ""),
+          usage: j && j.usage,
+          finish_reason: j && j.choices && j.choices[0] && j.choices[0].finish_reason
+        });
+      }
       return text ? String(text).trim() : "";
     }
     async function testConnection(opts) {
       opts = opts || {};
-      const profile = opts.profile || { source: "local" };
+      const profile = opts.profile || {};
       const timeoutMs = 2e4;
       const guard = new Promise((_, reject) => setTimeout(() => reject(new Error("\u6D4B\u8BD5\u8D85\u65F6\uFF08" + timeoutMs / 1e3 + "s \u65E0\u54CD\u5E94\uFF09")), timeoutMs));
+      const ver = window.WarmMemo && window.WarmMemo.version || "?";
       try {
-        const ver = window.WarmMemo && window.WarmMemo.version || "?";
-        console.log("[WarmMemo] ===== \u6D4B\u8BD5\u8FDE\u63A5(LLM) \u53D1\u8D77\uFF0C\u7248\u672C v" + ver + " =====");
         const out = await Promise.race([
           complete(
             [
-              { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\uFF0C\u4E0D\u8981\u4F7F\u7528\u804A\u5929\u5386\u53F2\u3002" },
-              { role: "user", content: "[WarmMemo\u6D4B\u8BD5\u8FDE\u63A5]\u8FD9\u662F\u6D4B\u8BD5\u8FDE\u63A5\u7684\uFF0C\u8BF7\u53D1\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u77E5\u4E0D\u77E5\u9053\uFF1F\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
+              { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\u3002" },
+              { role: "user", content: "[WarmMemo\u6D4B\u8BD5\u8FDE\u63A5]\u8BF7\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
             ],
-            { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
+            { profile, maxTokens: 8, temperature: 0 }
           ),
           guard
         ]);
@@ -826,7 +828,7 @@ ${it.message}`;
         return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { complete, testConnection, buildCustomApi, getRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
+    WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl };
   })();
 
   // src/config/vector-store.js
@@ -1063,8 +1065,9 @@ ${it.message}`;
       } else {
         body = JSON.stringify({ model, input });
       }
-      const reqTrace = { url: finalUrl, method: useGet ? "GET" : "POST", model, bodyPreview: body ? body.slice(0, 200) : "(\u65E0body)" };
+      const reqTrace = { url: finalUrl, method: useGet ? "GET" : "POST", model, bodyPreview: body ? body.slice(0, 400) : "(\u65E0body)" };
       WM._lastEmbedReq = reqTrace;
+      if (WM.DebugLog) WM.DebugLog.logRequest("embedding", reqTrace);
       try {
         console.log("[WarmMemo] Embedding \u5B9E\u9645\u8BF7\u6C42\uFF1A", reqTrace);
       } catch (e) {
@@ -1080,10 +1083,12 @@ ${it.message}`;
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
         const hint = isCors ? "\u8FD9\u662F\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\uFF08\u4E0D\u662F\u540E\u7AEF\u95EE\u9898\uFF09\u3002\u8BF7\u786E\u8BA4\uFF1A\u2460\u5730\u5740\u662F\u540C\u6E90\u4EE3\u7406\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\uFF1B\u2461\u53CD\u4EE3\u5DF2\u8FD4\u56DE access-control-allow-origin \u5934\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
+        if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, error: hint });
         throw new Error("[Embedding \u8BF7\u6C42\u5931\u8D25] \u5B9E\u9645\u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C" + hint);
       }
       const rawText = await r.text();
       if (!r.ok) {
+        if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
         throw new Error("[Embedding HTTP " + r.status + "] \u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C\u54CD\u5E94\uFF1A" + rawText.slice(0, 200));
       }
       let j;
@@ -1093,6 +1098,7 @@ ${it.message}`;
         throw new Error("embedding \u8FD4\u56DE\u975E JSON\uFF08HTTP " + r.status + "\uFF09\uFF1A" + rawText.slice(0, 200));
       }
       if (!j.data) throw new Error("embedding \u8FD4\u56DE\u5F02\u5E38\uFF08\u7F3A\u5C11 data \u5B57\u6BB5\uFF09\uFF1A" + rawText.slice(0, 200));
+      if (WM.DebugLog) WM.DebugLog.logResponse("embedding", { url: finalUrl, httpStatus: r.status, dimension: Array.isArray(j.data) && j.data[0] && j.data[0].embedding ? j.data[0].embedding.length : 0, responsePreview: rawText.slice(0, 400) });
       const vecs = j.data.map((d) => d.embedding);
       return Array.isArray(texts) ? vecs : vecs[0];
     }
@@ -1170,6 +1176,17 @@ ${it.message}`;
             return_documents: false
           });
         }
+        if (WM.DebugLog) {
+          WM.DebugLog.logRequest("rerank", {
+            url: finalUrl,
+            method: useGet ? "GET" : "POST",
+            model,
+            query,
+            documents: docs,
+            top_n: docs.length,
+            bodyPreview: body ? body.slice(0, 400) : "(GET, \u53C2\u6570\u5728 query)"
+          });
+        }
         let r;
         try {
           r = await fetch(finalUrl, {
@@ -1181,23 +1198,29 @@ ${it.message}`;
         } catch (netErr) {
           const msg = String(netErr && netErr.message ? netErr.message : netErr);
           const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-          throw new Error(
-            (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002"
-          );
+          const hint = (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002";
+          if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, error: hint });
+          throw new Error(hint);
         }
         const rawText = await r.text();
-        if (!r.ok) throw new Error("rerank \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+        if (!r.ok) {
+          if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
+          throw new Error("rerank \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+        }
         let j;
         try {
           j = JSON.parse(rawText);
         } catch (e) {
+          if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, error: "\u8FD4\u56DE\u975E JSON", response: rawText.slice(0, 400) });
           throw new Error("rerank \u8FD4\u56DE\u975E JSON\uFF08HTTP " + r.status + "\uFF09\uFF1A" + rawText.slice(0, 200));
         }
         const scoreMap = {};
         (j.results || []).forEach((it) => {
           scoreMap[it.index] = it.relevance_score;
         });
-        return docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
+        const scores = docs.map((_, i) => scoreMap[i] != null ? scoreMap[i] : 0);
+        if (WM.DebugLog) WM.DebugLog.logResponse("rerank", { url: finalUrl, httpStatus: r.status, scores, responsePreview: rawText.slice(0, 400) });
+        return scores;
       } catch (e) {
         console.warn("[WarmMemo] rerank \u5931\u8D25\uFF0C\u8FD4\u56DE null\uFF08\u7531\u8C03\u7528\u65B9\u4FDD\u7559\u539F\u6392\u5E8F\uFF09", e);
         return null;
@@ -2154,6 +2177,7 @@ ${p.summary || ""}`.trim() });
         <button data-tab="plot">\u5267\u60C5\u7EBF</button>
         <button data-tab="item">\u7269\u54C1</button>
         <button data-tab="world">\u4E16\u754C\u8BBE\u5B9A</button>
+        <button data-tab="dbg">\u8C03\u8BD5</button>
         <button data-tab="cfg">\u8BBE\u7F6E</button>
       </div>
       <div class="wm-body"></div>`;
@@ -2225,6 +2249,7 @@ ${p.summary || ""}`.trim() });
       if (tab === "plot") return renderPlot(body);
       if (tab === "item") return renderItem(body);
       if (tab === "world") return renderWorld(body);
+      if (tab === "dbg") return renderDebug(body);
       if (tab === "cfg") return renderCfg(body);
     }
     function renderAuto(body) {
@@ -2853,7 +2878,7 @@ ${p.summary || ""}`.trim() });
       };
     }
     function renderPaneLlm(s) {
-      const c = s.llmConfig || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
+      const c = s.llmConfig || { source: "local", apiUrl: "", apiKey: "", model: "" };
       const pp = s.presetPrefix || { mode: "none", importText: "", presetName: "" };
       const prompts = s.prompts || {};
       let presetNames = [];
@@ -2881,13 +2906,12 @@ ${p.summary || ""}`.trim() });
       </div>`;
       return `
       <div class="wm-card"><div class="wm-h">LLM \u8C03\u7528\u914D\u7F6E\uFF08\u7EDF\u4E00\uFF09</div>
-        <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1\uFF09\u5171\u7528\u8FD9\u4E00\u4E2A LLM \u914D\u7F6E\u3002<b>\u7559\u7A7A</b>\u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\uFF1B<b>\u586B\u4E86 Base URL</b> \u5219\u76F4\u63A5\u8C03\u7528\u8BE5\u5730\u5740\uFF08\u81EA\u9002\u5E94 OpenAI / DeepSeek / \u706B\u5C71\u5F15\u64CE \u7B49\u4EFB\u610F\u517C\u5BB9\u670D\u52A1\uFF0C\u65E0\u9700\u9009\u5382\u5BB6\uFF09\u3002\u914D\u5B8C\u53EF\u70B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u9A8C\u8BC1\u53EF\u7528\u6027\u3002</div>
+        <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1\uFF09\u5171\u7528\u8FD9\u4E00\u4E2A LLM \u914D\u7F6E\u3002<b>\u5FC5\u987B\u586B\u5199 Base URL</b>\uFF08\u76F4\u63A5\u8C03\u7528\u8BE5\u5730\u5740\uFF0C\u81EA\u9002\u5E94 OpenAI / DeepSeek / \u706B\u5C71\u5F15\u64CE \u7B49\u4EFB\u610F OpenAI \u517C\u5BB9\u670D\u52A1\uFF0C\u65E0\u9700\u9009\u5382\u5BB6\uFF09\u3002\u914D\u5B8C\u53EF\u70B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u9A8C\u8BC1\u53EF\u7528\u6027\u3002</div>
         <div id="llm-custom" style="margin-top:6px">
           <label class="wm-row">Base URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1\u3001https://ark.cn-beijing.volces.com/api/v3\u3001https://api.deepseek.com/v1"/></label>
           <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u5382\u5BB6\u7684 Base URL \u5373\u53EF\uFF0C\u81EA\u52A8\u6309 OpenAI \u517C\u5BB9\u534F\u8BAE\u8BF7\u6C42\uFF08\u706B\u5C71\u5F15\u64CE\u586B <code>https://ark.cn-beijing.volces.com/api/v3</code>\uFF0CDeepSeek \u586B <code>https://api.deepseek.com/v1</code>\uFF09\u3002</div>
-          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-...\uFF08\u672C\u5730\u9152\u9986\u6E90\u53EF\u7559\u7A7A\uFF09"/></label>
+          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
-          <label class="wm-row">\u4EE3\u7406\u9884\u8BBE\u540D(\u53EF\u9009)<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="\u7559\u7A7A\u5219\u7528\u4E0A\u65B9 URL\uFF08\u9152\u9986\u4EE3\u7406\u9884\u8BBE\u540D\uFF09"/></label>
           <label class="wm-row">\u8F93\u51FA Token \u4E0A\u9650<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="\u9650\u5236\u6A21\u578B\u8F93\u51FA\u957F\u5EA6\uFF0C\u6240\u6709\u529F\u80FD\u5171\u7528\u6B64\u4E0A\u9650"/> <span class="wm-hint" style="margin:0">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2\uFF09\u5171\u7528\uFF0C\u6A21\u578B\u4F1A\u5728\u8BE5\u8303\u56F4\u5185\u5B8C\u6574\u8F93\u51FA</span></label>
         </div>
         <div class="wm-divider"></div>
@@ -2915,6 +2939,104 @@ ${p.summary || ""}`.trim() });
         <div class="wm-hint">\u4E0B\u9762\u56DB\u5957\u63D0\u793A\u8BCD\u8D1F\u8D23\u300C\u603B\u7ED3 / \u5173\u7CFB / \u5267\u60C5 / \u4E16\u754C\u89C2\u300D\u7684\u5177\u4F53\u5199\u6CD5\uFF0C<b>\u76F4\u63A5\u6539\u5373\u53EF\u751F\u6548</b>\u3002\u53EF\u4FDD\u7559 <code>{{recent}}</code> \u7B49\u5360\u4F4D\u7B26\uFF0C\u8FD0\u884C\u65F6\u4F1A\u81EA\u52A8\u66FF\u6362\u6210\u771F\u5B9E\u6570\u636E\u3002</div>
         ${promptHtml}
       </div>`;
+    }
+    function renderDebug(body) {
+      body.innerHTML = `
+      <div class="wm-card">
+        <div class="wm-h">\u8C03\u7528\u8C03\u8BD5\uFF08\u8BF7\u6C42 / \u7ED3\u679C\uFF09</div>
+        <div class="wm-hint">\u5206\u522B\u8BB0\u5F55 LLM\u3001\u5411\u91CF(Embedding)\u3001\u91CD\u6392\u5E8F(Rerank) \u4E09\u7C7B\u8C03\u7528\u7684<b>\u8BF7\u6C42\u5185\u5BB9</b>\u4E0E<b>AI \u8FD4\u56DE\u7ED3\u679C</b>\uFF0C\u4E92\u4E0D\u6DF7\u5408\u3002\u6BCF\u6B21\u5B9E\u9645\u8C03\u7528\u81EA\u52A8\u8BB0\u5F55\uFF0C\u6700\u591A\u4FDD\u7559 ${WM.DebugLog ? WM.DebugLog.MAX : 30} \u6761\u3002</div>
+        <div class="wm-debug-toolbar">
+          <button class="wm-btn" data-dbg="llm">LLM</button>
+          <button class="wm-btn" data-dbg="embedding">\u5411\u91CF</button>
+          <button class="wm-btn" data-dbg="rerank">\u91CD\u6392\u5E8F</button>
+          <button class="wm-btn wm-btn-ghost" id="dbg-clear">\u6E05\u7A7A\u5168\u90E8</button>
+          <button class="wm-btn wm-btn-ghost" id="dbg-refresh">\u5237\u65B0</button>
+        </div>
+        <div id="dbg-llm" class="wm-debug-sec"></div>
+        <div id="dbg-embedding" class="wm-debug-sec"></div>
+        <div id="dbg-rerank" class="wm-debug-sec"></div>
+      </div>`;
+      const secs = {
+        llm: body.querySelector("#dbg-llm"),
+        embedding: body.querySelector("#dbg-embedding"),
+        rerank: body.querySelector("#dbg-rerank")
+      };
+      const titles = { llm: "LLM \u8C03\u7528", embedding: "\u5411\u91CF Embedding", rerank: "\u91CD\u6392\u5E8F Rerank" };
+      function fmt(v) {
+        if (v === void 0) return "\u2014";
+        if (typeof v === "string") return v;
+        try {
+          return JSON.stringify(v, null, 2);
+        } catch (e) {
+          return String(v);
+        }
+      }
+      function renderSec(kind) {
+        const el = secs[kind];
+        const logs = WM.DebugLog ? WM.DebugLog.get(kind) : [];
+        if (!logs.length) {
+          el.innerHTML = `<div class="wm-debug-title">${titles[kind]}</div><div class="wm-empty">\u6682\u65E0\u8BB0\u5F55\uFF0C\u5148\u53BB\u89E6\u53D1\u4E00\u6B21\u8C03\u7528\uFF08\u5982\u70B9\u6D4B\u8BD5\u8FDE\u63A5 / \u603B\u7ED3\uFF09</div>`;
+          return;
+        }
+        const html = logs.slice().reverse().map((e) => {
+          const t = new Date(e.ts).toLocaleTimeString();
+          const dirLabel = e.dir === "request" ? "\u8BF7\u6C42" : e.dir === "response" ? "\u7ED3\u679C" : "\u9519\u8BEF";
+          const dirCls = e.dir === "request" ? "req" : e.dir === "response" ? "res" : "err";
+          let bodyHtml = "";
+          if (e.dir === "request") {
+            const d = e.data || {};
+            if (kind === "llm") {
+              bodyHtml = "URL: " + (d.url || "") + "\n\u6A21\u578B: " + (d.model || "") + "\n\n\u3010Messages\u3011\n" + (d.messages || []).map((m) => "[" + m.role + "]\n" + m.content).join("\n\n");
+            } else if (kind === "embedding") {
+              bodyHtml = "URL: " + (d.url || "") + "\n\u65B9\u6CD5: " + (d.method || "POST") + "\n\u6A21\u578B: " + (d.model || "") + "\n\n\u3010\u8BF7\u6C42\u4F53\u9884\u89C8\u3011\n" + (d.bodyPreview || "");
+            } else {
+              bodyHtml = "URL: " + (d.url || "") + "\n\u65B9\u6CD5: " + (d.method || "POST") + "\n\u6A21\u578B: " + (d.model || "") + "\nQuery: " + (d.query || "") + "\n\n\u3010Documents\u3011\n" + (Array.isArray(d.documents) ? d.documents.join("\n") : "");
+            }
+          } else if (e.dir === "response") {
+            const d = e.data || {};
+            if (kind === "llm") {
+              bodyHtml = "\u6A21\u578B: " + (d.model || "") + "\nfinish_reason: " + (d.finish_reason || "") + "\nusage: " + fmt(d.usage) + "\n\n\u3010AI \u8F93\u51FA\u3011\n" + (d.output || "");
+            } else if (kind === "embedding") {
+              bodyHtml = "HTTP " + (d.httpStatus || "") + "\n\u7EF4\u5EA6: " + (d.dimension || "") + "\n\n\u3010\u54CD\u5E94\u9884\u89C8\u3011\n" + (d.responsePreview || "");
+            } else {
+              bodyHtml = "HTTP " + (d.httpStatus || "") + "\n\n\u3010Scores\u3011\n" + fmt(d.scores) + "\n\n\u3010\u54CD\u5E94\u9884\u89C8\u3011\n" + (d.responsePreview || "");
+            }
+          } else {
+            const d = e.data || {};
+            bodyHtml = "\u9519\u8BEF: " + (d.error || "") + (d.httpStatus ? "\nHTTP " + d.httpStatus : "") + (d.response || d.responsePreview ? "\n\n" + (d.response || d.responsePreview) : "");
+          }
+          return `<div class="wm-debug-item ${dirCls}">
+          <div class="wm-debug-meta"><span class="wm-debug-dir">${dirLabel}</span><span class="wm-debug-time">${t}</span></div>
+          <pre class="wm-debug-body">${escapeHtml(bodyHtml)}</pre>
+        </div>`;
+        }).join("");
+        el.innerHTML = `<div class="wm-debug-title">${titles[kind]}\uFF08${logs.length}\uFF09</div>` + html;
+      }
+      function renderAll() {
+        renderSec("llm");
+        renderSec("embedding");
+        renderSec("rerank");
+      }
+      body.querySelectorAll("[data-dbg]").forEach((b) => {
+        b.onclick = () => {
+          body.querySelectorAll("[data-dbg]").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          Object.keys(secs).forEach((k) => {
+            secs[k].style.display = k === b.dataset.dbg ? "" : "none";
+          });
+          renderSec(b.dataset.dbg);
+        };
+      });
+      body.querySelector("#dbg-clear").onclick = () => {
+        if (WM.DebugLog) WM.DebugLog.clear();
+        renderAll();
+      };
+      body.querySelector("#dbg-refresh").onclick = renderAll;
+      body.querySelector('[data-dbg="llm"]').classList.add("active");
+      Object.keys(secs).forEach((k) => {
+        secs[k].style.display = k === "llm" ? "" : "none";
+      });
+      renderAll();
     }
     function renderCfg(body) {
       const s = WM.Settings.load();
@@ -2981,7 +3103,6 @@ ${p.summary || ""}`.trim() });
           const apiUrl = q("#llm-url").value.trim();
           s.llmConfig = {
             source: apiUrl ? "custom" : "local",
-            proxyPreset: q("#llm-preset") ? q("#llm-preset").value.trim() : "",
             apiUrl,
             apiKey: q("#llm-key") ? q("#llm-key").value.trim() : "",
             model: q("#llm-model") ? q("#llm-model").value.trim() : "",
@@ -3085,10 +3206,10 @@ ${p.summary || ""}`.trim() });
           rows.push(`<div class="wm-test-item ${ok ? "wm-ok" : "wm-bad"}">${ok ? "\u2705" : "\u274C"} ${name}${ok ? "\uFF1A" + (detail || "") : "\uFF1A" + (r && r.error || "\u5931\u8D25")}</div>`);
         };
         const testLlm = async () => {
-          const tmpLlm = tmp.llmConfig || { source: "local" };
+          const tmpLlm = tmp.llmConfig || {};
           try {
             const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
-            add("LLM(" + (tmpLlm.source === "local" ? "\u672C\u5730\u9152\u9986" : "\u81EA\u5B9A\u4E49") + ")", r, "");
+            add("LLM(" + (tmpLlm.apiUrl ? "\u81EA\u5B9A\u4E49 BaseURL" : "\u672A\u914D\u7F6E") + ")", r, "");
           } catch (e) {
             add("LLM(\u7EDF\u4E00\u914D\u7F6E)", { success: false }, String(e.message || e));
           }
@@ -3308,7 +3429,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "graph-nan-fix";
+  window.WarmMemo.version = "direct-fetch-no-local + debug-panel";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
