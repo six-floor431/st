@@ -249,6 +249,7 @@
   // 提示词可编辑：settings.prompts.worldview（支持 {{plot}} {{recent}} 占位符）
   async function inferWorldview(settings, opts) {
     settings = settings || (WM.Settings && WM.Settings.load && WM.Settings.load()) || {};
+    opts = opts || {};
     const char = getCharacterCard();
     const user = getUserCard();
     const store = WM.MemoryStore;
@@ -257,22 +258,25 @@
     const prev = store ? store.getWorld() : '';
     const plots = (store && store.getPlots ? store.getPlots() : [])
       .map((p) => `· ${p.time ? '[' + p.time + '] ' : ''}${p.title}：${p.summary}`).join('\n');
-    const items = (store && store.getItems ? store.getItems() : [])
-      .map((i) => `· ${i.name}（持有者：${i.owner || '未知'}）：${i.desc || ''}`).join('\n');
+    // 注意：世界观只提炼「世界本身的规则/法则」，不注入物品/角色具体内容，避免污染世界设定。
+    const recent = Array.isArray(opts.recent) ? opts.recent : [];
+    const recentText = recent.length ? recent.map((m) => (m.name ? '【' + m.name + '】' : '') + (m.content || '')).join('\n') : '';
     const tpl = (settings && settings.prompts && settings.prompts.worldview) || DEFAULT_WORLDVIEW_PROMPT;
-    const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: '', items });
+    const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: recentText });
     const known = [
       prevMeta.name ? `世界名：${prevMeta.name}` : '',
       prevMeta.kind ? `世界类型：${prevMeta.kind}` : '',
       prevMeta.desc ? `简述：${prevMeta.desc}` : '',
       ...prevSecs.map((w) => `## ${w.title}\n${w.body}`),
     ].filter(Boolean).join('\n');
+    const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+    const recentRaw = (ctx && ctx.chat) ? ctx.chat.slice(-30).map((m) => (m.name ? '【' + m.name + '】' : '') + (m.mes || '')).join('\n') : (recentText || '（无）');
     const userMsg = `【角色设定】${char.name || '未知'}：${char.description || ''}
 【用户设定】${user.name || '未知'}：${user.description || ''}
 【剧情线】
 ${plots || '（无）'}
-【已知物品】
-${items || '（无）'}
+【最近对话】
+${recentText || recentRaw || '（无）'}
 【已有世界观】
 ${known || prev || '（无）'}
 ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction + '\n' : ''}请按规定格式输出世界设定：`;
