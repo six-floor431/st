@@ -5,9 +5,6 @@
   const LS_KEY = 'warmmemo_settings_v2';
 
   const DEFAULTS = {
-    summaryModel: '',
-    summaryBaseUrl: 'https://api.openai.com/v1',
-    summaryApiKey: '',
     showMemoryButton: true,
     autoUpdate: true,
     vectorEnabled: false,

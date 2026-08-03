@@ -5,9 +5,6 @@
     const WM = window.WarmMemo || (window.WarmMemo = {});
     const LS_KEY = "warmmemo_settings_v2";
     const DEFAULTS = {
-      summaryModel: "",
-      summaryBaseUrl: "https://api.openai.com/v1",
-      summaryApiKey: "",
       showMemoryButton: true,
       autoUpdate: true,
       vectorEnabled: false,
@@ -414,77 +411,66 @@ ${it.desc || ""}`.trim(),
   (function() {
     const WM = window.WarmMemo || (window.WarmMemo = {});
     function getGenerate() {
-      const ST = window.SillyTavern || {};
-      return ST.generate || (ST.generateRaw ? null : null);
-    }
-    function getGenerateRaw() {
-      const ST = window.SillyTavern || {};
-      return ST.generateRaw || null;
-    }
-    function toOrderedPrompts(messages) {
-      return (messages || []).map((m) => ({ role: m.role || "user", content: m.content || "" }));
+      if (typeof window.generate === "function") return window.generate;
+      try {
+        const ST = window.SillyTavern;
+        if (ST && typeof ST.getContext === "function") {
+          const ctx = ST.getContext();
+          if (ctx && typeof ctx.generate === "function") return ctx.generate;
+        }
+        if (ST && typeof ST.generate === "function") return ST.generate;
+      } catch (e) {
+      }
+      if (typeof window.generateRaw === "function") return window.generateRaw;
+      return null;
     }
     function buildCustomApi(p) {
-      if (!p) return null;
+      if (!p) return void 0;
       const api = {};
       if (p.proxyPreset) {
-        api.proxy_preset = p.proxyPreset;
-        api.preset_sources = [];
+        api.proxy_preset = p.proxyPreset.trim();
       }
       if (p.apiUrl || p.apiKey || p.model) {
-        api.source = "custom";
-        if (p.apiUrl) api.apiurl = p.apiUrl;
-        if (p.apiKey) api.key = p.apiKey;
-        if (p.model) api.model = p.model;
+        if (p.apiUrl) api.apiurl = p.apiUrl.trim();
+        if (p.apiKey) api.key = p.apiKey.trim();
+        if (p.model) api.model = p.model.trim();
       }
-      return api.proxy_preset || api.source ? api : null;
+      return api.proxy_preset || api.apiurl || api.model ? api : void 0;
     }
     async function complete(messages, opts) {
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
-      const gr = getGenerateRaw();
       const gen = getGenerate();
-      if (!gr && !gen) {
-        throw new Error("\u9152\u9986 generate \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF09");
+      if (!gen) {
+        throw new Error("\u9152\u9986 generate \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
       }
-      const ordered_prompts = toOrderedPrompts(messages);
+      const sys = (messages || []).filter((m) => m.role === "system").map((m) => m.content).join("\n");
+      const userMsg = (messages || []).filter((m) => m.role !== "system").map((m) => m.content).join("\n") || "";
+      const config = {
+        user_input: userMsg,
+        should_stream: false,
+        should_silence: true,
+        max_new_tokens: opts.maxTokens || 512
+      };
+      if (sys) {
+        config.injects = [{ role: "system", content: sys, position: "in_chat", depth: 0, should_scan: true }];
+      }
       if (profile.source === "custom") {
         const custom_api = buildCustomApi(profile);
         if (!custom_api) {
           throw new Error("\u81EA\u5B9A\u4E49\u6765\u6E90\u672A\u914D\u7F6E\uFF08\u9700\u586B\u4EE3\u7406\u9884\u8BBE\u6216 URL/Key/\u6A21\u578B\uFF09");
         }
-        if (gr) {
-          const out3 = await gr({ ordered_prompts, custom_api, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
-          return extractText(out3);
-        }
-        const out2 = await gen({ user_input: (messages[messages.length - 1] || {}).content || "", custom_api, max_new_tokens: opts.maxTokens || 512 });
-        return extractText(out2);
+        config.custom_api = custom_api;
       }
-      if (gr) {
-        const out2 = await gr({ ordered_prompts, max_new_tokens: opts.maxTokens || 512, temperature: opts.temperature });
-        return extractText(out2);
-      }
-      const out = await gen({ user_input: (messages[messages.length - 1] || {}).content || "", max_new_tokens: opts.maxTokens || 512 });
-      return extractText(out);
-    }
-    function extractText(out) {
-      if (typeof out === "string") return out;
-      if (out && typeof out === "object") {
-        if (typeof out.reply === "string") return out.reply;
-        if (Array.isArray(out.choices) && out.choices[0]) {
-          const m = out.choices[0].message || out.choices[0].text || {};
-          return m.content || m.text || "";
-        }
-        if (typeof out.content === "string") return out.content;
-      }
-      return String(out || "");
+      const out = await gen(config);
+      return typeof out === "string" ? out : out && out.reply ? out.reply : String(out || "");
     }
     async function testConnection(opts) {
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
       try {
         const out = await complete(
-          [{ role: "system", content: "\u4F60\u662F\u6D4B\u8BD5\u52A9\u624B\u3002" }, { role: "user", content: "\u56DE\u590D\u4E00\u4E2A\u5B57\uFF1A\u597D" }],
+          [{ role: "system", content: "\u4F60\u662F\u6D4B\u8BD5\u52A9\u624B\u3002" }, { role: "user", content: "\u53EA\u56DE\u590D\u4E00\u4E2A\u5B57\uFF1A\u597D" }],
           { profile, maxTokens: 16 }
         );
         if (out && String(out).trim().length > 0) {
@@ -495,7 +481,7 @@ ${it.desc || ""}`.trim(),
         return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { complete, testConnection, buildCustomApi };
+    WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerate };
   })();
 
   // src/config/vector-store.js
