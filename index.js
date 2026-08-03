@@ -3053,7 +3053,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-subtabs" id="cfg-tabs">
         ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? "active" : ""}">${t.label}</button>`).join("")}
       </div>
-      <div id="cfg-pane">${renderPaneLlm(s)}</div>
+      <div id="cfg-pane">${active === "llm" ? renderPaneLlm(s) : active === "mem" ? renderPaneMemory(s) : active === "vec" ? renderPaneVector(s) : active === "rerank" ? renderPaneRerank(s) : active === "lore" ? renderPaneLore(s) : active === "err" ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">\u6D4B\u8BD5\u8FDE\u63A5</button>
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
@@ -3197,6 +3197,7 @@ ${p.summary || ""}`.trim() });
       if (testBtn) testBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
         syncPaneToSettings(body, s, scope);
+        if (body.querySelector("#llm-url") !== null) syncPaneToSettings(body, s, "llm");
         const box = body.querySelector("#c-test-result");
         const tmp = Object.assign({}, s);
         box.innerHTML = '<div class="wm-test-item">\u23F3 \u6D4B\u8BD5\u4E2D\u2026</div>';
@@ -3429,7 +3430,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "direct-fetch-no-local + debug-panel";
+  window.WarmMemo.version = "fix-cfgtab-url-sync";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

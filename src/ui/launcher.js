@@ -942,7 +942,7 @@
       <div class="wm-subtabs" id="cfg-tabs">
         ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? 'active' : ''}">${t.label}</button>`).join('')}
       </div>
-      <div id="cfg-pane">${renderPaneLlm(s)}</div>
+      <div id="cfg-pane">${active === 'llm' ? renderPaneLlm(s) : active === 'mem' ? renderPaneMemory(s) : active === 'vec' ? renderPaneVector(s) : active === 'rerank' ? renderPaneRerank(s) : active === 'lore' ? renderPaneLore(s) : active === 'err' ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">测试连接</button>
         <button id="c-save" class="wm-btn primary">保存设置</button>
@@ -1102,7 +1102,9 @@
     if (testBtn) testBtn.onclick = async () => {
       const scope = WM._cfgTab || 'llm';
       // 先把当前面板最新输入同步进 s，确保测试用的是刚填的值
+      // 同时若 LLM 输入框存在（当前停在 LLM 子面板），也强制同步一次，避免 scope 非 llm 时漏读 BaseURL
       syncPaneToSettings(body, s, scope);
+      if (body.querySelector('#llm-url') !== null) syncPaneToSettings(body, s, 'llm');
       const box = body.querySelector('#c-test-result');
       const tmp = Object.assign({}, s);
       box.innerHTML = '<div class="wm-test-item">⏳ 测试中…</div>';
