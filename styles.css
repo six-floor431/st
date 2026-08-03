@@ -14,9 +14,16 @@
   --wm-paper: #f4f1ea;        /* 宣纸 */
   --wm-paper-2: #ece7db;      /* 旧宣纸 */
   --wm-seal: #9c3b2e;         /* 印泥红 */
+  --wm-seal-soft: #b9564a;    /* 印泥红·淡 */
+  --wm-jade: #5b6e57;         /* 苔绿（关系图用） */
   --wm-line: rgba(43, 43, 40, 0.18);
   --wm-line-strong: rgba(43, 43, 40, 0.34);
+  --wm-font-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC", "Georgia", serif;
+  --wm-font-ui: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+/* 面板与正文用衬线（水墨感）；控件/标签用 UI sans（可读性） */
+.wm-panel, .wm-ta, .wm-row textarea { font-family: var(--wm-font-serif); text-rendering: optimizeLegibility; }
+.wm-tabs button, .wm-subtabs button, .wm-btn, .wm-ctrl, .wm-row label, .wm-row input, .wm-row select, .wm-badge, .wm-hint { font-family: var(--wm-font-ui); }
 
 #warmmemo-btn {
   display: inline-flex;
@@ -210,8 +217,9 @@
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.38);
 }
-.wm-h { font-weight: 600; margin-bottom: 10px; letter-spacing: 1px; color: var(--wm-ink); }
-.wm-hint { font-size: 12px; color: var(--wm-ink-faint); margin: 6px 0 2px; line-height: 1.5; }
+.wm-h { font-weight: 600; margin-bottom: 10px; letter-spacing: 1px; color: var(--wm-ink); padding-left: 9px; position: relative; }
+.wm-h::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--wm-seal); }  /* section 标题立红 */
+.wm-hint { font-size: 12px; color: var(--wm-ink-faint); margin: 6px 0 2px; line-height: 1.6; font-style: italic; }
 .wm-divider { height: 1px; background: var(--wm-line); margin: 12px 0; }
 .wm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; min-width: 0; }
 .wm-row label { display: flex; align-items: center; gap: 6px; }
@@ -225,7 +233,13 @@
   background: rgba(255,255,255,.6);
   color: var(--wm-ink);
   font-size: 14px;
-  font-family: inherit;
+  font-family: var(--wm-font-ui);
+  transition: border-color .15s, box-shadow .15s;
+}
+.wm-row input:focus, .wm-row select:focus, .wm-row textarea:focus {
+  outline: none;
+  border-color: var(--wm-seal);
+  box-shadow: 0 0 0 2px rgba(156,59,46,.16);
 }
 .wm-row textarea { line-height: 1.6; }
 
@@ -254,6 +268,30 @@
 /* 直接列出的列表（无搜索框） */
 .wm-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 
+/* 可折叠小节（自动总结面板的标签过滤/子任务） */
+.wm-fold {
+  border: 1px solid var(--wm-line);
+  border-left: 3px solid var(--wm-jade);
+  border-radius: 6px 2px 6px 2px;
+  padding: 6px 10px;
+  margin: 10px 0;
+  background: rgba(255,255,255,.28);
+}
+.wm-fold > summary {
+  cursor: pointer;
+  font-family: var(--wm-font-ui);
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--wm-ink);
+  padding: 2px 0;
+  list-style: none;
+  user-select: none;
+}
+.wm-fold > summary::-webkit-details-marker { display: none; }
+.wm-fold > summary::before { content: "▾ "; color: var(--wm-jade); }
+.wm-fold:not([open]) > summary::before { content: "▸ "; }
+.wm-fold[open] > summary { margin-bottom: 8px; }
+
 /* 记忆 / 物品 / 关系：水墨便签 */
 .wm-item {
   border: 1px solid var(--wm-line);
@@ -264,9 +302,13 @@
   line-height: 1.6;
   word-break: break-word;
   position: relative;
+  transition: background .15s, border-color .15s, transform .05s;
 }
+.wm-item:hover { background: rgba(255,255,255,.7); border-left-color: var(--wm-seal-soft); }
+.wm-item:active { transform: translateY(1px); }
 .wm-item .wm-name { font-weight: 600; color: var(--wm-ink); }
 .wm-item .wm-muted { color: var(--wm-ink-faint); font-size: 12px; }
+.wm-item .wm-ts { color: var(--wm-ink-faint); font-size: 11px; float: right; }
 .wm-empty { color: var(--wm-ink-faint); font-style: italic; padding: 10px 2px; line-height: 1.6; }
 .wm-link { color: var(--wm-seal); cursor: pointer; text-decoration: underline; }
 
@@ -281,7 +323,9 @@
 .wm-test-item.wm-bad { background: rgba(156,59,46,0.1); border: 1px solid rgba(156,59,46,0.35); color: var(--wm-seal); }
 
 /* 关系图 */
-.wm-graph { width: 100%; height: auto; background: rgba(255,255,255,.3); border: 1px solid var(--wm-line); border-radius: 8px; }
+.wm-graph { width: 100%; height: auto; background: rgba(255,255,255,.3); border: 1px solid var(--wm-line); border-radius: 8px; touch-action: none; }
+.wm-graph circle { transition: r .12s, fill .12s; }
+.wm-graph circle:hover { fill: var(--wm-seal); }
 .wm-weight { color: var(--wm-seal); letter-spacing: -1px; }
 
 /* 剧情线时间卷 */

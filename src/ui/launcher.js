@@ -179,15 +179,19 @@
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors?'checked':''}/> 总结后隐藏已处理楼层</label>
-        <div class="wm-h" style="margin-top:10px">标签过滤（总结时剔除标签包裹内容）</div>
-        <div class="wm-hint">可自定义多条规则，同一标签也能「多重存在」：勾选多种形态同时生效。①<b>包裹</b>：成对/相同标签删中间（如 &lt;think&gt;…&lt;/think&gt;）；②<b>单标签-留之后</b>：只有开标签时删其<b>之前</b>（如 <code>xxxx &lt;a&gt; 像这种</code> → <code>像这种</code>）；③<b>单标签-留之前</b>：只有开标签时删其<b>之后</b>（如 <code>可见&lt;a&gt;秘密</code> → <code>可见</code>）。</div>
-        <div id="tag-rules"></div>
-        <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
-        <div class="wm-h" style="margin-top:10px">自动抽取子任务</div>
-        <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation?'checked':''}/> 关系图</label>
-        <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot?'checked':''}/> 剧情线</label>
-        <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld?'checked':''}/> 世界观设定</label>
-        <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems?'checked':''}/> 物品追踪</label>
+        <details class="wm-fold" open>
+          <summary>标签过滤（总结时剔除标签包裹内容）</summary>
+          <div class="wm-hint">可自定义多条规则，同一标签也能「多重存在」：勾选多种形态同时生效。①<b>包裹</b>：成对/相同标签删中间（如 &lt;think&gt;…&lt;/think&gt;）；②<b>单标签-留之后</b>：只有开标签时删其<b>之前</b>；③<b>单标签-留之前</b>：只有开标签时删其<b>之后</b>。</div>
+          <div id="tag-rules"></div>
+          <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
+        </details>
+        <details class="wm-fold" open>
+          <summary>自动抽取子任务</summary>
+          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation?'checked':''}/> 关系图</label>
+          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot?'checked':''}/> 剧情线</label>
+          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld?'checked':''}/> 世界观设定</label>
+          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems?'checked':''}/> 物品追踪</label>
+        </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">保存设置</button>
           <button id="a-run" class="wm-btn primary">立即总结</button>
@@ -276,6 +280,18 @@
     };
   }
 
+  // 相对时间（如「3天前」「刚刚」），用于记忆/物品等列表项
+  function relTime(ts) {
+    if (!ts) return '';
+    const d = Date.now() - ts;
+    if (d < 60000) return '刚刚';
+    if (d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+    if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+    if (d < 86400000 * 30) return Math.floor(d / 86400000) + ' 天前';
+    const dt = new Date(ts);
+    return (dt.getMonth() + 1) + '/' + dt.getDate();
+  }
+
   function renderMem(body) {
     const mem = WM.MemoryStore.getMemories();
     let html = `<div class="wm-card"><div class="wm-h">有温度记忆（${mem.length}）</div>
@@ -285,7 +301,7 @@
         <button id="mem-import" class="wm-btn">导入</button>
       </div>
       <div class="wm-list" id="mem-list">`;
-    html += mem.slice().reverse().map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
+    html += mem.slice().reverse().map((m) => `<div class="wm-item">${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ''}${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
     html += `</div></div>`;
     body.innerHTML = html;
     // 导出
@@ -333,11 +349,11 @@
     rels.forEach((r) => {
       const a = pos[r.from], b = pos[r.to];
       if (!a || !b) return;
-      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="#8a9a8b" stroke-width="${r.weight}" stroke-opacity="0.6"/>`;
+      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${r.weight}" stroke-opacity="0.6" class="wm-edge"/>`;
     });
     nodes.forEach((n) => {
-      s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="#5b6e57" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-      s += `<text x="${(n.x+8).toFixed(0)}" y="${(n.y+4).toFixed(0)}" font-size="9" fill="#5b4a3f">${escapeHtml(n.id.length>6?n.id.slice(0,6)+'…':n.id)}</text>`;
+      s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
+      s += `<text x="${(n.x+8).toFixed(0)}" y="${(n.y+4).toFixed(0)}" font-size="9" fill="var(--wm-ink-soft)">${escapeHtml(n.id.length>6?n.id.slice(0,6)+'…':n.id)}</text>`;
     });
     svg.innerHTML = s;
     // 点击节点：显示该实体关系详情
@@ -793,6 +809,6 @@
     t._timer = setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .5s'; }, 3200);
   }
 
-  WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto };
+  WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
 })();
 

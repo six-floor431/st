@@ -1590,15 +1590,19 @@ ${it.desc || ""}` }));
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors ? "checked" : ""}/> \u603B\u7ED3\u540E\u9690\u85CF\u5DF2\u5904\u7406\u697C\u5C42</label>
-        <div class="wm-h" style="margin-top:10px">\u6807\u7B7E\u8FC7\u6EE4\uFF08\u603B\u7ED3\u65F6\u5254\u9664\u6807\u7B7E\u5305\u88F9\u5185\u5BB9\uFF09</div>
-        <div class="wm-hint">\u53EF\u81EA\u5B9A\u4E49\u591A\u6761\u89C4\u5219\uFF0C\u540C\u4E00\u6807\u7B7E\u4E5F\u80FD\u300C\u591A\u91CD\u5B58\u5728\u300D\uFF1A\u52FE\u9009\u591A\u79CD\u5F62\u6001\u540C\u65F6\u751F\u6548\u3002\u2460<b>\u5305\u88F9</b>\uFF1A\u6210\u5BF9/\u76F8\u540C\u6807\u7B7E\u5220\u4E2D\u95F4\uFF08\u5982 &lt;think&gt;\u2026&lt;/think&gt;\uFF09\uFF1B\u2461<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u540E</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u524D</b>\uFF08\u5982 <code>xxxx &lt;a&gt; \u50CF\u8FD9\u79CD</code> \u2192 <code>\u50CF\u8FD9\u79CD</code>\uFF09\uFF1B\u2462<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u524D</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u540E</b>\uFF08\u5982 <code>\u53EF\u89C1&lt;a&gt;\u79D8\u5BC6</code> \u2192 <code>\u53EF\u89C1</code>\uFF09\u3002</div>
-        <div id="tag-rules"></div>
-        <div class="wm-row"><button id="tag-add" class="wm-btn">+ \u65B0\u589E\u6807\u7B7E\u89C4\u5219</button></div>
-        <div class="wm-h" style="margin-top:10px">\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</div>
-        <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation ? "checked" : ""}/> \u5173\u7CFB\u56FE</label>
-        <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
-        <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
-        <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems ? "checked" : ""}/> \u7269\u54C1\u8FFD\u8E2A</label>
+        <details class="wm-fold" open>
+          <summary>\u6807\u7B7E\u8FC7\u6EE4\uFF08\u603B\u7ED3\u65F6\u5254\u9664\u6807\u7B7E\u5305\u88F9\u5185\u5BB9\uFF09</summary>
+          <div class="wm-hint">\u53EF\u81EA\u5B9A\u4E49\u591A\u6761\u89C4\u5219\uFF0C\u540C\u4E00\u6807\u7B7E\u4E5F\u80FD\u300C\u591A\u91CD\u5B58\u5728\u300D\uFF1A\u52FE\u9009\u591A\u79CD\u5F62\u6001\u540C\u65F6\u751F\u6548\u3002\u2460<b>\u5305\u88F9</b>\uFF1A\u6210\u5BF9/\u76F8\u540C\u6807\u7B7E\u5220\u4E2D\u95F4\uFF08\u5982 &lt;think&gt;\u2026&lt;/think&gt;\uFF09\uFF1B\u2461<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u540E</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u524D</b>\uFF1B\u2462<b>\u5355\u6807\u7B7E-\u7559\u4E4B\u524D</b>\uFF1A\u53EA\u6709\u5F00\u6807\u7B7E\u65F6\u5220\u5176<b>\u4E4B\u540E</b>\u3002</div>
+          <div id="tag-rules"></div>
+          <div class="wm-row"><button id="tag-add" class="wm-btn">+ \u65B0\u589E\u6807\u7B7E\u89C4\u5219</button></div>
+        </details>
+        <details class="wm-fold" open>
+          <summary>\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</summary>
+          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation ? "checked" : ""}/> \u5173\u7CFB\u56FE</label>
+          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
+          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
+          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems ? "checked" : ""}/> \u7269\u54C1\u8FFD\u8E2A</label>
+        </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">\u4FDD\u5B58\u8BBE\u7F6E</button>
           <button id="a-run" class="wm-btn primary">\u7ACB\u5373\u603B\u7ED3</button>
@@ -1679,6 +1683,16 @@ ${it.desc || ""}` }));
         }
       };
     }
+    function relTime(ts) {
+      if (!ts) return "";
+      const d = Date.now() - ts;
+      if (d < 6e4) return "\u521A\u521A";
+      if (d < 36e5) return Math.floor(d / 6e4) + " \u5206\u949F\u524D";
+      if (d < 864e5) return Math.floor(d / 36e5) + " \u5C0F\u65F6\u524D";
+      if (d < 864e5 * 30) return Math.floor(d / 864e5) + " \u5929\u524D";
+      const dt = new Date(ts);
+      return dt.getMonth() + 1 + "/" + dt.getDate();
+    }
     function renderMem(body) {
       const mem = WM.MemoryStore.getMemories();
       let html = `<div class="wm-card"><div class="wm-h">\u6709\u6E29\u5EA6\u8BB0\u5FC6\uFF08${mem.length}\uFF09</div>
@@ -1688,7 +1702,7 @@ ${it.desc || ""}` }));
         <button id="mem-import" class="wm-btn">\u5BFC\u5165</button>
       </div>
       <div class="wm-list" id="mem-list">`;
-      html += mem.slice().reverse().map((m) => `<div class="wm-item">${escapeHtml(m.text)}</div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u8BB0\u5FC6\uFF0C\u5148\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u751F\u6210</div>';
+      html += mem.slice().reverse().map((m) => `<div class="wm-item">${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ""}${escapeHtml(m.text)}</div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u8BB0\u5FC6\uFF0C\u5148\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u751F\u6210</div>';
       html += `</div></div>`;
       body.innerHTML = html;
       body.querySelector("#mem-export").onclick = () => {
@@ -1744,11 +1758,11 @@ ${it.desc || ""}` }));
       rels.forEach((r) => {
         const a = pos[r.from], b = pos[r.to];
         if (!a || !b) return;
-        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="#8a9a8b" stroke-width="${r.weight}" stroke-opacity="0.6"/>`;
+        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${r.weight}" stroke-opacity="0.6" class="wm-edge"/>`;
       });
       nodes.forEach((n) => {
-        s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="#5b6e57" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-        s += `<text x="${(n.x + 8).toFixed(0)}" y="${(n.y + 4).toFixed(0)}" font-size="9" fill="#5b4a3f">${escapeHtml(n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id)}</text>`;
+        s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
+        s += `<text x="${(n.x + 8).toFixed(0)}" y="${(n.y + 4).toFixed(0)}" font-size="9" fill="var(--wm-ink-soft)">${escapeHtml(n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id)}</text>`;
       });
       svg.innerHTML = s;
       svg.querySelectorAll(".wm-node").forEach((c) => {
@@ -2207,7 +2221,7 @@ ${it.desc || ""}` }));
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto };
+    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
   })();
 
   // src/index.js
