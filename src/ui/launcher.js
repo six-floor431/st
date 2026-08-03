@@ -169,6 +169,7 @@
             <option value="new" ${s.autoSummaryMode==='new'?'selected':''}>仅新增楼层</option>
             <option value="count" ${s.autoSummaryMode==='count'?'selected':''}>最近 N 条</option>
             <option value="range" ${s.autoSummaryMode==='range'?'selected':''}>自定义楼层区间</option>
+            <option value="floor" ${s.autoSummaryMode==='floor'?'selected':''}>按楼层区间（1-20,21-40…）</option>
           </select>
         </div>
         <div class="wm-row" id="a-count-row" style="${s.autoSummaryMode==='count'?'':'display:none'}">最近条数：
@@ -177,6 +178,9 @@
         <div class="wm-row" id="a-range-row" style="${s.autoSummaryMode==='range'?'':'display:none'}">
           楼层 <input type="number" id="a-start" value="${s.autoSummaryStart}" min="0" style="width:64px"/> ~
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
+        </div>
+        <div class="wm-row" id="a-floor-row" style="${s.autoSummaryMode==='floor'?'':'display:none'}">
+          每 <input type="number" id="a-floor" value="${s.autoSummaryFloor}" min="1" max="500" style="width:64px"/> 层自动总结一段（如填 20：1-20、21-40、41-60…）
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors?'checked':''}/> 总结后隐藏已处理楼层</label>
         <details class="wm-fold" open>
@@ -202,6 +206,7 @@
     mode.onchange = () => {
       body.querySelector('#a-count-row').style.display = mode.value === 'count' ? '' : 'none';
       body.querySelector('#a-range-row').style.display = mode.value === 'range' ? '' : 'none';
+      body.querySelector('#a-floor-row').style.display = mode.value === 'floor' ? '' : 'none';
     };
 
     // 标签过滤规则渲染（同一标签可多重形态并存）
@@ -243,6 +248,7 @@
       s.autoSummaryEnabled = body.querySelector('#a-on').checked;
       s.autoSummaryMode = mode.value;
       s.autoSummaryCount = parseInt(body.querySelector('#a-count').value, 10) || 20;
+      s.autoSummaryFloor = parseInt(body.querySelector('#a-floor').value, 10) || 20;
       s.autoSummaryStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
       s.autoSummaryEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
       s.autoHideFloors = body.querySelector('#a-hide').checked;
@@ -546,6 +552,7 @@
       { key: 'mem', label: '记忆与注入' },
       { key: 'vec', label: '向量与重排' },
       { key: 'lore', label: '世界书' },
+      { key: 'err', label: '错误报告' },
     ];
     const active = (WM._cfgTab) || 'llm';
     body.innerHTML = `
@@ -571,6 +578,7 @@
         else if (key === 'mem') pane.innerHTML = renderPaneMemory(s);
         else if (key === 'vec') pane.innerHTML = renderPaneVector(s);
         else if (key === 'lore') pane.innerHTML = renderPaneLore(s);
+        else if (key === 'err') pane.innerHTML = renderPaneErrors(s);
         bindPaneEvents(body, s);
       };
     });
@@ -751,6 +759,39 @@
     </div>`;
   }
 
+  // 错误报告面板：展示所有捕获到的错误与 bug（来自 WM.ErrLog）
+  function renderPaneErrors(s) {
+    const list = (WM.ErrLog && WM.ErrLog.get) ? WM.ErrLog.get() : [];
+    let pane = `<div class="wm-card">
+      <div class="wm-h">🐞 错误与异常报告</div>
+      <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品/世界书等）运行时抛出的错误与异常都会自动记录在此，便于排查。</div>`;
+    if (!list.length) {
+      pane += `<div class="wm-row wm-muted">当前对话暂无记录的错误。</div>`;
+    } else {
+      pane += `<div class="wm-row wm-muted">共 ${list.length} 条（最新在前）。</div>`;
+      pane += `<div class="wm-err-list">`;
+      for (const it of list) {
+        const t = new Date(it.ts);
+        const time = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+        pane += `<details class="wm-fold wm-err-item">
+          <summary><span class="wm-err-scope">[${escapeHtml(it.scope)}]</span> ${escapeHtml(it.message)} <span class="wm-ts">${time}</span></summary>
+          ${it.extra ? `<div class="wm-err-extra">上下文：${escapeHtml(JSON.stringify(it.extra))}</div>` : ''}
+          ${it.stack ? `<pre class="wm-err-stack">${escapeHtml(it.stack)}</pre>` : ''}
+        </details>`;
+      }
+      pane += `</div>`;
+      pane += `<div class="wm-row"><button id="err-clear" class="wm-btn">清空本报告</button></div>`;
+    }
+    pane += `</div>`;
+    setTimeout(() => {
+      const btn = document.getElementById('err-clear');
+      if (btn) btn.onclick = async () => {
+        if (WM.ErrLog && WM.ErrLog.clear) { await WM.ErrLog.clear(); renderCfg(s); }
+      };
+    }, 0);
+    return pane;
+  }
+
   function escapeHtml(t) { return String(t).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
   function init() {
@@ -769,25 +810,18 @@
   async function autoSummaryHook() {
     const s = WM.Settings.load();
     if (!s.autoSummaryEnabled) return;
-    let range = null;
-    if (s.autoSummaryMode === 'count') {
-      const total = WM.Summary.getChatMessages().length;
-      range = { start: Math.max(0, total - s.autoSummaryCount), end: total - 1 };
-    } else if (s.autoSummaryMode === 'range') {
-      const total = WM.Summary.getChatMessages().length;
-      range = { start: s.autoSummaryStart, end: s.autoSummaryEnd < 0 ? total - 1 : Math.min(s.autoSummaryEnd, total - 1) };
-    }
     setTimeout(async () => {
       try {
-        const r = await WM.Summary.runSummary(s, range);
-        if (r.ok) {
+        const r = await WM.Summary.triggerSummary(s);
+        if (r && r.ok) {
           if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
             await WM.FloorHider.hideUntil(r.range[1]);
           }
-          toast(`🌿 温记：已提炼 ${r.count} 条记忆`);
-        } else {
+          toast(`🌿 温记：已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）`);
+        } else if (r && !r.ok) {
           toast(`🌿 温记：总结未执行（${r.reason}）`);
         }
+        // r 为 false：未到触发区间（如 floor 模式下还没攒够一层），静默跳过
       } catch (e) {
         toast(`🌿 温记：总结失败 - ${e.message || e}`);
       }

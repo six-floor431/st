@@ -399,6 +399,16 @@
   .wm-header { padding: 6px 10px; }
   .wm-tabs button { padding: 6px 10px; }
   .wm-body { padding: 10px; }
+
+/* —— 错误报告面板 —— */
+.wm-err-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; max-height: 420px; overflow: auto; }
+.wm-err-item { border: 1px solid var(--wm-line); border-radius: 8px 2px 8px 2px; background: rgba(156,59,46,.05); padding: 4px 8px; }
+.wm-err-item > summary { cursor: pointer; font-family: var(--wm-font-ui); font-size: 12px; color: var(--wm-ink); display: flex; gap: 6px; align-items: baseline; }
+.wm-err-scope { color: var(--wm-seal); font-weight: 600; flex: none; }
+.wm-err-item .wm-ts { margin-left: auto; color: var(--wm-ink-faint); font-size: 11px; flex: none; }
+.wm-err-extra { font-family: var(--wm-font-ui); font-size: 11px; color: var(--wm-ink-soft); margin: 4px 0; word-break: break-all; }
+.wm-err-stack { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; line-height: 1.5; color: var(--wm-ink-soft); background: rgba(43,43,40,.05); border-radius: 6px; padding: 6px 8px; margin: 4px 0 2px; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow: auto; }
+.wm-muted { color: var(--wm-ink-faint); font-family: var(--wm-font-ui); font-size: 12px; }
 }
 @media (max-width: 360px) {
   .wm-panel,

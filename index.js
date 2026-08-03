@@ -19,15 +19,19 @@
       autoSummaryEnabled: true,
       // 是否开启自动总结
       autoSummaryMode: "new",
-      // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条
+      // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条, 'floor'=按楼层区间(1-20,21-40...)
       autoSummaryCount: 20,
       // count 模式：最近 N 条
       autoSummaryStart: 0,
       // range 模式：起始楼层
       autoSummaryEnd: -1,
       // range 模式：-1 表示到最新
+      autoSummaryFloor: 20,
+      // floor 模式：每多少层触发一段（1-20,21-40,...）
       autoHideFloors: true,
       // 总结后隐藏已处理楼层
+      autoSummaryParallel: true,
+      // 总结后并行调用关系/剧情/世界观/物品（带失败重试）
       // 各自动子任务开关
       autoRelation: true,
       autoPlot: true,
@@ -83,7 +87,8 @@
         summary: "\u4F60\u662F\u6211\u7684\u4E13\u5C5E\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u6309\u300C\u65F6\u95F4\u987A\u5E8F\u300D\u63D0\u70BC\u51FA\u300C\u5173\u952E\u4E8B\u5B9E\u3001\u7EA6\u5B9A\u3001\u72B6\u6001\u53D8\u5316\u3001\u4EBA\u540D/\u5730\u70B9/\u7EC4\u7EC7\u3001\u672A\u5B8C\u6210\u7684\u627F\u8BFA\u6216\u5F85\u529E\u300D\u3002\u4E0D\u8981\u7F16\u9020\uFF0C\u4E0D\u786E\u5B9A\u5C31\u5199\u201C\u672A\u77E5\u201D\u3002\u4EC5\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\uFF0C\u4E0D\u8D85\u8FC7 12 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         relations: "\u4F60\u662F\u5173\u7CFB\u5206\u6790\u5E08\u3002\u8BF7\u57FA\u4E8E\u300C\u5386\u53F2\u603B\u7ED3\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u5206\u6790\u300C\u6211\uFF08\u7528\u6237\uFF09\u4E0E\u89D2\u8272\u4E4B\u95F4\u300D\u7684\u5173\u7CFB\u72B6\u6001\u3001\u4EB2\u5BC6\u5EA6\u3001\u5F20\u529B\u3001\u672A\u89E3\u5FC3\u7ED3\u3002\u8F93\u51FA\u7ED3\u6784\u5316\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5386\u53F2\u603B\u7ED3\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         plot: "\u4F60\u662F\u5267\u60C5\u68B3\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5173\u7CFB\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u68B3\u7406\u5F53\u524D\u5267\u60C5\u4E3B\u7EBF\u3001\u652F\u7EBF\u3001\u60AC\u5FF5\u4E0E\u4E0B\u4E00\u6B65\u53EF\u80FD\u53D1\u5C55\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        worldview: "\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5267\u60C5\u7EBF\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u62BD\u53D6\u672C\u4E16\u754C\u7684\u5173\u952E\u8BBE\u5B9A\uFF1A\u5730\u70B9\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u7269\u54C1\u3001\u6982\u5FF5\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
+        worldview: "\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5267\u60C5\u7EBF\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u62BD\u53D6\u672C\u4E16\u754C\u7684\u5173\u952E\u8BBE\u5B9A\uFF1A\u5730\u70B9\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u7269\u54C1\u3001\u6982\u5FF5\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
+        itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u62BD\u53D6\u672C\u6BB5\u51FA\u73B0\u7684\u300C\u5177\u4F53\u7269\u54C1/\u9053\u5177/\u4FE1\u7269/\u88C5\u5907\u300D\uFF1A\u540D\u79F0\u3001\u63CF\u8FF0\u3001\u5F53\u524D\u6301\u6709\u8005\u3002\u6BCF\u884C\u4E00\u6761\uFF0C\u683C\u5F0F\uFF1A\u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
       }
     };
     function load() {
@@ -175,6 +180,70 @@
       }
     }
     WM.Storage = { get, set, openDB };
+  })();
+
+  // src/config/errlog.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    const FIELD = "warm_memo_errors_v1";
+    const MAX = 200;
+    function getMeta() {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+      const md = ctx && ctx.chatMetadata;
+      if (md && typeof md === "object" && !Array.isArray(md)) return md;
+      return null;
+    }
+    function load() {
+      const md = getMeta();
+      const raw = md && md[FIELD];
+      if (!raw) return [];
+      try {
+        return Array.isArray(raw) ? raw : Array.isArray(raw.list) ? raw.list : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    async function persist(list) {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+      if (!ctx || !ctx.updateChatMetadata) {
+        console.error("[WarmMemo] \u9519\u8BEF\u65E5\u5FD7\u65E0\u6CD5\u6301\u4E45\u5316\uFF1A\u65E0 updateChatMetadata");
+        return;
+      }
+      try {
+        ctx.updateChatMetadata({ [FIELD]: list.slice(-MAX) }, false);
+        if (typeof ctx.saveMetadata === "function") await ctx.saveMetadata();
+      } catch (e) {
+        console.error("[WarmMemo] \u9519\u8BEF\u65E5\u5FD7\u6301\u4E45\u5316\u5931\u8D25", e);
+      }
+    }
+    async function add(scope, err, extra) {
+      const item = {
+        id: "err_" + Date.now() + "_" + Math.floor(Math.random() * 1e3),
+        ts: Date.now(),
+        scope: scope || "unknown",
+        message: err && err.message ? err.message : String(err || "\u672A\u77E5\u9519\u8BEF"),
+        stack: err && err.stack ? String(err.stack).slice(0, 2e3) : "",
+        extra: extra || null
+      };
+      const list = load();
+      list.push(item);
+      if (list.length > MAX) list.splice(0, list.length - MAX);
+      await persist(list);
+      console.error("[WarmMemo][" + (scope || "unknown") + "]", item.message, item.extra || "");
+      return item;
+    }
+    function get() {
+      return load().slice().reverse();
+    }
+    async function clear() {
+      await persist([]);
+    }
+    function last() {
+      const l = load();
+      return l.length ? l[l.length - 1] : null;
+    }
+    WM.ErrLog = { add, get, clear, last };
   })();
 
   // src/config/memory-store.js
@@ -1017,187 +1086,188 @@ ${recent}
     const WM = window.WarmMemo || (window.WarmMemo = {});
     function fillTemplate(tpl, data) {
       if (!tpl) return "";
-      return String(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => data && data[k] != null ? data[k] : "");
-    }
-    async function callLLM(system, user, settings, opts) {
-      settings = settings || WM.Settings.load();
-      opts = opts || {};
-      const profile = settings.llmConfig || { source: "local" };
-      const prefix = WM.LLMClient.resolvePrefix(settings);
-      const prompt = [...prefix, { role: "system", content: system }, { role: "user", content: user }];
-      const out = await WM.LLMClient.complete(prompt, {
-        temperature: opts.temperature != null ? opts.temperature : 0.3,
-        maxTokens: opts.maxTokens != null ? opts.maxTokens : profile.maxTokens || 700,
-        profile
+      return String(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, function(_, k) {
+        return data && data[k] != null ? String(data[k]) : "";
       });
-      return out || "";
     }
-    function dedupeMemory(text, range) {
-      const s = WM.MemoryStore.load();
-      const t = text.trim();
-      const sim = s.memories.find((m) => m.text === t || m.text.includes(t) || t.includes(m.text));
-      if (sim) {
-        sim.text = t;
-        sim.ts = Date.now();
-        if (range) sim.range = range;
-        WM.MemoryStore.save(s);
-        return sim.id;
-      }
-      return WM.MemoryStore.addMemory(t, range);
-    }
-    function escapeRegExp(s) {
-      return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    }
-    function stripTagged(text, rules) {
-      if (!text) return text;
-      const list = rules && rules.filter((r) => r && r.enabled && r.open) || [];
-      if (!list.length) return text;
-      let out = text;
-      for (const r of list) {
-        const open = escapeRegExp(r.open);
-        if (r.wrap && r.close) {
-          if (r.close !== r.open) {
-            out = out.replace(new RegExp(open + "[\\s\\S]*?" + escapeRegExp(r.close), "g"), "");
-          } else {
-            const m = r.open.match(/<([^>\s/]+)/);
-            if (m) {
-              const name = escapeRegExp(m[1]);
-              out = out.replace(new RegExp("<" + name + "[\\s\\S]*?</" + name + ">", "g"), "");
-            }
-          }
-        }
-        if (r.singleBefore) {
-          out = out.replace(new RegExp("[\\s\\S]*?" + open, "g"), "");
-        }
-        if (r.singleAfter) {
-          out = out.replace(new RegExp(open + "[\\s\\S]*", "g"), "");
-        }
-      }
-      return out.replace(/\n{3,}/g, "\n\n").replace(/^\s+|\s+$/g, "");
-    }
-    function getChatMessages() {
-      const rules = (WM.Settings.load() || {}).tagStripRules;
+    function getRecentMessages(n) {
       try {
-        const ctx = window.SillyTavern && window.SillyTavern.getContext();
-        const msgs = ctx && ctx.chat || [];
-        return msgs.map((m, i) => ({
-          index: i,
-          name: m.name || (m.is_user ? "\u7528\u6237" : "\u89D2\u8272"),
-          text: stripTagged(m.mes || "", rules)
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+        const chat = ctx && ctx.chat;
+        if (!Array.isArray(chat)) return [];
+        const sliced = chat.slice(-(n || 40));
+        return sliced.map((m) => ({
+          role: m.is_user ? "user" : "assistant",
+          content: m.mes || "",
+          name: m.name || ""
         }));
       } catch (e) {
         return [];
       }
     }
-    async function runSummary(settings, range) {
-      settings = settings || WM.Settings.load();
-      const msgs = getChatMessages();
-      if (!msgs.length) return { ok: false, reason: "no_messages" };
-      let start = range && range.start != null ? range.start : WM.MemoryStore.getSummaryPointer();
-      let end = range && range.end != null ? range.end : msgs.length - 1;
-      start = Math.max(0, start);
-      end = Math.min(msgs.length - 1, end);
-      if (end < start) return { ok: false, reason: "empty_range" };
-      const slice = msgs.slice(start, end + 1).map((m) => `${m.name}\uFF1A${m.text}`).join("\n");
-      const prevMem = WM.MemoryStore.getMemories().slice(-20).map((m) => m.text).join("\n");
-      const char = WM.Worldbook.getCharacterCard && WM.Worldbook.getCharacterCard() || {};
-      const user = WM.Worldbook.getUserCard && WM.Worldbook.getUserCard() || {};
-      const lore = WM.Worldbook.getLorebookEntries && await WM.Worldbook.getLorebookEntries() || [];
-      const loreTxt = lore.length ? lore.map((l) => `\xB7 ${l.key}: ${l.content.slice(0, 160)}`).join("\n") : "\uFF08\u65E0\uFF09";
-      const sysTpl = settings.prompts && settings.prompts.summary || "\u4F60\u662F\u6211\u7684\u4E13\u5C5E\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u6309\u65F6\u95F4\u987A\u5E8F\u63D0\u70BC\u5173\u952E\u4E8B\u5B9E\u3001\u7EA6\u5B9A\u3001\u72B6\u6001\u53D8\u5316\u3001\u4EBA\u540D/\u5730\u70B9/\u7EC4\u7EC7\u3001\u672A\u5B8C\u6210\u5F85\u529E\u3002\u6BCF\u6761\u4E00\u884C\uFF0C\u4E0D\u8D85\u8FC7 12 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}";
-      const sys = fillTemplate(sysTpl, { recent: slice });
-      let userMsg = `\u3010\u89D2\u8272\u8BBE\u5B9A\u3011${char.name || "\u672A\u77E5"}\uFF1A${char.description || ""} | \u6027\u683C\uFF1A${char.personality || ""}
-`;
-      userMsg += `\u3010\u7528\u6237\u8BBE\u5B9A\u3011${user.name || "\u672A\u77E5"}\uFF1A${user.description || ""}
-`;
-      userMsg += `\u3010\u4E16\u754C\u4E66\u3011${loreTxt}
-`;
-      userMsg += `\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011
-${prevMem || "\uFF08\u65E0\uFF09"}
-
-`;
-      userMsg += `\u3010\u65B0\u5BF9\u8BDD\uFF08\u697C\u5C42 ${start}-${end}\uFF09\u3011
-${slice}
-
-\u8BF7\u8F93\u51FA\u672C\u6B21\u63D0\u70BC\u7684\u8BB0\u5FC6\uFF1A`;
-      const out = await callLLM(sys, userMsg, settings, { temperature: 0.35 });
-      if (!out || !out.trim()) return { ok: false, reason: "llm_empty_or_failed" };
-      const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
-      for (const line of lines) await dedupeMemory(line, [start, end]);
-      const dateLabel = (/* @__PURE__ */ new Date()).toLocaleString("zh-CN");
-      await WM.MemoryStore.addSummary(out, "summary", dateLabel);
-      await WM.MemoryStore.setSummaryPointer(end + 1);
-      const results = { relations: 0, plots: 0, world: false, items: 0 };
-      if (settings.autoRelation) {
-        try {
-          const rels = await WM.Relations.extractRelations(lines.join("\n"), settings);
-          results.relations = rels.length;
-          const merged = WM.Relations.mergeRelations(WM.MemoryStore.getRelations(), rels);
-          await WM.MemoryStore.setRelations(merged);
-        } catch (e) {
-          results.relationsErr = e.message;
-        }
-      }
-      if (settings.autoPlot) {
-        try {
-          const plots = await WM.Plot.extractPlots(settings);
-          if (plots.length) {
-            const s = WM.MemoryStore.load();
-            s.plots = plots.map((p) => ({ id: "pl_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), title: p.title, summary: p.summary, status: p.status, ts: Date.now() }));
-            await WM.MemoryStore.save(s);
-            for (const p of plots) await WM.MemoryStore.addSummary(p.summary, "plot", p.title);
-            results.plots = plots.length;
-          }
-        } catch (e) {
-          results.plotsErr = e.message;
-        }
-      }
-      if (settings.autoWorld) {
-        try {
-          const world = await WM.Worldbook.inferWorldview(settings);
-          if (world) {
-            await WM.MemoryStore.setWorld(world);
-            results.world = true;
-          }
-        } catch (e) {
-          results.worldErr = e.message;
-        }
-      }
-      if (settings.autoItems) {
-        try {
-          const items = await extractItems(settings, lines.join("\n"));
-          if (items.length) {
-            for (const it of items) await WM.MemoryStore.addItem(it.name, it.desc, it.owner);
-            results.items = items.length;
-          }
-        } catch (e) {
-          results.itemsErr = e.message;
-        }
-      }
-      return { ok: true, count: lines.length, range: [start, end], results };
+    function toMessages(msgs) {
+      return msgs.map((m) => ({
+        role: m.role,
+        content: (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content
+      }));
     }
-    async function extractItems(settings, text) {
-      const msgs = getChatMessages();
-      const recent = msgs.slice(-30).map((m) => `${m.name}\uFF1A${m.text}`).join("\n");
-      const sys = `\u4ECE\u5BF9\u8BDD\u4E2D\u8BC6\u522B\u3010\u7269\u54C1/\u9053\u5177/\u6301\u6709\u7269\u3011\u7684\u65B0\u589E\u6216\u72B6\u6001\u53D8\u5316\u3002\u6BCF\u884C\u4E00\u6761\uFF0C\u683C\u5F0F\uFF1A\u7269\u54C1\u540D|\u63CF\u8FF0|\u6301\u6709\u8005/\u6240\u5C5E\u3002
-\u53EA\u5217\u660E\u786E\u63D0\u5230\u7684\uFF1B\u65E0\u5219\u8F93\u51FA\u7A7A\u3002\u6700\u591A 12 \u6761\u3002`;
+    async function callLLM(systemText, userText, settings, opts) {
+      opts = opts || {};
+      const maxRetry = opts.maxRetry != null ? opts.maxRetry : 3;
+      let lastErr = null;
+      for (let attempt = 1; attempt <= maxRetry; attempt++) {
+        try {
+          const out = await WM.LLMClient.complete(systemText, userText, settings, opts);
+          const text = out && out.trim && out.trim() || "";
+          if (!text) throw new Error("\u6A21\u578B\u8FD4\u56DE\u7A7A\u5185\u5BB9");
+          return text;
+        } catch (e) {
+          lastErr = e;
+          if (attempt < maxRetry) {
+            if (WM.ErrLog) await WM.ErrLog.add("llm", e, { phase: opts.phase || "unknown", attempt, willRetry: true });
+            await new Promise((r) => setTimeout(r, 1e3));
+          }
+        }
+      }
+      if (WM.ErrLog) await WM.ErrLog.add("llm", lastErr || new Error("\u672A\u77E5LLM\u5931\u8D25"), { phase: opts.phase || "unknown", attempt: maxRetry, willRetry: false });
+      throw lastErr || new Error("LLM \u8C03\u7528\u5931\u8D25");
+    }
+    async function triggerSummary(settings) {
+      settings = settings || {};
+      const auto = settings.autoSummaryMode || "new";
+      if (!settings.autoSummaryEnabled) return false;
+      let range, total;
+      const msgs = getRecentMessages(1e3);
+      total = msgs.length;
+      if (auto === "new") {
+        const ptr = WM.MemoryStore.getSummaryPointer();
+        if (ptr >= total) return false;
+        range = [ptr + 1, total];
+      } else if (auto === "count") {
+        const win = Math.max(5, settings.autoSummaryCount || 20);
+        const from = Math.max(0, total - win);
+        range = [from + 1, total];
+      } else if (auto === "range") {
+        const start = Math.max(1, settings.autoSummaryStart || 1);
+        let end = settings.autoSummaryEnd;
+        if (end == null || end < 0) end = total;
+        end = Math.min(end, total);
+        if (start > end) return false;
+        range = [start, end];
+      } else if (auto === "floor") {
+        const floor = Math.max(1, settings.autoSummaryFloor || 20);
+        const ptr = WM.MemoryStore.getSummaryPointer();
+        const segEnd = Math.floor(ptr / floor) * floor + floor;
+        if (total < segEnd) return false;
+        const start = ptr + 1;
+        const end = Math.min(total, segEnd);
+        range = [start, end];
+      } else {
+        return false;
+      }
+      const recent = msgs.slice(range[0] - 1, range[1]);
+      if (!recent.length) return false;
+      const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
+      const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
+      const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
+      const summaryTpl = settings.prompts && settings.prompts.summary;
+      const sys = fillTemplate(summaryTpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+      let summaryText = "";
       try {
-        const raw = await callLLM(sys, `\u3010\u8FD1\u671F\u5BF9\u8BDD\u3011
-${recent}
-\u3010\u672C\u6279\u8BB0\u5FC6\u3011
-${text}
-
-\u8BF7\u5217\u51FA\u7269\u54C1\uFF1A`, settings, { maxTokens: 500 });
-        if (!raw) return [];
-        return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
-          const [name, desc, owner] = l.split("|").map((x) => x.trim());
-          return name ? { name, desc: desc || "", owner: owner || "" } : null;
-        }).filter(Boolean);
+        summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
+        await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
+        await WM.MemoryStore.setSummaryPointer(range[1]);
       } catch (e) {
-        return [];
+        if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
+        WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
+        return { ok: false, range, reason: e && e.message ? e.message : String(e) };
       }
+      const tasks = [];
+      const labels = [];
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.relations;
+        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries });
+        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
+        let parsed = [];
+        try {
+          const arr = JSON.parse(out);
+          if (Array.isArray(arr)) parsed = arr;
+        } catch (e) {
+          parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+            const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+            return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: "", label: "" };
+          });
+        }
+        await WM.MemoryStore.setRelations(parsed);
+        return { kind: "relations", ok: true };
+      })());
+      labels.push("relations");
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.plot;
+        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries, relations: relationsText });
+        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u5F53\u524D\u5267\u60C5\u7EBF\uFF08\u6807\u9898\uFF5C\u6458\u8981\uFF0C\u6BCF\u884C\u4E00\u6761\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
+        const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+        for (const ln of lines) {
+          const idx = ln.indexOf("\uFF5C");
+          const idx2 = ln.indexOf("|");
+          const sep = idx >= 0 ? idx : idx2;
+          if (sep >= 0) await WM.MemoryStore.addPlot(ln.slice(0, sep).trim(), ln.slice(sep + 1).trim(), "active");
+          else await WM.MemoryStore.addPlot(ln, "", "active");
+        }
+        return { kind: "plot", ok: true };
+      })());
+      labels.push("plot");
+      tasks.push((async () => {
+        const world = await WM.Worldbook.inferWorldview(settings, { recent });
+        if (world && world.trim()) await WM.MemoryStore.setWorld(world);
+        return { kind: "worldview", ok: true };
+      })());
+      labels.push("worldview");
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.itemExtract;
+        if (!tpl) return { kind: "items", ok: true, skipped: true };
+        const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n") });
+        const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+        const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+        for (const ln of lines) {
+          const parts = ln.split(/[｜|]/);
+          if (parts[0] && parts[0].trim()) await WM.MemoryStore.addItem(parts[0].trim(), parts[1] ? parts[1].trim() : "", parts[2] ? parts[2].trim() : "");
+        }
+        return { kind: "items", ok: true };
+      })());
+      labels.push("items");
+      const results = await Promise.allSettled(tasks);
+      const failures = [];
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          const scope = labels[i];
+          failures.push({ scope, err: r.reason });
+          if (WM.ErrLog) WM.ErrLog.add(scope, r.reason, { range }).catch(() => {
+          });
+        }
+      });
+      if (failures.length === results.length && failures.length > 0) {
+        const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
+        if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u6240\u6709\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, reason });
+        WM.UI && WM.UI.toast && WM.UI.toast("\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
+      } else if (failures.length > 0) {
+        const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B");
+        WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF1A" + reason, "warn");
+      }
+      if (WM.UI && WM.UI.refresh) WM.UI.refresh();
+      return {
+        ok: true,
+        range,
+        count: recent.length,
+        results: {
+          relations: (WM.MemoryStore.getRelations() || []).length,
+          plots: (WM.MemoryStore.getPlots() || []).length,
+          world: !!(WM.MemoryStore.getWorld() || "").trim(),
+          items: (WM.MemoryStore.getItems ? WM.MemoryStore.getItems() : []).length
+        }
+      };
     }
-    WM.Summary = { callLLM, runSummary, getChatMessages, extractItems, stripTagged, fillTemplate };
+    WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages };
   })();
 
   // src/config/relations.js
@@ -1580,6 +1650,7 @@ ${it.desc || ""}` }));
             <option value="new" ${s.autoSummaryMode === "new" ? "selected" : ""}>\u4EC5\u65B0\u589E\u697C\u5C42</option>
             <option value="count" ${s.autoSummaryMode === "count" ? "selected" : ""}>\u6700\u8FD1 N \u6761</option>
             <option value="range" ${s.autoSummaryMode === "range" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u697C\u5C42\u533A\u95F4</option>
+            <option value="floor" ${s.autoSummaryMode === "floor" ? "selected" : ""}>\u6309\u697C\u5C42\u533A\u95F4\uFF081-20,21-40\u2026\uFF09</option>
           </select>
         </div>
         <div class="wm-row" id="a-count-row" style="${s.autoSummaryMode === "count" ? "" : "display:none"}">\u6700\u8FD1\u6761\u6570\uFF1A
@@ -1588,6 +1659,9 @@ ${it.desc || ""}` }));
         <div class="wm-row" id="a-range-row" style="${s.autoSummaryMode === "range" ? "" : "display:none"}">
           \u697C\u5C42 <input type="number" id="a-start" value="${s.autoSummaryStart}" min="0" style="width:64px"/> ~
           <input type="number" id="a-end" value="${s.autoSummaryEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
+        </div>
+        <div class="wm-row" id="a-floor-row" style="${s.autoSummaryMode === "floor" ? "" : "display:none"}">
+          \u6BCF <input type="number" id="a-floor" value="${s.autoSummaryFloor}" min="1" max="500" style="width:64px"/> \u5C42\u81EA\u52A8\u603B\u7ED3\u4E00\u6BB5\uFF08\u5982\u586B 20\uFF1A1-20\u300121-40\u300141-60\u2026\uFF09
         </div>
         <label class="wm-row"><input type="checkbox" id="a-hide" ${s.autoHideFloors ? "checked" : ""}/> \u603B\u7ED3\u540E\u9690\u85CF\u5DF2\u5904\u7406\u697C\u5C42</label>
         <details class="wm-fold" open>
@@ -1613,6 +1687,7 @@ ${it.desc || ""}` }));
       mode.onchange = () => {
         body.querySelector("#a-count-row").style.display = mode.value === "count" ? "" : "none";
         body.querySelector("#a-range-row").style.display = mode.value === "range" ? "" : "none";
+        body.querySelector("#a-floor-row").style.display = mode.value === "floor" ? "" : "none";
       };
       function renderTagRules() {
         const box = body.querySelector("#tag-rules");
@@ -1650,6 +1725,7 @@ ${it.desc || ""}` }));
         s.autoSummaryEnabled = body.querySelector("#a-on").checked;
         s.autoSummaryMode = mode.value;
         s.autoSummaryCount = parseInt(body.querySelector("#a-count").value, 10) || 20;
+        s.autoSummaryFloor = parseInt(body.querySelector("#a-floor").value, 10) || 20;
         s.autoSummaryStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
         s.autoSummaryEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
         s.autoHideFloors = body.querySelector("#a-hide").checked;
@@ -1967,7 +2043,8 @@ ${it.desc || ""}` }));
         { key: "llm", label: "LLM \u8C03\u7528" },
         { key: "mem", label: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165" },
         { key: "vec", label: "\u5411\u91CF\u4E0E\u91CD\u6392" },
-        { key: "lore", label: "\u4E16\u754C\u4E66" }
+        { key: "lore", label: "\u4E16\u754C\u4E66" },
+        { key: "err", label: "\u9519\u8BEF\u62A5\u544A" }
       ];
       const active = WM._cfgTab || "llm";
       body.innerHTML = `
@@ -1991,6 +2068,7 @@ ${it.desc || ""}` }));
           else if (key === "mem") pane.innerHTML = renderPaneMemory(s);
           else if (key === "vec") pane.innerHTML = renderPaneVector(s);
           else if (key === "lore") pane.innerHTML = renderPaneLore(s);
+          else if (key === "err") pane.innerHTML = renderPaneErrors(s);
           bindPaneEvents(body, s);
         };
       });
@@ -2165,6 +2243,40 @@ ${it.desc || ""}` }));
       <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook ? "checked" : ""}/> \u62C6\u5206\u5199\u5165\u4E16\u754C\u4E66\u6761\u76EE\uFF08\u603B\u7ED3/\u7269\u54C1/\u5173\u7CFB\u5404\u81EA\u72EC\u7ACB\u6761\u76EE\uFF09</label>
     </div>`;
     }
+    function renderPaneErrors(s) {
+      const list = WM.ErrLog && WM.ErrLog.get ? WM.ErrLog.get() : [];
+      let pane = `<div class="wm-card">
+      <div class="wm-h">\u{1F41E} \u9519\u8BEF\u4E0E\u5F02\u5E38\u62A5\u544A</div>
+      <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1/\u4E16\u754C\u4E66\u7B49\uFF09\u8FD0\u884C\u65F6\u629B\u51FA\u7684\u9519\u8BEF\u4E0E\u5F02\u5E38\u90FD\u4F1A\u81EA\u52A8\u8BB0\u5F55\u5728\u6B64\uFF0C\u4FBF\u4E8E\u6392\u67E5\u3002</div>`;
+      if (!list.length) {
+        pane += `<div class="wm-row wm-muted">\u5F53\u524D\u5BF9\u8BDD\u6682\u65E0\u8BB0\u5F55\u7684\u9519\u8BEF\u3002</div>`;
+      } else {
+        pane += `<div class="wm-row wm-muted">\u5171 ${list.length} \u6761\uFF08\u6700\u65B0\u5728\u524D\uFF09\u3002</div>`;
+        pane += `<div class="wm-err-list">`;
+        for (const it of list) {
+          const t = new Date(it.ts);
+          const time = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}`;
+          pane += `<details class="wm-fold wm-err-item">
+          <summary><span class="wm-err-scope">[${escapeHtml(it.scope)}]</span> ${escapeHtml(it.message)} <span class="wm-ts">${time}</span></summary>
+          ${it.extra ? `<div class="wm-err-extra">\u4E0A\u4E0B\u6587\uFF1A${escapeHtml(JSON.stringify(it.extra))}</div>` : ""}
+          ${it.stack ? `<pre class="wm-err-stack">${escapeHtml(it.stack)}</pre>` : ""}
+        </details>`;
+        }
+        pane += `</div>`;
+        pane += `<div class="wm-row"><button id="err-clear" class="wm-btn">\u6E05\u7A7A\u672C\u62A5\u544A</button></div>`;
+      }
+      pane += `</div>`;
+      setTimeout(() => {
+        const btn = document.getElementById("err-clear");
+        if (btn) btn.onclick = async () => {
+          if (WM.ErrLog && WM.ErrLog.clear) {
+            await WM.ErrLog.clear();
+            renderCfg(s);
+          }
+        };
+      }, 0);
+      return pane;
+    }
     function escapeHtml(t) {
       return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     }
@@ -2181,23 +2293,15 @@ ${it.desc || ""}` }));
     async function autoSummaryHook() {
       const s = WM.Settings.load();
       if (!s.autoSummaryEnabled) return;
-      let range = null;
-      if (s.autoSummaryMode === "count") {
-        const total = WM.Summary.getChatMessages().length;
-        range = { start: Math.max(0, total - s.autoSummaryCount), end: total - 1 };
-      } else if (s.autoSummaryMode === "range") {
-        const total = WM.Summary.getChatMessages().length;
-        range = { start: s.autoSummaryStart, end: s.autoSummaryEnd < 0 ? total - 1 : Math.min(s.autoSummaryEnd, total - 1) };
-      }
       setTimeout(async () => {
         try {
-          const r = await WM.Summary.runSummary(s, range);
-          if (r.ok) {
+          const r = await WM.Summary.triggerSummary(s);
+          if (r && r.ok) {
             if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
               await WM.FloorHider.hideUntil(r.range[1]);
             }
-            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6`);
-          } else {
+            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09`);
+          } else if (r && !r.ok) {
             toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u603B\u7ED3\u672A\u6267\u884C\uFF08${r.reason}\uFF09`);
           }
         } catch (e) {

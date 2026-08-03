@@ -3,6 +3,7 @@
 // 用 esbuild 打包为本目录的 index.js（单产物，供酒馆加载，零子请求）。
 import './config/settings.js';
 import './config/storage.js';
+import './config/errlog.js';
 import './config/memory-store.js';
 import './config/llm-client.js';
 import './config/vector-store.js';

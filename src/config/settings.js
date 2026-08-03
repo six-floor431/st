@@ -17,11 +17,13 @@
     rerankModel: '',
     // 自动总结楼层设置（自定义）
     autoSummaryEnabled: true,     // 是否开启自动总结
-    autoSummaryMode: 'new',       // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条
+    autoSummaryMode: 'new',       // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条, 'floor'=按楼层区间(1-20,21-40...)
     autoSummaryCount: 20,         // count 模式：最近 N 条
     autoSummaryStart: 0,          // range 模式：起始楼层
     autoSummaryEnd: -1,           // range 模式：-1 表示到最新
+    autoSummaryFloor: 20,         // floor 模式：每多少层触发一段（1-20,21-40,...）
     autoHideFloors: true,          // 总结后隐藏已处理楼层
+    autoSummaryParallel: true,    // 总结后并行调用关系/剧情/世界观/物品（带失败重试）
     // 各自动子任务开关
     autoRelation: true,
     autoPlot: true,
@@ -73,6 +75,7 @@
       relations: '你是关系分析师。请基于「历史总结」和「最近对话」，分析「我（用户）与角色之间」的关系状态、亲密度、张力、未解心结。输出结构化条目，每条一行。\n\n【历史总结】\n{{historySummary}}\n\n【最近对话】\n{{recent}}',
       plot: '你是剧情梳理者。请基于「关系」和「最近对话」，梳理当前剧情主线、支线、悬念与下一步可能发展。输出条目，每条一行。\n\n【关系】\n{{relations}}\n\n【最近对话】\n{{recent}}',
       worldview: '你是世界观提炼者。请基于「剧情线」和「最近对话」，抽取本世界的关键设定：地点、势力、规则、物品、概念。输出条目，每条一行。\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}',
+      itemExtract: '你是物品记录员。请基于「最近对话」，抽取本段出现的「具体物品/道具/信物/装备」：名称、描述、当前持有者。每行一条，格式：物品名｜描述｜持有者。\n\n【最近对话】\n{{recent}}',
     },
   };
 
