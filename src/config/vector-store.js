@@ -58,7 +58,13 @@
   // 计算文本向量（若 embedding 已配置），否则返回 null
   async function embed(text, settings) {
     settings = settings || WM.Settings.load();
-    if (!settings.vectorEnabled || !settings.embeddingBaseUrl || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+    if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+    // 判断向量是否真正可用：兼容 cloud(用 embeddingBaseUrl) / 本地反代 / Ollama(用 embeddingProxyPath)
+    const hasEndpoint =
+      !!settings.embeddingBaseUrl ||
+      settings.embeddingSource === 'localProxy' && !!settings.embeddingProxyPath ||
+      settings.embeddingSource === 'ollama';
+    if (!hasEndpoint) return null;
     try { return await WM.EmbeddingClient.embed(text, settings); } catch (e) { return null; }
   }
 
@@ -69,7 +75,8 @@
     if (!settings.vectorEnabled) { _enabled = false; return memories.slice(-topK); }
     _enabled = true;
     const vec = await embed(query, settings);
-    if (!vec) return memories.slice(-topK); // 无向量能力则回退最近 N 条
+    if (!vec) { try { console.log('[WarmMemo] 向量未启用/不可用，检索回退为最近 N 条'); } catch (e) {} return memories.slice(-topK); } // 无向量能力则回退最近 N 条
+    try { console.log('[WarmMemo] 已真正调用向量 embed，维度=', vec.length); } catch (e) {}
     const stored = await getAll();
     const map = {};
     stored.forEach((r) => (map[r.id] = r.vector));
@@ -86,6 +93,7 @@
       .sort((a, b) => b.score - a.score);
     if (settings.rerankEnabled && WM.RerankClient && WM.RerankClient.rerank) {
       const docs = scored.map((x) => x.m.text);
+      try { console.log('[WarmMemo] 已真正调用重排序 rerank，文档数=', docs.length); } catch (e) {}
       const rs = await WM.RerankClient.rerank(query, docs, settings, {});
       if (rs) { scored.forEach((x, i) => (x.score = rs[i])); scored.sort((a, b) => b.score - a.score); }
     }

@@ -890,7 +890,9 @@ ${it.message}`;
     }
     async function embed(text, settings) {
       settings = settings || WM.Settings.load();
-      if (!settings.vectorEnabled || !settings.embeddingBaseUrl || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+      if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+      const hasEndpoint = !!settings.embeddingBaseUrl || settings.embeddingSource === "localProxy" && !!settings.embeddingProxyPath || settings.embeddingSource === "ollama";
+      if (!hasEndpoint) return null;
       try {
         return await WM.EmbeddingClient.embed(text, settings);
       } catch (e) {
@@ -906,7 +908,17 @@ ${it.message}`;
       }
       _enabled = true;
       const vec = await embed(query, settings);
-      if (!vec) return memories.slice(-topK);
+      if (!vec) {
+        try {
+          console.log("[WarmMemo] \u5411\u91CF\u672A\u542F\u7528/\u4E0D\u53EF\u7528\uFF0C\u68C0\u7D22\u56DE\u9000\u4E3A\u6700\u8FD1 N \u6761");
+        } catch (e) {
+        }
+        return memories.slice(-topK);
+      }
+      try {
+        console.log("[WarmMemo] \u5DF2\u771F\u6B63\u8C03\u7528\u5411\u91CF embed\uFF0C\u7EF4\u5EA6=", vec.length);
+      } catch (e) {
+      }
       const stored = await getAll();
       const map = {};
       stored.forEach((r) => map[r.id] = r.vector);
@@ -922,6 +934,10 @@ ${it.message}`;
       let scored = memories.map((m) => ({ m, score: map[m.id] ? cosine(vec, map[m.id]) : -1 })).filter((x) => x.score > 0.1).sort((a, b) => b.score - a.score);
       if (settings.rerankEnabled && WM.RerankClient && WM.RerankClient.rerank) {
         const docs = scored.map((x) => x.m.text);
+        try {
+          console.log("[WarmMemo] \u5DF2\u771F\u6B63\u8C03\u7528\u91CD\u6392\u5E8F rerank\uFF0C\u6587\u6863\u6570=", docs.length);
+        } catch (e) {
+        }
         const rs = await WM.RerankClient.rerank(query, docs, settings, {});
         if (rs) {
           scored.forEach((x, i) => x.score = rs[i]);
