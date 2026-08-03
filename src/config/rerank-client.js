@@ -70,13 +70,27 @@
           return_documents: false,
         });
       }
-      const r = await fetch(finalUrl, {
-        method: useGet ? 'GET' : 'POST',
-        signal: ctrl.signal,
-        headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
-        body,
-      });
-      const j = await r.json();
+      let r;
+      try {
+        r = await fetch(finalUrl, {
+          method: useGet ? 'GET' : 'POST',
+          signal: ctrl.signal,
+          headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
+          body,
+        });
+      } catch (netErr) {
+        const msg = String(netErr && netErr.message ? netErr.message : netErr);
+        const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
+        throw new Error(
+          (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
+          ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。'
+        );
+      }
+      const rawText = await r.text();
+      if (!r.ok) throw new Error('rerank 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+      let j;
+      try { j = JSON.parse(rawText); }
+      catch (e) { throw new Error('rerank 返回非 JSON（HTTP ' + r.status + '）：' + rawText.slice(0, 200)); }
       // 返回与 documents 同序的 score 数组
       const scoreMap = {};
       (j.results || []).forEach((it) => {

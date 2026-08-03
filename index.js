@@ -1030,13 +1030,31 @@ ${it.message}`;
       } else {
         body = JSON.stringify({ model, input });
       }
-      const r = await fetch(finalUrl, {
-        method: useGet ? "GET" : "POST",
-        headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
-        body
-      });
-      const j = await r.json();
-      if (!j.data) throw new Error("embedding \u8FD4\u56DE\u5F02\u5E38: " + JSON.stringify(j).slice(0, 200));
+      let r;
+      try {
+        r = await fetch(finalUrl, {
+          method: useGet ? "GET" : "POST",
+          headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
+          body
+        });
+      } catch (netErr) {
+        const msg = String(netErr && netErr.message ? netErr.message : netErr);
+        const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
+        throw new Error(
+          (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u3002"
+        );
+      }
+      const rawText = await r.text();
+      if (!r.ok) {
+        throw new Error("embedding \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+      }
+      let j;
+      try {
+        j = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error("embedding \u8FD4\u56DE\u975E JSON\uFF08HTTP " + r.status + "\uFF09\uFF1A" + rawText.slice(0, 200));
+      }
+      if (!j.data) throw new Error("embedding \u8FD4\u56DE\u5F02\u5E38\uFF08\u7F3A\u5C11 data \u5B57\u6BB5\uFF09\uFF1A" + rawText.slice(0, 200));
       const vecs = j.data.map((d) => d.embedding);
       return Array.isArray(texts) ? vecs : vecs[0];
     }
@@ -1117,13 +1135,29 @@ ${it.message}`;
             return_documents: false
           });
         }
-        const r = await fetch(finalUrl, {
-          method: useGet ? "GET" : "POST",
-          signal: ctrl.signal,
-          headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
-          body
-        });
-        const j = await r.json();
+        let r;
+        try {
+          r = await fetch(finalUrl, {
+            method: useGet ? "GET" : "POST",
+            signal: ctrl.signal,
+            headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
+            body
+          });
+        } catch (netErr) {
+          const msg = String(netErr && netErr.message ? netErr.message : netErr);
+          const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
+          throw new Error(
+            (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002"
+          );
+        }
+        const rawText = await r.text();
+        if (!r.ok) throw new Error("rerank \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+        let j;
+        try {
+          j = JSON.parse(rawText);
+        } catch (e) {
+          throw new Error("rerank \u8FD4\u56DE\u975E JSON\uFF08HTTP " + r.status + "\uFF09\uFF1A" + rawText.slice(0, 200));
+        }
         const scoreMap = {};
         (j.results || []).forEach((it) => {
           scoreMap[it.index] = it.relevance_score;

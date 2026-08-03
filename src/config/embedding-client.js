@@ -115,13 +115,30 @@
     } else {
       body = JSON.stringify({ model, input });
     }
-    const r = await fetch(finalUrl, {
-      method: useGet ? 'GET' : 'POST',
-      headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
-      body,
-    });
-    const j = await r.json();
-    if (!j.data) throw new Error('embedding 返回异常: ' + JSON.stringify(j).slice(0, 200));
+    let r;
+    try {
+      r = await fetch(finalUrl, {
+        method: useGet ? 'GET' : 'POST',
+        headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
+        body,
+      });
+    } catch (netErr) {
+      // 典型：跨域(CORS)被浏览器拦截 / 地址不可达。终端可能显示 200（后端收到），但浏览器拿不到响应。
+      const msg = String(netErr && netErr.message ? netErr.message : netErr);
+      const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
+      throw new Error(
+        (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
+        ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/embeddings）。'
+      );
+    }
+    const rawText = await r.text();
+    if (!r.ok) {
+      throw new Error('embedding 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+    }
+    let j;
+    try { j = JSON.parse(rawText); }
+    catch (e) { throw new Error('embedding 返回非 JSON（HTTP ' + r.status + '）：' + rawText.slice(0, 200)); }
+    if (!j.data) throw new Error('embedding 返回异常（缺少 data 字段）：' + rawText.slice(0, 200));
     const vecs = j.data.map((d) => d.embedding);
     return Array.isArray(texts) ? vecs : vecs[0];
   }
