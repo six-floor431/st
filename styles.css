@@ -160,6 +160,33 @@
   box-shadow: 0 2px 6px rgba(43,43,40,.3);
 }
 
+/* cfg 内二级功能导航（按功能分组，点按钮只显示对应面板） */
+.wm-subtabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.wm-subtabs button {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border: 1px solid var(--wm-line);
+  border-radius: 14px 5px 14px 5px;
+  background: transparent;
+  color: var(--wm-ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  letter-spacing: 1px;
+  font-size: 13px;
+}
+.wm-subtabs button.active {
+  background: var(--wm-seal, #9c4a3c);
+  color: #f6f3ec;
+  border-color: var(--wm-seal, #9c4a3c);
+  box-shadow: 0 2px 6px rgba(43,43,40,.3);
+}
+
 /* 内容区：可滚动、隐藏滚动条（鼠标划 / 触摸划 保留） */
 .wm-body {
   flex: 1 1 auto;

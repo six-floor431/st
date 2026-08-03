@@ -458,7 +458,7 @@
   }
 
   // 统一的 LLM 调用配置（所有功能共用这一个）
-  function renderLlmConfig(s) {
+  function renderPaneLlm(s) {
     const c = s.llmConfig || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
     const pp = s.presetPrefix || { mode: 'none', importText: '', presetName: '' };
     const prompts = s.prompts || {};
@@ -524,15 +524,192 @@
 
   function renderCfg(body) {
     const s = WM.Settings.load();
-    body.innerHTML = `${renderLlmConfig(s)}
-      <div class="wm-card">
-      <div class="wm-divider"></div>
+    // cfg 内按功能分组的子面板：点某个按钮只显示对应的那一块配置
+    const tabs = [
+      { key: 'llm', label: 'LLM 调用' },
+      { key: 'mem', label: '记忆与注入' },
+      { key: 'vec', label: '向量与重排' },
+      { key: 'lore', label: '世界书' },
+    ];
+    const active = (WM._cfgTab) || 'llm';
+    body.innerHTML = `
+      <div class="wm-subtabs" id="cfg-tabs">
+        ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? 'active' : ''}">${t.label}</button>`).join('')}
+      </div>
+      <div id="cfg-pane">${renderPaneLlm(s)}</div>
+      <div class="wm-actions" style="margin-top:12px">
+        <button id="c-test" class="wm-btn">测试连接</button>
+        <button id="c-save" class="wm-btn primary">保存设置</button>
+      </div>
+      <div id="c-test-result" class="wm-test-box"></div>`;
+    // 子面板切换：点按钮只渲染对应功能块
+    body.querySelector('#cfg-tabs').querySelectorAll('button').forEach((btn) => {
+      btn.onclick = () => {
+        const key = btn.dataset.tab;
+        // 切换前先把当前面板未保存的改动同步回 s，避免切换丢值
+        syncPaneToSettings(body, s);
+        WM._cfgTab = key;
+        body.querySelectorAll('#cfg-tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+        const pane = body.querySelector('#cfg-pane');
+        if (key === 'llm') pane.innerHTML = renderPaneLlm(s);
+        else if (key === 'mem') pane.innerHTML = renderPaneMemory(s);
+        else if (key === 'vec') pane.innerHTML = renderPaneVector(s);
+        else if (key === 'lore') pane.innerHTML = renderPaneLore(s);
+        bindPaneEvents(body, s);
+      };
+    });
+    bindPaneEvents(body, s);
+
+    // 来源切换时显示/隐藏自定义字段（仅当 LLM pane 在 DOM 中时）
+    const srcSel = body.querySelector('#llm-src');
+    const customBox = body.querySelector('#llm-custom');
+    if (srcSel && customBox) {
+      // 依据当前值先纠正一次显示
+      customBox.style.display = srcSel.value === 'custom' ? '' : 'none';
+      srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
+    }
+    // 预设前置 mode 切换显示
+    const ppImport = body.querySelector('#pp-import');
+    const ppPreset = body.querySelector('#pp-preset');
+    const syncPp = () => {
+      const m = (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none';
+      if (ppImport) ppImport.style.display = m === 'import' ? '' : 'none';
+      if (ppPreset) ppPreset.style.display = m === 'preset' ? '' : 'none';
+    };
+    body.querySelectorAll('input[name="pp-mode"]').forEach((r) => { r.onchange = syncPp; });
+    syncPp();
+  }
+
+  // 把当前已渲染面板内的输入值同步回 s（保证切面板不丢未保存的改动）
+  function syncPaneToSettings(body, s) {
+    const q = (sel) => body.querySelector(sel);
+    if (q('#llm-src')) {
+      s.llmConfig = {
+        source: q('#llm-src').value,
+        proxyPreset: q('#llm-preset').value.trim(),
+        apiUrl: q('#llm-url').value.trim(),
+        apiKey: q('#llm-key').value.trim(),
+        model: q('#llm-model').value.trim(),
+        maxTokens: Math.max(50, parseInt(q('#llm-maxtok').value, 10) || 700),
+      };
+      s.presetPrefix = {
+        mode: (q('input[name="pp-mode"]:checked') || {}).value || 'none',
+        importText: q('#pp-import-text') ? q('#pp-import-text').value : '',
+        presetName: q('#pp-preset-name') ? q('#pp-preset-name').value : '',
+      };
+      s.prompts = {
+        summary: q('#pprompt-summary') ? q('#pprompt-summary').value : s.prompts.summary,
+        relations: q('#pprompt-relations') ? q('#pprompt-relations').value : s.prompts.relations,
+        plot: q('#pprompt-plot') ? q('#pprompt-plot').value : s.prompts.plot,
+        worldview: q('#pprompt-worldview') ? q('#pprompt-worldview').value : s.prompts.worldview,
+      };
+    }
+    if (q('#c-vec')) {
+      s.vectorEnabled = q('#c-vec').checked;
+      s.rerankEnabled = q('#c-rerank').checked;
+      s.injectMemories = q('#c-inj').checked;
+      s.injectWorld = q('#c-injw').checked;
+    }
+    if (q('#c-emb-url')) {
+      s.embeddingBaseUrl = q('#c-emb-url').value;
+      s.embeddingApiKey = q('#c-emb-key').value;
+      s.embeddingModel = q('#c-emb-model').value;
+      s.rerankBaseUrl = q('#c-rk-url').value;
+      s.rerankApiKey = q('#c-rk-key').value;
+      s.rerankModel = q('#c-rk-model').value;
+      s.takeoverEmbedding = q('#c-take-emb').checked;
+      s.takeoverRerank = q('#c-take-re').checked;
+    }
+    if (q('#c-lore')) {
+      s.lorebookName = q('#c-lore').value.trim();
+      s.worldToLorebook = q('#c-wlore').checked;
+    }
+  }
+
+  // 绑定 cfg 内各面板的交互事件（每次渲染面板后调用）
+  function bindPaneEvents(body, s) {
+    // 任何输入变更都实时同步回 s，保证切换面板 / 保存不丢未保存的改动
+    const pane = body.querySelector('#cfg-pane');
+    if (pane) pane.querySelectorAll('input, textarea, select').forEach((el) => {
+      el.addEventListener('change', () => syncPaneToSettings(body, s));
+      el.addEventListener('input', () => syncPaneToSettings(body, s));
+    });
+    // 来源切换显示
+    const srcSel = body.querySelector('#llm-src');
+    const customBox = body.querySelector('#llm-custom');
+    if (srcSel && customBox) srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
+    // 预设前置 mode 切换
+    const ppImport = body.querySelector('#pp-import');
+    const ppPreset = body.querySelector('#pp-preset');
+    body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
+      r.onchange = () => {
+        const m = (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none';
+        if (ppImport) ppImport.style.display = m === 'import' ? '' : 'none';
+        if (ppPreset) ppPreset.style.display = m === 'preset' ? '' : 'none';
+      };
+    });
+
+    // 保存：把当前面板值同步进 s 后整体保存
+    const saveBtn = body.querySelector('#c-save');
+    if (saveBtn) saveBtn.onclick = () => {
+      syncPaneToSettings(body, s);
+      WM.Settings.save(s);
+      if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+      toast('🌿 设置已保存');
+    };
+
+    // 测试连接：验证统一 LLM 配置 + 世界书 + 向量/重排
+    const testBtn = body.querySelector('#c-test');
+    if (testBtn) testBtn.onclick = async () => {
+      syncPaneToSettings(body, s);
+      const box = body.querySelector('#c-test-result');
+      const tmpLlm = s.llmConfig || { source: 'local' };
+      const tmp = Object.assign({}, s);
+      box.innerHTML = '<div class="wm-test-item">⏳ 测试中…</div>';
+      const rows = [];
+      const add = (name, r, detail) => {
+        const ok = r && r.success;
+        rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
+      };
+      try {
+        const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
+        add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
+      } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
+      try {
+        const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
+        if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
+        else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
+      } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
+      try {
+        if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
+          add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '');
+        else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+      } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
+      try {
+        if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
+          add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '');
+        else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
+      } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
+      box.innerHTML = rows.join('');
+    };
+  }
+
+  // 记忆与注入面板
+  function renderPaneMemory(s) {
+    return `<div class="wm-card">
       <div class="wm-h">记忆与注入</div>
-      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索
-        <input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
-      <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）
-        <input type="checkbox" id="c-injw" ${s.injectWorld?'checked':''}/> 含世界观</label>
-      <div class="wm-divider"></div>
+      <div class="wm-hint">控制记忆如何被检索、重排序并注入到对话上下文中，让角色真正「记得」。</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索</label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
+      <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）</label>
+      <label class="wm-row"><input type="checkbox" id="c-injw" ${s.injectWorld?'checked':''}/> 注入时含世界观</label>
+      <div class="wm-hint">向量 / 重排的具体服务配置在「向量与重排」面板。</div>
+    </div>`;
+  }
+
+  // 向量与重排面板
+  function renderPaneVector(s) {
+    return `<div class="wm-card">
       <div class="wm-h">Embedding（向量）配置</div>
       <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选"/></label>
@@ -542,129 +719,20 @@
       <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
-      <div class="wm-h">世界书（数据按角色卡隔离）</div>
-      <label class="wm-row">世界书名<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
-      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook?'checked':''}/> 拆分写入世界书条目（总结/物品/关系各自独立条目）</label>
-      <div class="wm-divider"></div>
       <div class="wm-h">接管酒馆向量 / 重排序</div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>
-      <div class="wm-divider"></div>
-      <div class="wm-actions">
-        <button id="c-test" class="wm-btn">测试连接</button>
-        <button id="c-save" class="wm-btn primary">保存设置</button>
-      </div>
-      <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">默认选「本地酒馆」即用酒馆当前对话源。自定义模式本地反代填 127.0.0.1。</div></div>`;
+    </div>`;
+  }
 
-    // 来源切换时显示/隐藏自定义字段
-    const srcSel = body.querySelector('#llm-src');
-    const customBox = body.querySelector('#llm-custom');
-    srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
-
-    // 预设前置 mode 切换显示
-    const ppImport = body.querySelector('#pp-import');
-    const ppPreset = body.querySelector('#pp-preset');
-    body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
-      r.onchange = () => {
-        const m = body.querySelector('input[name="pp-mode"]:checked').value;
-        ppImport.style.display = m === 'import' ? '' : 'none';
-        ppPreset.style.display = m === 'preset' ? '' : 'none';
-      };
-    });
-
-    // 保存
-    body.querySelector('#c-save').onclick = () => {
-      s.llmConfig = {
-        source: body.querySelector('#llm-src').value,
-        proxyPreset: body.querySelector('#llm-preset').value.trim(),
-        apiUrl: body.querySelector('#llm-url').value.trim(),
-        apiKey: body.querySelector('#llm-key').value.trim(),
-        model: body.querySelector('#llm-model').value.trim(),
-        maxTokens: Math.max(50, parseInt(body.querySelector('#llm-maxtok').value, 10) || 700),
-      };
-      s.presetPrefix = {
-        mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none',
-        importText: body.querySelector('#pp-import-text').value,
-        presetName: body.querySelector('#pp-preset-name') ? body.querySelector('#pp-preset-name').value : '',
-      };
-      s.prompts = {
-        summary: body.querySelector('#pprompt-summary').value,
-        relations: body.querySelector('#pprompt-relations').value,
-        plot: body.querySelector('#pprompt-plot').value,
-        worldview: body.querySelector('#pprompt-worldview').value,
-      };
-      s.vectorEnabled = body.querySelector('#c-vec').checked;
-      s.rerankEnabled = body.querySelector('#c-rerank').checked;
-      s.injectMemories = body.querySelector('#c-inj').checked;
-      s.injectWorld = body.querySelector('#c-injw').checked;
-      s.embeddingBaseUrl = body.querySelector('#c-emb-url').value;
-      s.embeddingApiKey = body.querySelector('#c-emb-key').value;
-      s.embeddingModel = body.querySelector('#c-emb-model').value;
-      s.rerankBaseUrl = body.querySelector('#c-rk-url').value;
-      s.rerankApiKey = body.querySelector('#c-rk-key').value;
-      s.rerankModel = body.querySelector('#c-rk-model').value;
-      s.lorebookName = body.querySelector('#c-lore').value.trim();
-      s.worldToLorebook = body.querySelector('#c-wlore').checked;
-      s.takeoverEmbedding = body.querySelector('#c-take-emb').checked;
-      s.takeoverRerank = body.querySelector('#c-take-re').checked;
-      WM.Settings.save(s);
-      if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
-      body.querySelector('.wm-hint').textContent = '✓ 已保存（世界书已绑定当前角色卡）';
-    };
-
-    // 测试连接：验证统一 LLM 配置 + 世界书 + 向量/重排
-    body.querySelector('#c-test').onclick = async () => {
-      const box = body.querySelector('#c-test-result');
-      // 按当前输入构造临时 llmConfig（不覆盖已保存）
-      const tmpLlm = {
-        source: body.querySelector('#llm-src').value,
-        proxyPreset: body.querySelector('#llm-preset').value.trim(),
-        apiUrl: body.querySelector('#llm-url').value.trim(),
-        apiKey: body.querySelector('#llm-key').value.trim(),
-        model: body.querySelector('#llm-model').value.trim(),
-        maxTokens: Math.max(50, parseInt(body.querySelector('#llm-maxtok').value, 10) || 700),
-      };
-      const tmp = Object.assign({}, WM.Settings.load(), {
-        llmConfig: tmpLlm,
-        embeddingBaseUrl: body.querySelector('#c-emb-url').value,
-        embeddingApiKey: body.querySelector('#c-emb-key').value,
-        embeddingModel: body.querySelector('#c-emb-model').value,
-        rerankBaseUrl: body.querySelector('#c-rk-url').value,
-        rerankApiKey: body.querySelector('#c-rk-key').value,
-        rerankModel: body.querySelector('#c-rk-model').value,
-      });
-      box.innerHTML = '<div class="wm-test-item">⏳ 测试中…</div>';
-      const rows = [];
-      const add = (name, r, detail) => {
-        const ok = r && r.success;
-        rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
-      };
-      // 1) 统一 LLM 配置
-      try {
-        const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
-        add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
-      } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
-      // 2) 世界书（酒馆 TavernHelper）
-      try {
-        const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
-        if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
-        else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
-      } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
-      // 3) Embedding（仅在启用时测）
-      try {
-        if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
-          add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '');
-        else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
-      } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
-      // 4) Rerank（仅在启用时测）
-      try {
-        if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
-          add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '');
-        else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
-      } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
-      box.innerHTML = rows.join('');
-    };
+  // 世界书面板（数据按角色卡隔离）
+  function renderPaneLore(s) {
+    return `<div class="wm-card">
+      <div class="wm-h">世界书（数据按角色卡隔离）</div>
+      <div class="wm-hint">记忆、关系、剧情会按当前角色卡写入对应世界书，互不串档。</div>
+      <label class="wm-row">世界书名<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook?'checked':''}/> 拆分写入世界书条目（总结/物品/关系各自独立条目）</label>
+    </div>`;
   }
 
   function escapeHtml(t) { return String(t).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }

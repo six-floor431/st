@@ -1882,7 +1882,7 @@ ${it.desc || ""}` }));
         }
       };
     }
-    function renderLlmConfig(s) {
+    function renderPaneLlm(s) {
       const c = s.llmConfig || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
       const pp = s.presetPrefix || { mode: "none", importText: "", presetName: "" };
       const prompts = s.prompts || {};
@@ -1949,109 +1949,135 @@ ${it.desc || ""}` }));
     }
     function renderCfg(body) {
       const s = WM.Settings.load();
-      body.innerHTML = `${renderLlmConfig(s)}
-      <div class="wm-card">
-      <div class="wm-divider"></div>
-      <div class="wm-h">\u8BB0\u5FC6\u4E0E\u6CE8\u5165</div>
-      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22
-        <input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
-      <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09
-        <input type="checkbox" id="c-injw" ${s.injectWorld ? "checked" : ""}/> \u542B\u4E16\u754C\u89C2</label>
-      <div class="wm-divider"></div>
-      <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
-      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
-      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009"/></label>
-      <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
-      <div class="wm-h">Rerank\uFF08\u91CD\u6392\u5E8F\uFF09\u914D\u7F6E</div>
-      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
-      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
-      <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
-      <div class="wm-divider"></div>
-      <div class="wm-h">\u4E16\u754C\u4E66\uFF08\u6570\u636E\u6309\u89D2\u8272\u5361\u9694\u79BB\uFF09</div>
-      <label class="wm-row">\u4E16\u754C\u4E66\u540D<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
-      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook ? "checked" : ""}/> \u62C6\u5206\u5199\u5165\u4E16\u754C\u4E66\u6761\u76EE\uFF08\u603B\u7ED3/\u7269\u54C1/\u5173\u7CFB\u5404\u81EA\u72EC\u7ACB\u6761\u76EE\uFF09</label>
-      <div class="wm-divider"></div>
-      <div class="wm-h">\u63A5\u7BA1\u9152\u9986\u5411\u91CF / \u91CD\u6392\u5E8F</div>
-      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
-      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
-      <div class="wm-divider"></div>
-      <div class="wm-actions">
+      const tabs = [
+        { key: "llm", label: "LLM \u8C03\u7528" },
+        { key: "mem", label: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165" },
+        { key: "vec", label: "\u5411\u91CF\u4E0E\u91CD\u6392" },
+        { key: "lore", label: "\u4E16\u754C\u4E66" }
+      ];
+      const active = WM._cfgTab || "llm";
+      body.innerHTML = `
+      <div class="wm-subtabs" id="cfg-tabs">
+        ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? "active" : ""}">${t.label}</button>`).join("")}
+      </div>
+      <div id="cfg-pane">${renderPaneLlm(s)}</div>
+      <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">\u6D4B\u8BD5\u8FDE\u63A5</button>
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
       </div>
-      <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">\u9ED8\u8BA4\u9009\u300C\u672C\u5730\u9152\u9986\u300D\u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\u3002\u81EA\u5B9A\u4E49\u6A21\u5F0F\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
+      <div id="c-test-result" class="wm-test-box"></div>`;
+      body.querySelector("#cfg-tabs").querySelectorAll("button").forEach((btn) => {
+        btn.onclick = () => {
+          const key = btn.dataset.tab;
+          syncPaneToSettings(body, s);
+          WM._cfgTab = key;
+          body.querySelectorAll("#cfg-tabs button").forEach((b) => b.classList.toggle("active", b === btn));
+          const pane = body.querySelector("#cfg-pane");
+          if (key === "llm") pane.innerHTML = renderPaneLlm(s);
+          else if (key === "mem") pane.innerHTML = renderPaneMemory(s);
+          else if (key === "vec") pane.innerHTML = renderPaneVector(s);
+          else if (key === "lore") pane.innerHTML = renderPaneLore(s);
+          bindPaneEvents(body, s);
+        };
+      });
+      bindPaneEvents(body, s);
       const srcSel = body.querySelector("#llm-src");
       const customBox = body.querySelector("#llm-custom");
-      srcSel.onchange = () => {
+      if (srcSel && customBox) {
+        customBox.style.display = srcSel.value === "custom" ? "" : "none";
+        srcSel.onchange = () => {
+          customBox.style.display = srcSel.value === "custom" ? "" : "none";
+        };
+      }
+      const ppImport = body.querySelector("#pp-import");
+      const ppPreset = body.querySelector("#pp-preset");
+      const syncPp = () => {
+        const m = (body.querySelector('input[name="pp-mode"]:checked') || {}).value || "none";
+        if (ppImport) ppImport.style.display = m === "import" ? "" : "none";
+        if (ppPreset) ppPreset.style.display = m === "preset" ? "" : "none";
+      };
+      body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
+        r.onchange = syncPp;
+      });
+      syncPp();
+    }
+    function syncPaneToSettings(body, s) {
+      const q = (sel) => body.querySelector(sel);
+      if (q("#llm-src")) {
+        s.llmConfig = {
+          source: q("#llm-src").value,
+          proxyPreset: q("#llm-preset").value.trim(),
+          apiUrl: q("#llm-url").value.trim(),
+          apiKey: q("#llm-key").value.trim(),
+          model: q("#llm-model").value.trim(),
+          maxTokens: Math.max(50, parseInt(q("#llm-maxtok").value, 10) || 700)
+        };
+        s.presetPrefix = {
+          mode: (q('input[name="pp-mode"]:checked') || {}).value || "none",
+          importText: q("#pp-import-text") ? q("#pp-import-text").value : "",
+          presetName: q("#pp-preset-name") ? q("#pp-preset-name").value : ""
+        };
+        s.prompts = {
+          summary: q("#pprompt-summary") ? q("#pprompt-summary").value : s.prompts.summary,
+          relations: q("#pprompt-relations") ? q("#pprompt-relations").value : s.prompts.relations,
+          plot: q("#pprompt-plot") ? q("#pprompt-plot").value : s.prompts.plot,
+          worldview: q("#pprompt-worldview") ? q("#pprompt-worldview").value : s.prompts.worldview
+        };
+      }
+      if (q("#c-vec")) {
+        s.vectorEnabled = q("#c-vec").checked;
+        s.rerankEnabled = q("#c-rerank").checked;
+        s.injectMemories = q("#c-inj").checked;
+        s.injectWorld = q("#c-injw").checked;
+      }
+      if (q("#c-emb-url")) {
+        s.embeddingBaseUrl = q("#c-emb-url").value;
+        s.embeddingApiKey = q("#c-emb-key").value;
+        s.embeddingModel = q("#c-emb-model").value;
+        s.rerankBaseUrl = q("#c-rk-url").value;
+        s.rerankApiKey = q("#c-rk-key").value;
+        s.rerankModel = q("#c-rk-model").value;
+        s.takeoverEmbedding = q("#c-take-emb").checked;
+        s.takeoverRerank = q("#c-take-re").checked;
+      }
+      if (q("#c-lore")) {
+        s.lorebookName = q("#c-lore").value.trim();
+        s.worldToLorebook = q("#c-wlore").checked;
+      }
+    }
+    function bindPaneEvents(body, s) {
+      const pane = body.querySelector("#cfg-pane");
+      if (pane) pane.querySelectorAll("input, textarea, select").forEach((el) => {
+        el.addEventListener("change", () => syncPaneToSettings(body, s));
+        el.addEventListener("input", () => syncPaneToSettings(body, s));
+      });
+      const srcSel = body.querySelector("#llm-src");
+      const customBox = body.querySelector("#llm-custom");
+      if (srcSel && customBox) srcSel.onchange = () => {
         customBox.style.display = srcSel.value === "custom" ? "" : "none";
       };
       const ppImport = body.querySelector("#pp-import");
       const ppPreset = body.querySelector("#pp-preset");
       body.querySelectorAll('input[name="pp-mode"]').forEach((r) => {
         r.onchange = () => {
-          const m = body.querySelector('input[name="pp-mode"]:checked').value;
-          ppImport.style.display = m === "import" ? "" : "none";
-          ppPreset.style.display = m === "preset" ? "" : "none";
+          const m = (body.querySelector('input[name="pp-mode"]:checked') || {}).value || "none";
+          if (ppImport) ppImport.style.display = m === "import" ? "" : "none";
+          if (ppPreset) ppPreset.style.display = m === "preset" ? "" : "none";
         };
       });
-      body.querySelector("#c-save").onclick = () => {
-        s.llmConfig = {
-          source: body.querySelector("#llm-src").value,
-          proxyPreset: body.querySelector("#llm-preset").value.trim(),
-          apiUrl: body.querySelector("#llm-url").value.trim(),
-          apiKey: body.querySelector("#llm-key").value.trim(),
-          model: body.querySelector("#llm-model").value.trim(),
-          maxTokens: Math.max(50, parseInt(body.querySelector("#llm-maxtok").value, 10) || 700)
-        };
-        s.presetPrefix = {
-          mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || "none",
-          importText: body.querySelector("#pp-import-text").value,
-          presetName: body.querySelector("#pp-preset-name") ? body.querySelector("#pp-preset-name").value : ""
-        };
-        s.prompts = {
-          summary: body.querySelector("#pprompt-summary").value,
-          relations: body.querySelector("#pprompt-relations").value,
-          plot: body.querySelector("#pprompt-plot").value,
-          worldview: body.querySelector("#pprompt-worldview").value
-        };
-        s.vectorEnabled = body.querySelector("#c-vec").checked;
-        s.rerankEnabled = body.querySelector("#c-rerank").checked;
-        s.injectMemories = body.querySelector("#c-inj").checked;
-        s.injectWorld = body.querySelector("#c-injw").checked;
-        s.embeddingBaseUrl = body.querySelector("#c-emb-url").value;
-        s.embeddingApiKey = body.querySelector("#c-emb-key").value;
-        s.embeddingModel = body.querySelector("#c-emb-model").value;
-        s.rerankBaseUrl = body.querySelector("#c-rk-url").value;
-        s.rerankApiKey = body.querySelector("#c-rk-key").value;
-        s.rerankModel = body.querySelector("#c-rk-model").value;
-        s.lorebookName = body.querySelector("#c-lore").value.trim();
-        s.worldToLorebook = body.querySelector("#c-wlore").checked;
-        s.takeoverEmbedding = body.querySelector("#c-take-emb").checked;
-        s.takeoverRerank = body.querySelector("#c-take-re").checked;
+      const saveBtn = body.querySelector("#c-save");
+      if (saveBtn) saveBtn.onclick = () => {
+        syncPaneToSettings(body, s);
         WM.Settings.save(s);
         if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
-        body.querySelector(".wm-hint").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u4E16\u754C\u4E66\u5DF2\u7ED1\u5B9A\u5F53\u524D\u89D2\u8272\u5361\uFF09";
+        toast("\u{1F33F} \u8BBE\u7F6E\u5DF2\u4FDD\u5B58");
       };
-      body.querySelector("#c-test").onclick = async () => {
+      const testBtn = body.querySelector("#c-test");
+      if (testBtn) testBtn.onclick = async () => {
+        syncPaneToSettings(body, s);
         const box = body.querySelector("#c-test-result");
-        const tmpLlm = {
-          source: body.querySelector("#llm-src").value,
-          proxyPreset: body.querySelector("#llm-preset").value.trim(),
-          apiUrl: body.querySelector("#llm-url").value.trim(),
-          apiKey: body.querySelector("#llm-key").value.trim(),
-          model: body.querySelector("#llm-model").value.trim(),
-          maxTokens: Math.max(50, parseInt(body.querySelector("#llm-maxtok").value, 10) || 700)
-        };
-        const tmp = Object.assign({}, WM.Settings.load(), {
-          llmConfig: tmpLlm,
-          embeddingBaseUrl: body.querySelector("#c-emb-url").value,
-          embeddingApiKey: body.querySelector("#c-emb-key").value,
-          embeddingModel: body.querySelector("#c-emb-model").value,
-          rerankBaseUrl: body.querySelector("#c-rk-url").value,
-          rerankApiKey: body.querySelector("#c-rk-key").value,
-          rerankModel: body.querySelector("#c-rk-model").value
-        });
+        const tmpLlm = s.llmConfig || { source: "local" };
+        const tmp = Object.assign({}, s);
         box.innerHTML = '<div class="wm-test-item">\u23F3 \u6D4B\u8BD5\u4E2D\u2026</div>';
         const rows = [];
         const add = (name, r, detail) => {
@@ -2089,6 +2115,41 @@ ${it.desc || ""}` }));
         }
         box.innerHTML = rows.join("");
       };
+    }
+    function renderPaneMemory(s) {
+      return `<div class="wm-card">
+      <div class="wm-h">\u8BB0\u5FC6\u4E0E\u6CE8\u5165</div>
+      <div class="wm-hint">\u63A7\u5236\u8BB0\u5FC6\u5982\u4F55\u88AB\u68C0\u7D22\u3001\u91CD\u6392\u5E8F\u5E76\u6CE8\u5165\u5230\u5BF9\u8BDD\u4E0A\u4E0B\u6587\u4E2D\uFF0C\u8BA9\u89D2\u8272\u771F\u6B63\u300C\u8BB0\u5F97\u300D\u3002</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22</label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
+      <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-injw" ${s.injectWorld ? "checked" : ""}/> \u6CE8\u5165\u65F6\u542B\u4E16\u754C\u89C2</label>
+      <div class="wm-hint">\u5411\u91CF / \u91CD\u6392\u7684\u5177\u4F53\u670D\u52A1\u914D\u7F6E\u5728\u300C\u5411\u91CF\u4E0E\u91CD\u6392\u300D\u9762\u677F\u3002</div>
+    </div>`;
+    }
+    function renderPaneVector(s) {
+      return `<div class="wm-card">
+      <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
+      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-h">Rerank\uFF08\u91CD\u6392\u5E8F\uFF09\u914D\u7F6E</div>
+      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
+      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
+      <div class="wm-divider"></div>
+      <div class="wm-h">\u63A5\u7BA1\u9152\u9986\u5411\u91CF / \u91CD\u6392\u5E8F</div>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
+    </div>`;
+    }
+    function renderPaneLore(s) {
+      return `<div class="wm-card">
+      <div class="wm-h">\u4E16\u754C\u4E66\uFF08\u6570\u636E\u6309\u89D2\u8272\u5361\u9694\u79BB\uFF09</div>
+      <div class="wm-hint">\u8BB0\u5FC6\u3001\u5173\u7CFB\u3001\u5267\u60C5\u4F1A\u6309\u5F53\u524D\u89D2\u8272\u5361\u5199\u5165\u5BF9\u5E94\u4E16\u754C\u4E66\uFF0C\u4E92\u4E0D\u4E32\u6863\u3002</div>
+      <label class="wm-row">\u4E16\u754C\u4E66\u540D<input id="c-lore" value="${s.lorebookName}" placeholder="WarmMemo"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-wlore" ${s.worldToLorebook ? "checked" : ""}/> \u62C6\u5206\u5199\u5165\u4E16\u754C\u4E66\u6761\u76EE\uFF08\u603B\u7ED3/\u7269\u54C1/\u5173\u7CFB\u5404\u81EA\u72EC\u7ACB\u6761\u76EE\uFF09</label>
+    </div>`;
     }
     function escapeHtml(t) {
       return String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
