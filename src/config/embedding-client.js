@@ -26,18 +26,32 @@
     return base + '/models/' + model + ':embedContent';
   }
 
+  // 按来源解析 embedding 实际请求地址
+  function resolveEmbedUrl(s) {
+    const src = s.embeddingSource || 'cloud';
+    if (src === 'ollama') {
+      // 本地 Ollama（OpenAI 兼容接口）
+      return { url: normalizeBaseUrl(s.embeddingProxyPath) || 'http://127.0.0.1:11434/v1/embeddings', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
+    }
+    if (src === 'localProxy') {
+      // 用户自建本地反代：proxyPath 即完整地址
+      return { url: normalizeBaseUrl(s.embeddingProxyPath) || '', provider: 'compatible', model: s.embeddingModel || 'nomic-embed-text' };
+    }
+    // cloud：用填写的 Base URL（OpenAI 兼容 / Gemini 按 host 推断）
+    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || 'https://api.siliconflow.cn/v1';
+    if (/generativelanguage\.googleapis\.com/i.test(base)) {
+      return { url: base, provider: 'gemini', model: s.embeddingModel || s.model || 'text-embedding-004' };
+    }
+    return { url: base, provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3' };
+  }
+
   async function embed(texts, settings) {
     const s = settings || {};
-    // 兼容新 settings 字段
-    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || 'https://api.siliconflow.cn/v1';
-    const model = s.embeddingModel || s.model || 'BAAI/bge-m3';
+    const info = resolveEmbedUrl(s);
+    const base = info.url;
+    const model = info.model;
     const key = s.embeddingApiKey || s.apiKey || '';
-    // 推断 provider：显式 settings.embeddingProvider 优先；否则按 base URL 关键字判断
-    let provider = s.embeddingProvider;
-    if (!provider) {
-      if (/generativelanguage\.googleapis\.com/i.test(base)) provider = 'gemini';
-      else provider = 'compatible';
-    }
+    const provider = info.provider;
     const input = Array.isArray(texts) ? texts : [texts];
 
     if (provider === 'gemini') {
@@ -78,5 +92,5 @@
     }
   }
 
-  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl };
+  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };
 })();

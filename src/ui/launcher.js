@@ -550,7 +550,8 @@
     const tabs = [
       { key: 'llm', label: 'LLM 调用' },
       { key: 'mem', label: '记忆与注入' },
-      { key: 'vec', label: '向量与重排' },
+      { key: 'vec', label: '向量(Embedding)' },
+      { key: 'rerank', label: '重排序(Rerank)' },
       { key: 'lore', label: '世界书' },
       { key: 'err', label: '错误报告' },
     ];
@@ -577,6 +578,7 @@
         if (key === 'llm') pane.innerHTML = renderPaneLlm(s);
         else if (key === 'mem') pane.innerHTML = renderPaneMemory(s);
         else if (key === 'vec') pane.innerHTML = renderPaneVector(s);
+        else if (key === 'rerank') pane.innerHTML = renderPaneRerank(s);
         else if (key === 'lore') pane.innerHTML = renderPaneLore(s);
         else if (key === 'err') pane.innerHTML = renderPaneErrors(s);
         bindPaneEvents(body, s);
@@ -628,21 +630,31 @@
         worldview: q('#pprompt-worldview') ? q('#pprompt-worldview').value : s.prompts.worldview,
       };
     }
-    if (q('#c-vec')) {
-      s.vectorEnabled = q('#c-vec').checked;
-      s.rerankEnabled = q('#c-rerank').checked;
+    if (q('#c-inj')) {
       s.injectMemories = q('#c-inj').checked;
       s.injectWorld = q('#c-injw').checked;
     }
-    if (q('#c-emb-url')) {
-      s.embeddingBaseUrl = q('#c-emb-url').value;
-      s.embeddingApiKey = q('#c-emb-key').value;
-      s.embeddingModel = q('#c-emb-model').value;
-      s.rerankBaseUrl = q('#c-rk-url').value;
-      s.rerankApiKey = q('#c-rk-key').value;
-      s.rerankModel = q('#c-rk-model').value;
-      s.takeoverEmbedding = q('#c-take-emb').checked;
-      s.takeoverRerank = q('#c-take-re').checked;
+    if (q('#c-vec')) {
+      s.vectorEnabled = q('#c-vec').checked;
+    }
+    if (q('#c-emb-src')) {
+      s.embeddingSource = q('#c-emb-src').value;
+      s.embeddingBaseUrl = q('#c-emb-url') ? q('#c-emb-url').value : s.embeddingBaseUrl;
+      s.embeddingApiKey = q('#c-emb-key') ? q('#c-emb-key').value : s.embeddingApiKey;
+      s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
+      s.embeddingProxyPath = q('#c-emb-proxy') ? q('#c-emb-proxy').value : s.embeddingProxyPath;
+      s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
+    }
+    if (q('#c-rerank')) {
+      s.rerankEnabled = q('#c-rerank').checked;
+    }
+    if (q('#c-rk-src')) {
+      s.rerankSource = q('#c-rk-src').value;
+      s.rerankBaseUrl = q('#c-rk-url') ? q('#c-rk-url').value : s.rerankBaseUrl;
+      s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
+      s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
+      s.rerankProxyPath = q('#c-rk-proxy') ? q('#c-rk-proxy').value : s.rerankProxyPath;
+      s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
     }
     if (q('#c-lore')) {
       s.lorebookName = q('#c-lore').value.trim();
@@ -672,6 +684,33 @@
         if (ppPreset) ppPreset.style.display = m === 'preset' ? '' : 'none';
       };
     });
+
+    // 向量来源切换显示（云端/本地Ollama/本地反代）
+    const embSrc = body.querySelector('#c-emb-src');
+    if (embSrc) {
+      const sync = () => {
+        const v = embSrc.value;
+        const cloud = body.querySelector('#emb-cloud');
+        const ollama = body.querySelector('#emb-ollama');
+        const proxy = body.querySelector('#emb-proxy');
+        if (cloud) cloud.style.display = v === 'cloud' ? '' : 'none';
+        if (ollama) ollama.style.display = v === 'ollama' ? '' : 'none';
+        if (proxy) proxy.style.display = v === 'localProxy' ? '' : 'none';
+      };
+      embSrc.onchange = sync; sync();
+    }
+    // 重排来源切换显示（云端/本地反代）
+    const rkSrc = body.querySelector('#c-rk-src');
+    if (rkSrc) {
+      const sync = () => {
+        const v = rkSrc.value;
+        const cloud = body.querySelector('#rk-cloud');
+        const proxy = body.querySelector('#rk-proxy');
+        if (cloud) cloud.style.display = v === 'cloud' ? '' : 'none';
+        if (proxy) proxy.style.display = v === 'localProxy' ? '' : 'none';
+      };
+      rkSrc.onchange = sync; sync();
+    }
 
     // 保存：把当前面板值同步进 s 后整体保存
     const saveBtn = body.querySelector('#c-save');
@@ -705,13 +744,15 @@
         else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
       } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
       try {
-        if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
-          add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '');
+        const embTestable = tmp.embeddingSource === 'ollama' || tmp.embeddingSource === 'localProxy'
+          ? !!(tmp.embeddingProxyPath)
+          : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
+        if (embTestable) add('Embedding(向量)', await WM.EmbeddingClient.testConnection(tmp), '来源=' + (tmp.embeddingSource || 'cloud'));
         else add('Embedding(向量)', { success: true }, '未填，跳过（可留空用酒馆内置）');
       } catch (e) { add('Embedding(向量)', { success: false }, String(e.message || e)); }
       try {
-        if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
-          add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '');
+        const rkTestable = tmp.rerankSource === 'localProxy' ? !!(tmp.rerankProxyPath) : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
+        if (rkTestable) add('Rerank(重排)', await WM.RerankClient.testConnection(tmp), '来源=' + (tmp.rerankSource || 'cloud'));
         else add('Rerank(重排)', { success: true }, '未填，跳过（可留空用酒馆内置）');
       } catch (e) { add('Rerank(重排)', { success: false }, String(e.message || e)); }
       box.innerHTML = rows.join('');
@@ -727,24 +768,67 @@
       <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）</label>
       <label class="wm-row"><input type="checkbox" id="c-injw" ${s.injectWorld?'checked':''}/> 注入时含世界观</label>
-      <div class="wm-hint">向量 / 重排的具体服务配置在「向量与重排」面板。</div>
+      <div class="wm-hint">向量 / 重排的具体服务配置在「向量(Embedding)」「重排序(Rerank)」两个面板。</div>
     </div>`;
   }
 
-  // 向量与重排面板
+  // 向量(Embedding)面板：来源可选 云端 / 本地Ollama / 本地反代
   function renderPaneVector(s) {
+    const src = s.embeddingSource || 'cloud';
+    const showCloud = src === 'cloud' ? '' : 'none';
+    const showProxy = src === 'localProxy' ? '' : 'none';
+    const showOllama = src === 'ollama' ? '' : 'none';
     return `<div class="wm-card">
       <div class="wm-h">Embedding（向量）配置</div>
-      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
-      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索</label>
+      <label class="wm-row">来源
+        <select id="c-emb-src">
+          <option value="cloud" ${src==='cloud'?'selected':''}>云端服务</option>
+          <option value="ollama" ${src==='ollama'?'selected':''}>本地 Ollama</option>
+          <option value="localProxy" ${src==='localProxy'?'selected':''}>本地反代</option>
+        </select>
+      </label>
+      <div id="emb-cloud" style="display:${showCloud}">
+        <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
+        <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选"/></label>
+      </div>
+      <div id="emb-ollama" style="display:${showOllama}">
+        <div class="wm-hint">使用本地 Ollama 的 OpenAI 兼容接口（默认 http://127.0.0.1:11434/v1）。</div>
+      </div>
+      <div id="emb-proxy" style="display:${showProxy}">
+        <label class="wm-row">本地反代路径<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://127.0.0.1:8080/v1/embeddings"/></label>
+        <div class="wm-hint">自建本地反代地址（含完整路径）。两个服务可各自决定是否走本地反代。</div>
+      </div>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
+    </div>`;
+  }
+
+  // 重排序(Rerank)面板：来源可选 云端 / 本地反代
+  function renderPaneRerank(s) {
+    const src = s.rerankSource || 'cloud';
+    const showCloud = src === 'cloud' ? '' : 'none';
+    const showProxy = src === 'localProxy' ? '' : 'none';
+    return `<div class="wm-card">
       <div class="wm-h">Rerank（重排序）配置</div>
-      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
-      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
+      <label class="wm-row">来源
+        <select id="c-rk-src">
+          <option value="cloud" ${src==='cloud'?'selected':''}>云端服务</option>
+          <option value="localProxy" ${src==='localProxy'?'selected':''}>本地反代</option>
+        </select>
+      </label>
+      <div id="rk-cloud" style="display:${showCloud}">
+        <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
+        <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选"/></label>
+      </div>
+      <div id="rk-proxy" style="display:${showProxy}">
+        <label class="wm-row">本地反代路径<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://127.0.0.1:8080/v1/rerank"/></label>
+        <div class="wm-hint">自建本地反代地址（含完整路径）。</div>
+      </div>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
-      <div class="wm-h">接管酒馆向量 / 重排序</div>
-      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>
     </div>`;
   }

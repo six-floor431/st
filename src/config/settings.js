@@ -8,13 +8,19 @@
     showMemoryButton: true,
     autoUpdate: true,
     vectorEnabled: false,
-    embeddingBaseUrl: '',
+    // 向量(Embedding)配置：支持「云端 / 本地Ollama / 本地反代」三种来源，可各自选要不要本地反代
+    embeddingSource: 'cloud',       // 'cloud'=填 BaseURL 的云端服务; 'ollama'=本地 Ollama; 'localProxy'=用户自建本地反代(走 proxyPath)
+    embeddingBaseUrl: '',           // cloud 模式下的 Base URL
     embeddingApiKey: '',
     embeddingModel: 'text-embedding-3-small',
+    embeddingProxyPath: '',         // 本地反代路径（localProxy 模式使用，填完整地址如 http://127.0.0.1:8080/v1/embeddings）
     rerankEnabled: false,
+    // 重排序(Rerank)配置：支持「云端 / 本地反代」两种来源
+    rerankSource: 'cloud',          // 'cloud'=填 BaseURL 的云端服务; 'localProxy'=用户自建本地反代(走 proxyPath)
     rerankBaseUrl: '',
     rerankApiKey: '',
     rerankModel: '',
+    rerankProxyPath: '',            // 本地反代路径（localProxy 模式使用，填完整地址如 http://127.0.0.1:8080/v1/rerank）
     // 自动总结楼层设置（自定义）
     autoSummaryEnabled: true,     // 是否开启自动总结
     autoSummaryMode: 'new',       // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条, 'floor'=按楼层区间(1-20,21-40...)

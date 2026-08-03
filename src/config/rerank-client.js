@@ -8,10 +8,20 @@
     return url.replace('0.0.0.0', '127.0.0.1').replace(/\/+$/, '');
   }
 
+  // 按来源解析 rerank 实际请求地址
+  function resolveRerankUrl(s) {
+    const src = s.rerankSource || 'cloud';
+    if (src === 'localProxy') {
+      // 用户自建本地反代：proxyPath 即完整地址
+      return normalize(s.rerankProxyPath) || '';
+    }
+    return normalize(s.rerankBaseUrl) || 'https://api.siliconflow.cn/v1/rerank';
+  }
+
   async function rerank(query, documents, rawSettings, options) {
     const s = rawSettings || {};
     if (!s.rerankEnabled) return null; // 与 settings.rerankEnabled 对齐
-    const url = normalize(s.rerankBaseUrl) || 'https://api.siliconflow.cn/v1/rerank';
+    const url = resolveRerankUrl(s);
     const model = s.rerankModel || 'BAAI/bge-reranker-v2-m3';
     const key = s.rerankApiKey || '';
     const docs = (documents || []).filter((d) => d && String(d).trim());
@@ -56,5 +66,5 @@
     }
   }
 
-  WM.RerankClient = { rerank, testConnection };
+  WM.RerankClient = { rerank, testConnection, resolveRerankUrl };
 })();

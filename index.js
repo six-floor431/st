@@ -8,13 +8,24 @@
       showMemoryButton: true,
       autoUpdate: true,
       vectorEnabled: false,
+      // 向量(Embedding)配置：支持「云端 / 本地Ollama / 本地反代」三种来源，可各自选要不要本地反代
+      embeddingSource: "cloud",
+      // 'cloud'=填 BaseURL 的云端服务; 'ollama'=本地 Ollama; 'localProxy'=用户自建本地反代(走 proxyPath)
       embeddingBaseUrl: "",
+      // cloud 模式下的 Base URL
       embeddingApiKey: "",
       embeddingModel: "text-embedding-3-small",
+      embeddingProxyPath: "",
+      // 本地反代路径（localProxy 模式使用，填完整地址如 http://127.0.0.1:8080/v1/embeddings）
       rerankEnabled: false,
+      // 重排序(Rerank)配置：支持「云端 / 本地反代」两种来源
+      rerankSource: "cloud",
+      // 'cloud'=填 BaseURL 的云端服务; 'localProxy'=用户自建本地反代(走 proxyPath)
       rerankBaseUrl: "",
       rerankApiKey: "",
       rerankModel: "",
+      rerankProxyPath: "",
+      // 本地反代路径（localProxy 模式使用，填完整地址如 http://127.0.0.1:8080/v1/rerank）
       // 自动总结楼层设置（自定义）
       autoSummaryEnabled: true,
       // 是否开启自动总结
@@ -766,16 +777,27 @@ ${it.desc || ""}`.trim(),
       base = normalizeBaseUrl(base) || "";
       return base + "/models/" + model + ":embedContent";
     }
+    function resolveEmbedUrl(s) {
+      const src = s.embeddingSource || "cloud";
+      if (src === "ollama") {
+        return { url: normalizeBaseUrl(s.embeddingProxyPath) || "http://127.0.0.1:11434/v1/embeddings", provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
+      }
+      if (src === "localProxy") {
+        return { url: normalizeBaseUrl(s.embeddingProxyPath) || "", provider: "compatible", model: s.embeddingModel || "nomic-embed-text" };
+      }
+      const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "https://api.siliconflow.cn/v1";
+      if (/generativelanguage\.googleapis\.com/i.test(base)) {
+        return { url: base, provider: "gemini", model: s.embeddingModel || s.model || "text-embedding-004" };
+      }
+      return { url: base, provider: "compatible", model: s.embeddingModel || s.model || "BAAI/bge-m3" };
+    }
     async function embed(texts, settings) {
       const s = settings || {};
-      const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "https://api.siliconflow.cn/v1";
-      const model = s.embeddingModel || s.model || "BAAI/bge-m3";
+      const info = resolveEmbedUrl(s);
+      const base = info.url;
+      const model = info.model;
       const key = s.embeddingApiKey || s.apiKey || "";
-      let provider = s.embeddingProvider;
-      if (!provider) {
-        if (/generativelanguage\.googleapis\.com/i.test(base)) provider = "gemini";
-        else provider = "compatible";
-      }
+      const provider = info.provider;
       const input = Array.isArray(texts) ? texts : [texts];
       if (provider === "gemini") {
         const out = [];
@@ -810,7 +832,7 @@ ${it.desc || ""}`.trim(),
         return { success: false, error: String(e.message || e) };
       }
     }
-    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl };
+    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };
   })();
 
   // src/config/rerank-client.js
@@ -821,10 +843,17 @@ ${it.desc || ""}`.trim(),
       if (!url) return url;
       return url.replace("0.0.0.0", "127.0.0.1").replace(/\/+$/, "");
     }
+    function resolveRerankUrl(s) {
+      const src = s.rerankSource || "cloud";
+      if (src === "localProxy") {
+        return normalize(s.rerankProxyPath) || "";
+      }
+      return normalize(s.rerankBaseUrl) || "https://api.siliconflow.cn/v1/rerank";
+    }
     async function rerank(query, documents, rawSettings, options) {
       const s = rawSettings || {};
       if (!s.rerankEnabled) return null;
-      const url = normalize(s.rerankBaseUrl) || "https://api.siliconflow.cn/v1/rerank";
+      const url = resolveRerankUrl(s);
       const model = s.rerankModel || "BAAI/bge-reranker-v2-m3";
       const key = s.rerankApiKey || "";
       const docs = (documents || []).filter((d) => d && String(d).trim());
@@ -865,7 +894,7 @@ ${it.desc || ""}`.trim(),
         return { success: false, error: String(e.message || e) };
       }
     }
-    WM.RerankClient = { rerank, testConnection };
+    WM.RerankClient = { rerank, testConnection, resolveRerankUrl };
   })();
 
   // src/config/worldbook.js
@@ -2086,7 +2115,8 @@ ${it.desc || ""}` }));
       const tabs = [
         { key: "llm", label: "LLM \u8C03\u7528" },
         { key: "mem", label: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165" },
-        { key: "vec", label: "\u5411\u91CF\u4E0E\u91CD\u6392" },
+        { key: "vec", label: "\u5411\u91CF(Embedding)" },
+        { key: "rerank", label: "\u91CD\u6392\u5E8F(Rerank)" },
         { key: "lore", label: "\u4E16\u754C\u4E66" },
         { key: "err", label: "\u9519\u8BEF\u62A5\u544A" }
       ];
@@ -2111,6 +2141,7 @@ ${it.desc || ""}` }));
           if (key === "llm") pane.innerHTML = renderPaneLlm(s);
           else if (key === "mem") pane.innerHTML = renderPaneMemory(s);
           else if (key === "vec") pane.innerHTML = renderPaneVector(s);
+          else if (key === "rerank") pane.innerHTML = renderPaneRerank(s);
           else if (key === "lore") pane.innerHTML = renderPaneLore(s);
           else if (key === "err") pane.innerHTML = renderPaneErrors(s);
           bindPaneEvents(body, s);
@@ -2160,21 +2191,31 @@ ${it.desc || ""}` }));
           worldview: q("#pprompt-worldview") ? q("#pprompt-worldview").value : s.prompts.worldview
         };
       }
-      if (q("#c-vec")) {
-        s.vectorEnabled = q("#c-vec").checked;
-        s.rerankEnabled = q("#c-rerank").checked;
+      if (q("#c-inj")) {
         s.injectMemories = q("#c-inj").checked;
         s.injectWorld = q("#c-injw").checked;
       }
-      if (q("#c-emb-url")) {
-        s.embeddingBaseUrl = q("#c-emb-url").value;
-        s.embeddingApiKey = q("#c-emb-key").value;
-        s.embeddingModel = q("#c-emb-model").value;
-        s.rerankBaseUrl = q("#c-rk-url").value;
-        s.rerankApiKey = q("#c-rk-key").value;
-        s.rerankModel = q("#c-rk-model").value;
-        s.takeoverEmbedding = q("#c-take-emb").checked;
-        s.takeoverRerank = q("#c-take-re").checked;
+      if (q("#c-vec")) {
+        s.vectorEnabled = q("#c-vec").checked;
+      }
+      if (q("#c-emb-src")) {
+        s.embeddingSource = q("#c-emb-src").value;
+        s.embeddingBaseUrl = q("#c-emb-url") ? q("#c-emb-url").value : s.embeddingBaseUrl;
+        s.embeddingApiKey = q("#c-emb-key") ? q("#c-emb-key").value : s.embeddingApiKey;
+        s.embeddingModel = q("#c-emb-model") ? q("#c-emb-model").value : s.embeddingModel;
+        s.embeddingProxyPath = q("#c-emb-proxy") ? q("#c-emb-proxy").value : s.embeddingProxyPath;
+        s.takeoverEmbedding = q("#c-take-emb") ? q("#c-take-emb").checked : s.takeoverEmbedding;
+      }
+      if (q("#c-rerank")) {
+        s.rerankEnabled = q("#c-rerank").checked;
+      }
+      if (q("#c-rk-src")) {
+        s.rerankSource = q("#c-rk-src").value;
+        s.rerankBaseUrl = q("#c-rk-url") ? q("#c-rk-url").value : s.rerankBaseUrl;
+        s.rerankApiKey = q("#c-rk-key") ? q("#c-rk-key").value : s.rerankApiKey;
+        s.rerankModel = q("#c-rk-model") ? q("#c-rk-model").value : s.rerankModel;
+        s.rerankProxyPath = q("#c-rk-proxy") ? q("#c-rk-proxy").value : s.rerankProxyPath;
+        s.takeoverRerank = q("#c-take-re") ? q("#c-take-re").checked : s.takeoverRerank;
       }
       if (q("#c-lore")) {
         s.lorebookName = q("#c-lore").value.trim();
@@ -2201,6 +2242,32 @@ ${it.desc || ""}` }));
           if (ppPreset) ppPreset.style.display = m === "preset" ? "" : "none";
         };
       });
+      const embSrc = body.querySelector("#c-emb-src");
+      if (embSrc) {
+        const sync = () => {
+          const v = embSrc.value;
+          const cloud = body.querySelector("#emb-cloud");
+          const ollama = body.querySelector("#emb-ollama");
+          const proxy = body.querySelector("#emb-proxy");
+          if (cloud) cloud.style.display = v === "cloud" ? "" : "none";
+          if (ollama) ollama.style.display = v === "ollama" ? "" : "none";
+          if (proxy) proxy.style.display = v === "localProxy" ? "" : "none";
+        };
+        embSrc.onchange = sync;
+        sync();
+      }
+      const rkSrc = body.querySelector("#c-rk-src");
+      if (rkSrc) {
+        const sync = () => {
+          const v = rkSrc.value;
+          const cloud = body.querySelector("#rk-cloud");
+          const proxy = body.querySelector("#rk-proxy");
+          if (cloud) cloud.style.display = v === "cloud" ? "" : "none";
+          if (proxy) proxy.style.display = v === "localProxy" ? "" : "none";
+        };
+        rkSrc.onchange = sync;
+        sync();
+      }
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = () => {
         syncPaneToSettings(body, s);
@@ -2236,15 +2303,15 @@ ${it.desc || ""}` }));
           add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
         }
         try {
-          if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
-            add("Embedding(\u5411\u91CF)", await WM.EmbeddingClient.testConnection(tmp), "");
+          const embTestable = tmp.embeddingSource === "ollama" || tmp.embeddingSource === "localProxy" ? !!tmp.embeddingProxyPath : !!(tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel);
+          if (embTestable) add("Embedding(\u5411\u91CF)", await WM.EmbeddingClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.embeddingSource || "cloud"));
           else add("Embedding(\u5411\u91CF)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
         } catch (e) {
           add("Embedding(\u5411\u91CF)", { success: false }, String(e.message || e));
         }
         try {
-          if (tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel)
-            add("Rerank(\u91CD\u6392)", await WM.RerankClient.testConnection(tmp), "");
+          const rkTestable = tmp.rerankSource === "localProxy" ? !!tmp.rerankProxyPath : !!(tmp.rerankEnabled || tmp.rerankBaseUrl || tmp.rerankApiKey || tmp.rerankModel);
+          if (rkTestable) add("Rerank(\u91CD\u6392)", await WM.RerankClient.testConnection(tmp), "\u6765\u6E90=" + (tmp.rerankSource || "cloud"));
           else add("Rerank(\u91CD\u6392)", { success: true }, "\u672A\u586B\uFF0C\u8DF3\u8FC7\uFF08\u53EF\u7559\u7A7A\u7528\u9152\u9986\u5185\u7F6E\uFF09");
         } catch (e) {
           add("Rerank(\u91CD\u6392)", { success: false }, String(e.message || e));
@@ -2260,22 +2327,63 @@ ${it.desc || ""}` }));
       <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09</label>
       <label class="wm-row"><input type="checkbox" id="c-injw" ${s.injectWorld ? "checked" : ""}/> \u6CE8\u5165\u65F6\u542B\u4E16\u754C\u89C2</label>
-      <div class="wm-hint">\u5411\u91CF / \u91CD\u6392\u7684\u5177\u4F53\u670D\u52A1\u914D\u7F6E\u5728\u300C\u5411\u91CF\u4E0E\u91CD\u6392\u300D\u9762\u677F\u3002</div>
+      <div class="wm-hint">\u5411\u91CF / \u91CD\u6392\u7684\u5177\u4F53\u670D\u52A1\u914D\u7F6E\u5728\u300C\u5411\u91CF(Embedding)\u300D\u300C\u91CD\u6392\u5E8F(Rerank)\u300D\u4E24\u4E2A\u9762\u677F\u3002</div>
     </div>`;
     }
     function renderPaneVector(s) {
+      const src = s.embeddingSource || "cloud";
+      const showCloud = src === "cloud" ? "" : "none";
+      const showProxy = src === "localProxy" ? "" : "none";
+      const showOllama = src === "ollama" ? "" : "none";
       return `<div class="wm-card">
       <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
-      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
-      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22</label>
+      <label class="wm-row">\u6765\u6E90
+        <select id="c-emb-src">
+          <option value="cloud" ${src === "cloud" ? "selected" : ""}>\u4E91\u7AEF\u670D\u52A1</option>
+          <option value="ollama" ${src === "ollama" ? "selected" : ""}>\u672C\u5730 Ollama</option>
+          <option value="localProxy" ${src === "localProxy" ? "selected" : ""}>\u672C\u5730\u53CD\u4EE3</option>
+        </select>
+      </label>
+      <div id="emb-cloud" style="display:${showCloud}">
+        <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="https://api.openai.com/v1"/></label>
+        <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009"/></label>
+      </div>
+      <div id="emb-ollama" style="display:${showOllama}">
+        <div class="wm-hint">\u4F7F\u7528\u672C\u5730 Ollama \u7684 OpenAI \u517C\u5BB9\u63A5\u53E3\uFF08\u9ED8\u8BA4 http://127.0.0.1:11434/v1\uFF09\u3002</div>
+      </div>
+      <div id="emb-proxy" style="display:${showProxy}">
+        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-emb-proxy" value="${s.embeddingProxyPath}" placeholder="http://127.0.0.1:8080/v1/embeddings"/></label>
+        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\uFF08\u542B\u5B8C\u6574\u8DEF\u5F84\uFF09\u3002\u4E24\u4E2A\u670D\u52A1\u53EF\u5404\u81EA\u51B3\u5B9A\u662F\u5426\u8D70\u672C\u5730\u53CD\u4EE3\u3002</div>
+      </div>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
+    </div>`;
+    }
+    function renderPaneRerank(s) {
+      const src = s.rerankSource || "cloud";
+      const showCloud = src === "cloud" ? "" : "none";
+      const showProxy = src === "localProxy" ? "" : "none";
+      return `<div class="wm-card">
       <div class="wm-h">Rerank\uFF08\u91CD\u6392\u5E8F\uFF09\u914D\u7F6E</div>
-      <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
-      <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
+      <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
+      <label class="wm-row">\u6765\u6E90
+        <select id="c-rk-src">
+          <option value="cloud" ${src === "cloud" ? "selected" : ""}>\u4E91\u7AEF\u670D\u52A1</option>
+          <option value="localProxy" ${src === "localProxy" ? "selected" : ""}>\u672C\u5730\u53CD\u4EE3</option>
+        </select>
+      </label>
+      <div id="rk-cloud" style="display:${showCloud}">
+        <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank"/></label>
+        <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009"/></label>
+      </div>
+      <div id="rk-proxy" style="display:${showProxy}">
+        <label class="wm-row">\u672C\u5730\u53CD\u4EE3\u8DEF\u5F84<input id="c-rk-proxy" value="${s.rerankProxyPath}" placeholder="http://127.0.0.1:8080/v1/rerank"/></label>
+        <div class="wm-hint">\u81EA\u5EFA\u672C\u5730\u53CD\u4EE3\u5730\u5740\uFF08\u542B\u5B8C\u6574\u8DEF\u5F84\uFF09\u3002</div>
+      </div>
       <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
-      <div class="wm-h">\u63A5\u7BA1\u9152\u9986\u5411\u91CF / \u91CD\u6392\u5E8F</div>
-      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
     </div>`;
     }
