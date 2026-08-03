@@ -114,7 +114,9 @@
     const config = {
       ordered_prompts,
       should_stream: false,
-      max_new_tokens: maxTokens,
+      // 注意：酒馆 generateRaw 的字段名是 max_tokens（不是 max_new_tokens），
+      // 写错会导致被全局对话设置的超大 max_tokens 覆盖，测试/摘要会巨慢。
+      max_tokens: maxTokens,
       // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
       temperature: opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3),
       // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
