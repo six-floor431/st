@@ -28,10 +28,45 @@
     const s = WM.MemoryStore.load();
     const cands = [];
     s.summaries.forEach((sm) => cands.push({ id: sm.id, type: sm.kind === 'plot' ? '剧情摘要' : '总结', text: sm.title + '\n' + sm.text }));
-    s.items.forEach((it) => cands.push({ id: it.id, type: '物品', text: `物品：${it.name}${it.owner ? '（持有者：' + it.owner + '）' : ''}\n${it.desc || ''}` }));
+
+    // 剧情线：最新在上，带剧情内时间
+    const plotTitle = {};
+    (s.plots || []).forEach((p) => { plotTitle[p.id] = p.title || p.time || p.id; });
+    (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach((p) => {
+      if (!p.title && !p.summary) return;
+      const stat = p.status === 'done' ? '已完结' : (p.status === 'abandon' ? '已废弃' : '进行中');
+      cands.push({ id: p.id, type: '剧情', text: `${p.time ? '[' + p.time + '] ' : ''}${p.title || ''}（${stat}）\n${p.summary || ''}`.trim() });
+    });
+
+    // 物品：名称 / 作用 / 持有者 / 关联剧情
+    (s.items || []).forEach((it) => {
+      const rel = (it.relatedPlots || []).map((pid) => plotTitle[pid]).filter(Boolean);
+      const lines = [`物品：${it.name}`];
+      if (it.desc) lines.push(`作用：${it.desc}`);
+      if (it.owner) lines.push(`持有者：${it.owner}`);
+      if (it.origin) lines.push(`来历：${it.origin}`);
+      if (rel.length) lines.push(`关联剧情：${rel.join('、')}`);
+      cands.push({ id: it.id, type: '物品', text: lines.join('\n') });
+    });
+
     const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
     groups.forEach((g) => cands.push({ id: 'relation::' + g.person, type: '关系', text: g.person + '的关系：' + g.text }));
-    if (s.world && s.world.trim()) cands.push({ id: 'world::main', type: '世界观', text: s.world });
+
+    // 世界观总纲：世界名 + 类型 + 简述（兼容旧的纯文本 world）
+    const wm = s.worldMeta || {};
+    const head = [];
+    if (wm.name) head.push(`世界名：${wm.name}`);
+    if (wm.kind) head.push(`世界类型：${wm.kind}`);
+    if (wm.desc) head.push(wm.desc);
+    if (!head.length && s.world && s.world.trim()) head.push(s.world.trim());
+    if (head.length) cands.push({ id: 'world::main', type: '世界观', text: head.join('\n') });
+
+    // 世界设定分条
+    (s.worldSections || []).forEach((w) => {
+      if (!w.title && !w.body) return;
+      cands.push({ id: w.id, type: '世界设定', text: `${w.title ? w.title + '\n' : ''}${w.body || ''}`.trim() });
+    });
+
     return cands;
   }
 

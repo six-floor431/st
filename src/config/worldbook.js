@@ -133,6 +133,22 @@
     } catch (e) { console.warn('[WarmMemo] removeEntry 失败:', e); }
   }
 
+  // 按前缀清理「已不存在」的条目：keepIds 为该前缀下应保留的 sourceId 集合。
+  // 用于删除物品/剧情/世界分条后，同步移除世界书里的残留条目。
+  async function pruneByPrefix(prefix, keepIds) {
+    if (!available() || !prefix) return;
+    const name = targetName();
+    const keep = new Set(Array.isArray(keepIds) ? keepIds : []);
+    try {
+      await helper().deleteWorldbookEntries(name, (e) => {
+        const ex = e && e.extra;
+        if (!ex || !ex.warmMemo || !ex.sourceId) return false;
+        if (String(ex.sourceId).indexOf(prefix) !== 0) return false;
+        return !keep.has(String(ex.sourceId));
+      });
+    } catch (e) { console.warn('[WarmMemo] pruneByPrefix 失败:', e); }
+  }
+
   // 清空本扩展写入的所有条目（保留世界书本身）
   async function clearAll() {
     if (!available()) return;
@@ -187,29 +203,110 @@
     return list.map((x) => ({ key: x.entry.name || x.entry.comment || '', content: x.entry.content || '' }));
   }
 
-  // 用 LLM 推断世界观（真实调用），返回文本
+  // 解析 AI 输出的结构化世界观文本 → { name, kind, desc, sections:[{title,body}] }
+  // 期望格式：
+  //   世界名：九霄大陆
+  //   世界类型：修仙世界
+  //   简述：……
+  //   ## 修炼体系
+  //   ……
+  function parseWorldview(text) {
+    if (!text || !String(text).trim()) return null;
+    const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+    const out = { name: '', kind: '', desc: '', sections: [] };
+    let cur = null;
+    const descBuf = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) { if (cur) cur.body.push(''); continue; }
+      // 小标题：## xxx 或 【xxx】 或 「xxx」
+      let m = line.match(/^#{1,6}\s*(.+?)\s*$/) || line.match(/^【(.+?)】\s*$/) || line.match(/^「(.+?)」\s*$/);
+      if (m) { cur = { title: m[1].trim(), body: [] }; out.sections.push(cur); continue; }
+      // 顶部字段
+      m = line.match(/^(?:世界名(?:称)?|世界)\s*[:：]\s*(.+)$/);
+      if (m && !cur) { out.name = m[1].trim(); continue; }
+      m = line.match(/^世界类型\s*[:：]\s*(.+)$/);
+      if (m && !cur) { out.kind = m[1].trim(); continue; }
+      m = line.match(/^(?:简述|世界简述|概述)\s*[:：]\s*(.+)$/);
+      if (m && !cur) { descBuf.push(m[1].trim()); continue; }
+      if (cur) cur.body.push(line);
+      else descBuf.push(line);
+    }
+    out.desc = descBuf.join('\n').trim();
+    out.sections = out.sections
+      .map((s) => ({ title: s.title, body: s.body.join('\n').trim() }))
+      .filter((s) => s.title || s.body);
+    if (!out.name && !out.kind && !out.desc && !out.sections.length) return null;
+    return out;
+  }
+
+  // 用 LLM 推断世界观（真实调用），返回结构化文本
   // 提示词可编辑：settings.prompts.worldview（支持 {{plot}} {{recent}} 占位符）
   async function inferWorldview(settings, opts) {
-    settings = settings || (WM.Settings && WM.Settings.load) || {};
+    settings = settings || (WM.Settings && WM.Settings.load && WM.Settings.load()) || {};
     const char = getCharacterCard();
     const user = getUserCard();
-    const prev = WM.MemoryStore ? WM.MemoryStore.getWorld() : '';
-    const plots = (WM.MemoryStore && WM.MemoryStore.getPlots ? WM.MemoryStore.getPlots() : []).map((p) => `· ${p.title}：${p.summary}`).join('\n');
-    const tpl = (settings && settings.prompts && settings.prompts.worldview) ||
-      '你是世界观提炼者。请基于【剧情线】和【最近对话】，抽取本世界的关键设定：地点、势力、规则、物品、概念。输出条目，每条一行。\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}';
-    const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: '' });
+    const store = WM.MemoryStore;
+    const prevMeta = store && store.getWorldMeta ? store.getWorldMeta() : { name: '', kind: '', desc: '' };
+    const prevSecs = store && store.getWorldSections ? store.getWorldSections() : [];
+    const prev = store ? store.getWorld() : '';
+    const plots = (store && store.getPlots ? store.getPlots() : [])
+      .map((p) => `· ${p.time ? '[' + p.time + '] ' : ''}${p.title}：${p.summary}`).join('\n');
+    const items = (store && store.getItems ? store.getItems() : [])
+      .map((i) => `· ${i.name}（持有者：${i.owner || '未知'}）：${i.desc || ''}`).join('\n');
+    const tpl = (settings && settings.prompts && settings.prompts.worldview) || DEFAULT_WORLDVIEW_PROMPT;
+    const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: '', items });
+    const known = [
+      prevMeta.name ? `世界名：${prevMeta.name}` : '',
+      prevMeta.kind ? `世界类型：${prevMeta.kind}` : '',
+      prevMeta.desc ? `简述：${prevMeta.desc}` : '',
+      ...prevSecs.map((w) => `## ${w.title}\n${w.body}`),
+    ].filter(Boolean).join('\n');
     const userMsg = `【角色设定】${char.name || '未知'}：${char.description || ''}
 【用户设定】${user.name || '未知'}：${user.description || ''}
-【已有世界观】${prev || '（无）'}
-请输出世界观设定：`;
+【剧情线】
+${plots || '（无）'}
+【已知物品】
+${items || '（无）'}
+【已有世界观】
+${known || prev || '（无）'}
+${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction + '\n' : ''}请按规定格式输出世界设定：`;
     if (!WM.Summary || !WM.Summary.callLLM) return prev;
     const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
     return out && out.trim() ? out.trim() : prev;
   }
 
+  const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【角色设定】【剧情线】【已知物品】，提炼这个故事所处世界的设定。
+
+严格按以下格式输出，不要添加任何多余说明：
+
+世界名：（这个世界/大陆/城市叫什么，没有就起一个贴切的）
+世界类型：（用一个词概括，如：修仙世界、赛博朋克、蒸汽朋克、现代都市、剑与魔法）
+简述：（一到两句话说明这是个什么样的世界）
+
+## 设定标题一
+（围绕"世界类型"展开的具体规则。例如修仙世界就写修炼体系的境界划分；赛博朋克就写义体与企业规则）
+
+## 设定标题二
+（内容）
+
+要求：
+1. 「世界类型」决定了下面写什么。修仙世界就必须有修炼体系、灵气、宗门等设定，不要写无关内容。
+2. 每条设定要具体、可被后续剧情引用，不要空泛。
+3. 输出 3-6 条设定条目。
+
+【剧情线】
+{{plot}}
+
+【已知物品】
+{{items}}
+
+【最近对话】
+{{recent}}`;
+
   WM.Worldbook = {
-    available, ensureLorebook, writeEntry, removeEntry, clearAll, listEntries, getLorebookEntries,
+    available, ensureLorebook, writeEntry, removeEntry, clearAll, pruneByPrefix, listEntries, getLorebookEntries,
     writeSummary, writeItem, writeRelation, writeWorld, targetName,
-    getCharacterCard, getUserCard, inferWorldview,
+    getCharacterCard, getUserCard, inferWorldview, parseWorldview, DEFAULT_WORLDVIEW_PROMPT,
   };
 })();

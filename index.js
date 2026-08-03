@@ -97,9 +97,9 @@
       prompts: {
         summary: "\u4F60\u662F\u6211\u7684\u4E13\u5C5E\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u6309\u300C\u65F6\u95F4\u987A\u5E8F\u300D\u63D0\u70BC\u51FA\u300C\u5173\u952E\u4E8B\u5B9E\u3001\u7EA6\u5B9A\u3001\u72B6\u6001\u53D8\u5316\u3001\u4EBA\u540D/\u5730\u70B9/\u7EC4\u7EC7\u3001\u672A\u5B8C\u6210\u7684\u627F\u8BFA\u6216\u5F85\u529E\u300D\u3002\u4E0D\u8981\u7F16\u9020\uFF0C\u4E0D\u786E\u5B9A\u5C31\u5199\u201C\u672A\u77E5\u201D\u3002\u4EC5\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\uFF0C\u4E0D\u8D85\u8FC7 12 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         relations: "\u4F60\u662F\u5173\u7CFB\u5206\u6790\u5E08\u3002\u8BF7\u57FA\u4E8E\u300C\u5386\u53F2\u603B\u7ED3\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u5206\u6790\u300C\u6211\uFF08\u7528\u6237\uFF09\u4E0E\u89D2\u8272\u4E4B\u95F4\u300D\u7684\u5173\u7CFB\u72B6\u6001\u3001\u4EB2\u5BC6\u5EA6\u3001\u5F20\u529B\u3001\u672A\u89E3\u5FC3\u7ED3\u3002\u8F93\u51FA\u7ED3\u6784\u5316\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5386\u53F2\u603B\u7ED3\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        plot: "\u4F60\u662F\u5267\u60C5\u68B3\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5173\u7CFB\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u68B3\u7406\u5F53\u524D\u5267\u60C5\u4E3B\u7EBF\u3001\u652F\u7EBF\u3001\u60AC\u5FF5\u4E0E\u4E0B\u4E00\u6B65\u53EF\u80FD\u53D1\u5C55\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        worldview: "\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5267\u60C5\u7EBF\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u62BD\u53D6\u672C\u4E16\u754C\u7684\u5173\u952E\u8BBE\u5B9A\uFF1A\u5730\u70B9\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u7269\u54C1\u3001\u6982\u5FF5\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u62BD\u53D6\u672C\u6BB5\u51FA\u73B0\u7684\u300C\u5177\u4F53\u7269\u54C1/\u9053\u5177/\u4FE1\u7269/\u88C5\u5907\u300D\uFF1A\u540D\u79F0\u3001\u63CF\u8FF0\u3001\u5F53\u524D\u6301\u6709\u8005\u3002\u6BCF\u884C\u4E00\u6761\uFF0C\u683C\u5F0F\uFF1A\u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
+        plot: "\u4F60\u662F\u5267\u60C5\u68B3\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5173\u7CFB\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u68B3\u7406\u8FD9\u4E00\u6BB5\u53D1\u751F\u7684\u5267\u60C5\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\n\n\u8BF4\u660E\uFF1A\n- \u65F6\u95F4\uFF1A\u5267\u60C5\u5185\u7684\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E09\u65E5\u6E05\u6668\u300D\u300C\u5EFA\u5143\u4E03\u5E74\u6625\u300D\uFF09\u3002\u82E5\u5BF9\u8BDD\u672A\u63D0\u53CA\uFF0C\u5199\u300C\u672A\u6807\u6CE8\u300D\u3002\n- \u6807\u9898\uFF1A\u8FD9\u6BB5\u5267\u60C5\u7684\u7B80\u77ED\u547D\u540D\uFF0C\u4E0D\u8D85\u8FC7 15 \u5B57\u3002\n- \u5185\u5BB9\uFF1A\u8FD9\u6BB5\u5267\u60C5\u53D1\u751F\u4E86\u4EC0\u4E48\uFF0C\u4E00\u5230\u4E24\u53E5\u8BDD\u3002\n- \u72B6\u6001\uFF1A\u53EA\u80FD\u586B \u8FDB\u884C\u4E2D / \u5DF2\u5B8C\u7ED3 / \u5DF2\u5E9F\u5F03 \u4E09\u8005\u4E4B\u4E00\u3002\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\uFF0C\u4E0D\u8981\u7F16\u53F7\uFF0C\u4E0D\u8981\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
+        worldview: '\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u5267\u60C5\u7EBF\u3011\u3010\u5DF2\u77E5\u7269\u54C1\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u7684\u8BBE\u5B9A\u3002\n\n\u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A\n\n\u4E16\u754C\u540D\uFF1A\uFF08\u8FD9\u4E2A\u4E16\u754C/\u5927\u9646/\u57CE\u5E02\u53EB\u4EC0\u4E48\uFF0C\u6CA1\u6709\u5C31\u8D77\u4E00\u4E2A\u8D34\u5207\u7684\uFF09\n\u4E16\u754C\u7C7B\u578B\uFF1A\uFF08\u7528\u4E00\u4E2A\u8BCD\u6982\u62EC\uFF0C\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C\u3001\u8D5B\u535A\u670B\u514B\u3001\u84B8\u6C7D\u670B\u514B\u3001\u73B0\u4EE3\u90FD\u5E02\u3001\u5251\u4E0E\u9B54\u6CD5\uFF09\n\u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E00\n\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u4E0E\u4F01\u4E1A\u89C4\u5219\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E8C\n\uFF08\u5185\u5BB9\uFF09\n\n\u8981\u6C42\uFF1A\n1. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u6709\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u5B97\u95E8\u7B49\u8BBE\u5B9A\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002\n2. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002\n3. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u5DF2\u77E5\u7269\u54C1\u3011\n{{items}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u7269\u54C1\u5FC5\u987B\u4E0E\u300C\u89D2\u8272\u300D\u548C\u300C\u5267\u60C5\u300D\u4EA7\u751F\u5173\u8054\uFF0C\u5B64\u7ACB\u7684\u666E\u901A\u9053\u5177\u4E0D\u8981\u8BB0\u5F55\u3002\n\n\u8BF7\u57FA\u4E8E\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u62BD\u53D6\u672C\u6BB5\u51FA\u73B0\u7684\u5177\u6709\u5267\u60C5\u610F\u4E49\u7684\u7269\u54C1/\u9053\u5177/\u4FE1\u7269/\u88C5\u5907\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\n\n\u8BF4\u660E\uFF1A\n- \u7269\u54C1\u540D\uFF1A\u7269\u54C1\u7684\u540D\u79F0\u3002\n- \u4F5C\u7528\uFF1A\u8FD9\u4EF6\u7269\u54C1\u6709\u4EC0\u4E48\u7528\u9014\u3001\u6548\u679C\u6216\u8C61\u5F81\u610F\u4E49\uFF08\u5FC5\u586B\uFF0C\u4E0D\u53EF\u5199\u300C\u65E0\u300D\uFF09\u3002\n- \u6301\u6709\u8005\uFF1A\u73B0\u5728\u5728\u54EA\u4E2A\u89D2\u8272\u624B\u4E0A\u3002\u5FC5\u987B\u662F\u3010\u5267\u60C5\u7EBF\u3011\u6216\u5BF9\u8BDD\u4E2D\u51FA\u73B0\u8FC7\u7684\u89D2\u8272\u540D\uFF1B\u786E\u5B9E\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n- \u5173\u8054\u5267\u60C5\uFF1A\u8FD9\u4EF6\u7269\u54C1\u7275\u6D89\u5230\u54EA\u6761\u5267\u60C5\u7EBF\uFF0C\u8BF7\u4ECE\u4E0B\u9762\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u7684\u6807\u9898\u4E2D\u6311\u9009\uFF0C\u53EF\u591A\u4E2A\u7528\u987F\u53F7\u5206\u9694\uFF1B\u90FD\u4E0D\u6CBE\u8FB9\u5199\u300C\u65E0\u300D\u3002\n- \u6765\u5386\uFF1A\u4ECE\u54EA\u91CC\u83B7\u5F97\u7684\uFF0C\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n\n\u5224\u65AD\u6807\u51C6\uFF1A\u53EA\u8BB0\u5F55\u6EE1\u8DB3\u4EE5\u4E0B\u4EFB\u4E00\u6761\u4EF6\u7684\u7269\u54C1\u2014\u2014\n(a) \u88AB\u67D0\u4E2A\u89D2\u8272\u660E\u786E\u6301\u6709\u6216\u4E89\u593A\uFF1B\n(b) \u63A8\u52A8\u4E86\u67D0\u6761\u5267\u60C5\u7EBF\u7684\u53D1\u5C55\uFF1B\n(c) \u662F\u89D2\u8272\u5173\u7CFB\u6216\u8EAB\u4EFD\u7684\u4FE1\u7269\u3002\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\uFF0C\u4E0D\u8981\u7F16\u53F7\uFF0C\u4E0D\u8981\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
       }
     };
     function load() {
@@ -287,12 +287,18 @@ ${it.message}`;
         // [{id, text, ts, range:[start,end], vector?:number[]}]
         summaries: [],
         // 每段总结/剧情摘要独立存档 [{id, kind:'summary'|'plot', title, text, ts}]
+        // 物品：name=名称 / desc=作用 / owner=持有者；relatedPlots 关联剧情线，origin 来历
         items: [],
-        // 物品追踪 [{id, name, desc, owner, ts}]
+        // [{id, name, desc, owner, relatedPlots:[], origin, ts}]
+        // 剧情线：time=剧情内时间（最左列显示），ts=记录时间戳（排序兜底）
         plots: [],
-        // 剧情线 [{id, title, summary, ts, status:'active'|'done'|'abandon'}]
+        // [{id, title, summary, time, ts, status:'active'|'done'|'abandon'}]
         world: "",
-        // 世界观设定文本
+        // 世界观设定文本（旧版兼容 / 也作为「世界简述」）
+        worldMeta: { name: "", kind: "", desc: "" },
+        // 世界名 / 世界类型 / 一句话简述
+        worldSections: [],
+        // 分条设定 [{id, title, body, ts}]
         relations: [],
         // 关系边 [{from,to,label,weight}]
         summaryPointer: 0
@@ -320,7 +326,19 @@ ${it.message}`;
       try {
         const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
         const base = emptyStore();
-        return Object.assign(base, obj);
+        const s = Object.assign(base, obj);
+        if (!s.worldMeta || typeof s.worldMeta !== "object") s.worldMeta = { name: "", kind: "", desc: "" };
+        if (!Array.isArray(s.worldSections)) s.worldSections = [];
+        s.items = (Array.isArray(s.items) ? s.items : []).map((it) => Object.assign(
+          { id: "it_" + Math.random().toString(36).slice(2), name: "", desc: "", owner: "", relatedPlots: [], origin: "", ts: Date.now() },
+          it,
+          { relatedPlots: Array.isArray(it && it.relatedPlots) ? it.relatedPlots : [] }
+        ));
+        s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => Object.assign(
+          { id: "pl_" + Math.random().toString(36).slice(2), title: "", summary: "", time: "", status: "active", ts: Date.now() },
+          p
+        ));
+        return s;
       } catch (e) {
         return emptyStore();
       }
@@ -374,7 +392,26 @@ ${it.message}`;
     function getSummaries() {
       return load().summaries;
     }
+    let _dispatching = null;
+    let _dispatchPending = false;
     async function dispatchLorebook() {
+      if (_dispatching) {
+        _dispatchPending = true;
+        return _dispatching;
+      }
+      _dispatching = (async () => {
+        try {
+          do {
+            _dispatchPending = false;
+            await doDispatch();
+          } while (_dispatchPending);
+        } finally {
+          _dispatching = null;
+        }
+      })();
+      return _dispatching;
+    }
+    async function doDispatch() {
       if (!WM.Worldbook) return;
       const s = load();
       const settings = WM.Settings.load();
@@ -388,16 +425,42 @@ ${it.message}`;
           strategy: "constant"
         });
       }
+      const plotTitleById = {};
+      for (const p of s.plots) plotTitleById[p.id] = p.title;
       for (const it of s.items) {
         if (!it.name) continue;
+        const relNames = (it.relatedPlots || []).map((pid) => plotTitleById[pid] || pid).filter(Boolean);
+        const lines = [`\u7269\u54C1\uFF1A${it.name}`];
+        if (it.desc) lines.push(`\u4F5C\u7528\uFF1A${it.desc}`);
+        if (it.owner) lines.push(`\u6301\u6709\u8005\uFF1A${it.owner}`);
+        if (it.origin) lines.push(`\u6765\u5386\uFF1A${it.origin}`);
+        if (relNames.length) lines.push(`\u5173\u8054\u5267\u60C5\uFF1A${relNames.join("\u3001")}`);
+        const keys = [it.name];
+        if (it.owner) keys.push(it.owner);
+        for (const n of relNames) keys.push(n);
         await WM.Worldbook.writeEntry({
           kind: "item",
-          sourceId: "item::" + it.name,
+          sourceId: "item::" + it.id,
           title: "\u7269\u54C1\xB7" + it.name,
-          content: `\u7269\u54C1\uFF1A${it.name}${it.owner ? "\uFF08\u6301\u6709\u8005\uFF1A" + it.owner + "\uFF09" : ""}
-${it.desc || ""}`.trim(),
-          keys: [it.name],
+          content: lines.join("\n"),
+          keys: Array.from(new Set(keys.filter(Boolean))),
           strategy: "selective"
+        });
+      }
+      for (const p of s.plots) {
+        if (!p.title && !p.summary) continue;
+        const lines = [];
+        if (p.time) lines.push(`\u65F6\u95F4\uFF1A${p.time}`);
+        if (p.summary) lines.push(p.summary);
+        const stat = p.status === "done" ? "\u5DF2\u5B8C\u7ED3" : p.status === "abandon" ? "\u5DF2\u5E9F\u5F03" : "\u8FDB\u884C\u4E2D";
+        lines.push(`\u72B6\u6001\uFF1A${stat}`);
+        await WM.Worldbook.writeEntry({
+          kind: "plot",
+          sourceId: "plot::" + p.id,
+          title: "\u5267\u60C5\xB7" + (p.title || p.time || p.id),
+          content: lines.join("\n"),
+          keys: [p.title].filter(Boolean),
+          strategy: p.status === "active" ? "constant" : "selective"
         });
       }
       const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
@@ -411,26 +474,64 @@ ${it.desc || ""}`.trim(),
           strategy: "constant"
         });
       }
-      if (s.world && s.world.trim()) {
+      const wm = s.worldMeta || {};
+      const headLines = [];
+      if (wm.name) headLines.push(`\u4E16\u754C\u540D\uFF1A${wm.name}`);
+      if (wm.kind) headLines.push(`\u4E16\u754C\u7C7B\u578B\uFF1A${wm.kind}`);
+      if (wm.desc) headLines.push(wm.desc);
+      if (!headLines.length && s.world && s.world.trim()) headLines.push(s.world.trim());
+      if (headLines.length) {
         await WM.Worldbook.writeEntry({
           kind: "world",
           sourceId: "world::main",
-          title: "\u4E16\u754C\u89C2\u8BBE\u5B9A",
-          content: s.world,
+          title: "\u4E16\u754C\u89C2\xB7" + (wm.name || "\u603B\u7EB2"),
+          content: headLines.join("\n"),
           strategy: "constant"
         });
       }
+      for (const w of s.worldSections || []) {
+        if (!w.title && !w.body) continue;
+        await WM.Worldbook.writeEntry({
+          kind: "world",
+          sourceId: "worldsec::" + w.id,
+          title: "\u8BBE\u5B9A\xB7" + (w.title || w.id),
+          content: `${w.title ? w.title + "\n" : ""}${w.body || ""}`.trim(),
+          keys: [w.title].filter(Boolean),
+          strategy: "selective"
+        });
+      }
+      if (WM.Worldbook.pruneByPrefix) {
+        await WM.Worldbook.pruneByPrefix("item::", s.items.map((x) => "item::" + x.id));
+        await WM.Worldbook.pruneByPrefix("plot::", s.plots.map((x) => "plot::" + x.id));
+        await WM.Worldbook.pruneByPrefix("worldsec::", (s.worldSections || []).map((x) => "worldsec::" + x.id));
+        await WM.Worldbook.pruneByPrefix("summary::", s.summaries.map((x) => "summary::" + x.id));
+      }
     }
-    async function addItem(name, desc, owner) {
+    function normItem(o) {
+      return {
+        name: String(o && o.name || "").trim(),
+        desc: String(o && o.desc || "").trim(),
+        owner: String(o && o.owner || "").trim(),
+        origin: String(o && o.origin || "").trim(),
+        relatedPlots: Array.isArray(o && o.relatedPlots) ? o.relatedPlots.filter(Boolean).map(String) : []
+      };
+    }
+    async function addItem(a, desc, owner) {
       const s = load();
-      s.items.push({ id: "it_" + Date.now(), name: String(name).trim(), desc: String(desc || "").trim(), owner: String(owner || "").trim(), ts: Date.now() });
+      const data = a && typeof a === "object" ? normItem(a) : normItem({ name: a, desc, owner });
+      const id = "it_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
+      s.items.push(Object.assign({ id, ts: Date.now() }, data));
       await save(s);
+      return id;
     }
     async function updateItem(id, patch) {
       const s = load();
       const it = s.items.find((x) => x.id === id);
-      if (it) Object.assign(it, patch);
+      if (!it) return false;
+      Object.assign(it, patch || {});
+      if (patch && "relatedPlots" in patch) it.relatedPlots = Array.isArray(patch.relatedPlots) ? patch.relatedPlots.map(String) : [];
       await save(s);
+      return true;
     }
     async function removeItem(id) {
       const s = load();
@@ -440,16 +541,29 @@ ${it.desc || ""}`.trim(),
     function getItems() {
       return load().items;
     }
-    async function addPlot(title, summary, status) {
+    function normPlot(o) {
+      return {
+        title: String(o && o.title || "").trim(),
+        summary: String(o && o.summary || "").trim(),
+        time: String(o && o.time || "").trim(),
+        status: o && o.status || "active"
+      };
+    }
+    async function addPlot(a, summary, status) {
       const s = load();
-      s.plots.push({ id: "pl_" + Date.now(), title: String(title).trim(), summary: String(summary || "").trim(), status: status || "active", ts: Date.now() });
+      const data = a && typeof a === "object" ? normPlot(a) : normPlot({ title: a, summary, status });
+      const id = "pl_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
+      s.plots.push(Object.assign({ id, ts: Date.now() }, data));
       await save(s);
+      return id;
     }
     async function updatePlot(id, patch) {
       const s = load();
       const p = s.plots.find((x) => x.id === id);
-      if (p) Object.assign(p, patch);
+      if (!p) return false;
+      Object.assign(p, patch || {});
       await save(s);
+      return true;
     }
     async function removePlot(id) {
       const s = load();
@@ -459,6 +573,13 @@ ${it.desc || ""}`.trim(),
     function getPlots() {
       return load().plots;
     }
+    function getPlotsSorted() {
+      const list = load().plots.slice();
+      return list.map((p, i) => ({ p, i })).sort((A, B) => {
+        const d = (B.p.ts || 0) - (A.p.ts || 0);
+        return d !== 0 ? d : B.i - A.i;
+      }).map((x) => x.p);
+    }
     async function setWorld(text) {
       const s = load();
       s.world = String(text || "").trim();
@@ -466,6 +587,41 @@ ${it.desc || ""}`.trim(),
     }
     function getWorld() {
       return load().world;
+    }
+    function getWorldMeta() {
+      const m = load().worldMeta || {};
+      return { name: m.name || "", kind: m.kind || "", desc: m.desc || "" };
+    }
+    async function setWorldMeta(patch) {
+      const s = load();
+      s.worldMeta = Object.assign({ name: "", kind: "", desc: "" }, s.worldMeta || {}, patch || {});
+      s.worldMeta.name = String(s.worldMeta.name || "").trim();
+      s.worldMeta.kind = String(s.worldMeta.kind || "").trim();
+      s.worldMeta.desc = String(s.worldMeta.desc || "").trim();
+      await save(s);
+    }
+    function getWorldSections() {
+      return load().worldSections || [];
+    }
+    async function addWorldSection(title, body) {
+      const s = load();
+      const id = "ws_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
+      s.worldSections.push({ id, title: String(title || "").trim(), body: String(body || "").trim(), ts: Date.now() });
+      await save(s);
+      return id;
+    }
+    async function updateWorldSection(id, patch) {
+      const s = load();
+      const w = s.worldSections.find((x) => x.id === id);
+      if (!w) return false;
+      Object.assign(w, patch || {});
+      await save(s);
+      return true;
+    }
+    async function removeWorldSection(id) {
+      const s = load();
+      s.worldSections = s.worldSections.filter((x) => x.id !== id);
+      await save(s);
     }
     async function setRelations(rels) {
       const s = load();
@@ -513,8 +669,15 @@ ${it.desc || ""}`.trim(),
       updatePlot,
       removePlot,
       getPlots,
+      getPlotsSorted,
       setWorld,
       getWorld,
+      getWorldMeta,
+      setWorldMeta,
+      getWorldSections,
+      addWorldSection,
+      updateWorldSection,
+      removeWorldSection,
       setRelations,
       getRelations,
       dispatchLorebook,
@@ -1010,6 +1173,21 @@ ${it.desc || ""}`.trim(),
         console.warn("[WarmMemo] removeEntry \u5931\u8D25:", e);
       }
     }
+    async function pruneByPrefix(prefix, keepIds) {
+      if (!available() || !prefix) return;
+      const name = targetName();
+      const keep = new Set(Array.isArray(keepIds) ? keepIds : []);
+      try {
+        await helper().deleteWorldbookEntries(name, (e) => {
+          const ex = e && e.extra;
+          if (!ex || !ex.warmMemo || !ex.sourceId) return false;
+          if (String(ex.sourceId).indexOf(prefix) !== 0) return false;
+          return !keep.has(String(ex.sourceId));
+        });
+      } catch (e) {
+        console.warn("[WarmMemo] pruneByPrefix \u5931\u8D25:", e);
+      }
+    }
     async function clearAll() {
       if (!available()) return;
       const name = targetName();
@@ -1060,28 +1238,113 @@ ${it.desc || ""}`.trim(),
       const list = await listEntries();
       return list.map((x) => ({ key: x.entry.name || x.entry.comment || "", content: x.entry.content || "" }));
     }
+    function parseWorldview(text) {
+      if (!text || !String(text).trim()) return null;
+      const lines = String(text).replace(/\r\n/g, "\n").split("\n");
+      const out = { name: "", kind: "", desc: "", sections: [] };
+      let cur = null;
+      const descBuf = [];
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) {
+          if (cur) cur.body.push("");
+          continue;
+        }
+        let m = line.match(/^#{1,6}\s*(.+?)\s*$/) || line.match(/^【(.+?)】\s*$/) || line.match(/^「(.+?)」\s*$/);
+        if (m) {
+          cur = { title: m[1].trim(), body: [] };
+          out.sections.push(cur);
+          continue;
+        }
+        m = line.match(/^(?:世界名(?:称)?|世界)\s*[:：]\s*(.+)$/);
+        if (m && !cur) {
+          out.name = m[1].trim();
+          continue;
+        }
+        m = line.match(/^世界类型\s*[:：]\s*(.+)$/);
+        if (m && !cur) {
+          out.kind = m[1].trim();
+          continue;
+        }
+        m = line.match(/^(?:简述|世界简述|概述)\s*[:：]\s*(.+)$/);
+        if (m && !cur) {
+          descBuf.push(m[1].trim());
+          continue;
+        }
+        if (cur) cur.body.push(line);
+        else descBuf.push(line);
+      }
+      out.desc = descBuf.join("\n").trim();
+      out.sections = out.sections.map((s) => ({ title: s.title, body: s.body.join("\n").trim() })).filter((s) => s.title || s.body);
+      if (!out.name && !out.kind && !out.desc && !out.sections.length) return null;
+      return out;
+    }
     async function inferWorldview(settings, opts) {
-      settings = settings || WM.Settings && WM.Settings.load || {};
+      settings = settings || WM.Settings && WM.Settings.load && WM.Settings.load() || {};
       const char = getCharacterCard();
       const user = getUserCard();
-      const prev = WM.MemoryStore ? WM.MemoryStore.getWorld() : "";
-      const plots = (WM.MemoryStore && WM.MemoryStore.getPlots ? WM.MemoryStore.getPlots() : []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
-      const tpl = settings && settings.prompts && settings.prompts.worldview || "\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u548C\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u62BD\u53D6\u672C\u4E16\u754C\u7684\u5173\u952E\u8BBE\u5B9A\uFF1A\u5730\u70B9\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u7269\u54C1\u3001\u6982\u5FF5\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}";
-      const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: "" });
+      const store = WM.MemoryStore;
+      const prevMeta = store && store.getWorldMeta ? store.getWorldMeta() : { name: "", kind: "", desc: "" };
+      const prevSecs = store && store.getWorldSections ? store.getWorldSections() : [];
+      const prev = store ? store.getWorld() : "";
+      const plots = (store && store.getPlots ? store.getPlots() : []).map((p) => `\xB7 ${p.time ? "[" + p.time + "] " : ""}${p.title}\uFF1A${p.summary}`).join("\n");
+      const items = (store && store.getItems ? store.getItems() : []).map((i) => `\xB7 ${i.name}\uFF08\u6301\u6709\u8005\uFF1A${i.owner || "\u672A\u77E5"}\uFF09\uFF1A${i.desc || ""}`).join("\n");
+      const tpl = settings && settings.prompts && settings.prompts.worldview || DEFAULT_WORLDVIEW_PROMPT;
+      const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: "", items });
+      const known = [
+        prevMeta.name ? `\u4E16\u754C\u540D\uFF1A${prevMeta.name}` : "",
+        prevMeta.kind ? `\u4E16\u754C\u7C7B\u578B\uFF1A${prevMeta.kind}` : "",
+        prevMeta.desc ? `\u7B80\u8FF0\uFF1A${prevMeta.desc}` : "",
+        ...prevSecs.map((w) => `## ${w.title}
+${w.body}`)
+      ].filter(Boolean).join("\n");
       const userMsg = `\u3010\u89D2\u8272\u8BBE\u5B9A\u3011${char.name || "\u672A\u77E5"}\uFF1A${char.description || ""}
 \u3010\u7528\u6237\u8BBE\u5B9A\u3011${user.name || "\u672A\u77E5"}\uFF1A${user.description || ""}
-\u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011${prev || "\uFF08\u65E0\uFF09"}
-\u8BF7\u8F93\u51FA\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
+\u3010\u5267\u60C5\u7EBF\u3011
+${plots || "\uFF08\u65E0\uFF09"}
+\u3010\u5DF2\u77E5\u7269\u54C1\u3011
+${items || "\uFF08\u65E0\uFF09"}
+\u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011
+${known || prev || "\uFF08\u65E0\uFF09"}
+${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.extraInstruction + "\n" : ""}\u8BF7\u6309\u89C4\u5B9A\u683C\u5F0F\u8F93\u51FA\u4E16\u754C\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
       const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
       return out && out.trim() ? out.trim() : prev;
     }
+    const DEFAULT_WORLDVIEW_PROMPT = `\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u5267\u60C5\u7EBF\u3011\u3010\u5DF2\u77E5\u7269\u54C1\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u7684\u8BBE\u5B9A\u3002
+
+\u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A
+
+\u4E16\u754C\u540D\uFF1A\uFF08\u8FD9\u4E2A\u4E16\u754C/\u5927\u9646/\u57CE\u5E02\u53EB\u4EC0\u4E48\uFF0C\u6CA1\u6709\u5C31\u8D77\u4E00\u4E2A\u8D34\u5207\u7684\uFF09
+\u4E16\u754C\u7C7B\u578B\uFF1A\uFF08\u7528\u4E00\u4E2A\u8BCD\u6982\u62EC\uFF0C\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C\u3001\u8D5B\u535A\u670B\u514B\u3001\u84B8\u6C7D\u670B\u514B\u3001\u73B0\u4EE3\u90FD\u5E02\u3001\u5251\u4E0E\u9B54\u6CD5\uFF09
+\u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09
+
+## \u8BBE\u5B9A\u6807\u9898\u4E00
+\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u4E0E\u4F01\u4E1A\u89C4\u5219\uFF09
+
+## \u8BBE\u5B9A\u6807\u9898\u4E8C
+\uFF08\u5185\u5BB9\uFF09
+
+\u8981\u6C42\uFF1A
+1. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u6709\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u5B97\u95E8\u7B49\u8BBE\u5B9A\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002
+2. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002
+3. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002
+
+\u3010\u5267\u60C5\u7EBF\u3011
+{{plot}}
+
+\u3010\u5DF2\u77E5\u7269\u54C1\u3011
+{{items}}
+
+\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011
+{{recent}}`;
     WM.Worldbook = {
       available,
       ensureLorebook,
       writeEntry,
       removeEntry,
       clearAll,
+      pruneByPrefix,
       listEntries,
       getLorebookEntries,
       writeSummary,
@@ -1091,7 +1354,9 @@ ${it.desc || ""}`.trim(),
       targetName,
       getCharacterCard,
       getUserCard,
-      inferWorldview
+      inferWorldview,
+      parseWorldview,
+      DEFAULT_WORLDVIEW_PROMPT
     };
   })();
 
@@ -1265,33 +1530,84 @@ ${recent}
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"), historySummary: histSummaries, relations: relationsText });
-          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u5F53\u524D\u5267\u60C5\u7EBF\uFF08\u6807\u9898\uFF5C\u6458\u8981\uFF0C\u6BCF\u884C\u4E00\u6761\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
-          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
+          const statusMap = { "\u8FDB\u884C\u4E2D": "active", "\u5DF2\u5B8C\u7ED3": "done", "\u5B8C\u7ED3": "done", "\u5DF2\u5E9F\u5F03": "abandon", "\u5E9F\u5F03": "abandon" };
+          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
           for (const ln of lines) {
-            const idx = ln.indexOf("\uFF5C");
-            const idx2 = ln.indexOf("|");
-            const sep = idx >= 0 ? idx : idx2;
-            if (sep >= 0) await WM.MemoryStore.addPlot(ln.slice(0, sep).trim(), ln.slice(sep + 1).trim(), "active");
-            else await WM.MemoryStore.addPlot(ln, "", "active");
+            const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
+            if (!parts.length) continue;
+            if (parts.length >= 3) {
+              const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
+              await WM.MemoryStore.addPlot({
+                time,
+                title: parts[1] || "",
+                summary: parts[2] || "",
+                status: statusMap[parts[3]] || "active"
+              });
+            } else if (parts.length === 2) {
+              await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: "active" });
+            } else if (parts[0]) {
+              await WM.MemoryStore.addPlot({ title: parts[0], summary: "", status: "active" });
+            }
           }
           return { kind: "plot", ok: true };
         })());
         labels.push("plot");
         tasks.push((async () => {
           const world = await WM.Worldbook.inferWorldview(settings, { recent });
-          if (world && world.trim()) await WM.MemoryStore.setWorld(world);
+          if (!world || !world.trim()) return { kind: "worldview", ok: true, skipped: true };
+          const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+          if (parsed) {
+            const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+            await WM.MemoryStore.setWorldMeta({
+              name: parsed.name || cur.name || "",
+              kind: parsed.kind || cur.kind || "",
+              desc: parsed.desc || cur.desc || ""
+            });
+            for (const sec of parsed.sections) {
+              const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+              if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+              else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+            }
+          } else {
+            await WM.MemoryStore.setWorld(world);
+          }
           return { kind: "worldview", ok: true };
         })());
         labels.push("worldview");
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.itemExtract;
           if (!tpl) return { kind: "items", ok: true, skipped: true };
-          const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n") });
-          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u63CF\u8FF0\uFF5C\u6301\u6709\u8005\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
-          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
+          const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
+          const s = fillTemplate(tpl, {
+            recent: recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + m.content).join("\n"),
+            plot: knownPlots
+          });
+          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+          const allPlots = WM.MemoryStore.getPlots() || [];
+          const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
           for (const ln of lines) {
-            const parts = ln.split(/[｜|]/);
-            if (parts[0] && parts[0].trim()) await WM.MemoryStore.addItem(parts[0].trim(), parts[1] ? parts[1].trim() : "", parts[2] ? parts[2].trim() : "");
+            const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
+            const name = parts[0];
+            if (!name) continue;
+            const relIds = [];
+            if (!blank(parts[3])) {
+              for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+                const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+                if (hit) relIds.push(hit.id);
+              }
+            }
+            const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
+            const data = {
+              name,
+              desc: blank(parts[1]) ? exist ? exist.desc : "" : parts[1],
+              owner: blank(parts[2]) ? exist ? exist.owner : "" : parts[2],
+              origin: blank(parts[4]) ? exist ? exist.origin : "" : parts[4],
+              relatedPlots: relIds.length ? relIds : exist ? exist.relatedPlots : []
+            };
+            if (exist) await WM.MemoryStore.updateItem(exist.id, data);
+            else await WM.MemoryStore.addItem(data);
           }
           return { kind: "items", ok: true };
         })());
@@ -1468,11 +1784,38 @@ ${recent}
       const s = WM.MemoryStore.load();
       const cands = [];
       s.summaries.forEach((sm) => cands.push({ id: sm.id, type: sm.kind === "plot" ? "\u5267\u60C5\u6458\u8981" : "\u603B\u7ED3", text: sm.title + "\n" + sm.text }));
-      s.items.forEach((it) => cands.push({ id: it.id, type: "\u7269\u54C1", text: `\u7269\u54C1\uFF1A${it.name}${it.owner ? "\uFF08\u6301\u6709\u8005\uFF1A" + it.owner + "\uFF09" : ""}
-${it.desc || ""}` }));
+      const plotTitle = {};
+      (s.plots || []).forEach((p) => {
+        plotTitle[p.id] = p.title || p.time || p.id;
+      });
+      (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach((p) => {
+        if (!p.title && !p.summary) return;
+        const stat = p.status === "done" ? "\u5DF2\u5B8C\u7ED3" : p.status === "abandon" ? "\u5DF2\u5E9F\u5F03" : "\u8FDB\u884C\u4E2D";
+        cands.push({ id: p.id, type: "\u5267\u60C5", text: `${p.time ? "[" + p.time + "] " : ""}${p.title || ""}\uFF08${stat}\uFF09
+${p.summary || ""}`.trim() });
+      });
+      (s.items || []).forEach((it) => {
+        const rel = (it.relatedPlots || []).map((pid) => plotTitle[pid]).filter(Boolean);
+        const lines = [`\u7269\u54C1\uFF1A${it.name}`];
+        if (it.desc) lines.push(`\u4F5C\u7528\uFF1A${it.desc}`);
+        if (it.owner) lines.push(`\u6301\u6709\u8005\uFF1A${it.owner}`);
+        if (it.origin) lines.push(`\u6765\u5386\uFF1A${it.origin}`);
+        if (rel.length) lines.push(`\u5173\u8054\u5267\u60C5\uFF1A${rel.join("\u3001")}`);
+        cands.push({ id: it.id, type: "\u7269\u54C1", text: lines.join("\n") });
+      });
       const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
       groups.forEach((g) => cands.push({ id: "relation::" + g.person, type: "\u5173\u7CFB", text: g.person + "\u7684\u5173\u7CFB\uFF1A" + g.text }));
-      if (s.world && s.world.trim()) cands.push({ id: "world::main", type: "\u4E16\u754C\u89C2", text: s.world });
+      const wm = s.worldMeta || {};
+      const head = [];
+      if (wm.name) head.push(`\u4E16\u754C\u540D\uFF1A${wm.name}`);
+      if (wm.kind) head.push(`\u4E16\u754C\u7C7B\u578B\uFF1A${wm.kind}`);
+      if (wm.desc) head.push(wm.desc);
+      if (!head.length && s.world && s.world.trim()) head.push(s.world.trim());
+      if (head.length) cands.push({ id: "world::main", type: "\u4E16\u754C\u89C2", text: head.join("\n") });
+      (s.worldSections || []).forEach((w) => {
+        if (!w.title && !w.body) return;
+        cands.push({ id: w.id, type: "\u4E16\u754C\u8BBE\u5B9A", text: `${w.title ? w.title + "\n" : ""}${w.body || ""}`.trim() });
+      });
       return cands;
     }
     function buildMemoryBlock() {
@@ -1951,97 +2294,387 @@ ${it.desc || ""}` }));
         });
       });
     }
+    function openModal(opts) {
+      return new Promise((resolve) => {
+        const fields = opts.fields || [];
+        const mask = document.createElement("div");
+        mask.className = "wm-modal-mask";
+        const fieldHtml = fields.map((f) => {
+          const v = f.value == null ? "" : String(f.value);
+          let ctrl;
+          if (f.type === "textarea") {
+            ctrl = `<textarea id="wmf-${f.key}" placeholder="${escapeHtml(f.placeholder || "")}">${escapeHtml(v)}</textarea>`;
+          } else if (f.type === "select") {
+            ctrl = `<select id="wmf-${f.key}">${(f.options || []).map((o) => `<option value="${escapeHtml(o.value)}" ${String(o.value) === v ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select>`;
+          } else if (f.type === "multiselect") {
+            ctrl = `<select id="wmf-${f.key}" multiple size="${Math.min(5, Math.max(2, (f.options || []).length))}">${(f.options || []).map((o) => `<option value="${escapeHtml(o.value)}" ${Array.isArray(f.value) && f.value.map(String).includes(String(o.value)) ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select>`;
+          } else {
+            ctrl = `<input type="text" id="wmf-${f.key}" value="${escapeHtml(v)}" placeholder="${escapeHtml(f.placeholder || "")}"/>`;
+          }
+          return `<div class="wm-field"><label for="wmf-${f.key}">${escapeHtml(f.label)}</label>${ctrl}${f.hint ? `<div class="wm-field-hint">${escapeHtml(f.hint)}</div>` : ""}</div>`;
+        }).join("");
+        mask.innerHTML = `<div class="wm-modal" role="dialog" aria-modal="true">
+        <div class="wm-modal-head">
+          <div class="wm-modal-title">${escapeHtml(opts.title || "")}</div>
+          <button class="wm-ctrl" data-act="x" aria-label="\u5173\u95ED">\xD7</button>
+        </div>
+        <div class="wm-modal-body">${fieldHtml}</div>
+        <div class="wm-modal-foot">
+          <button class="wm-btn" data-act="cancel">\u53D6\u6D88</button>
+          <button class="wm-btn primary" data-act="ok">${escapeHtml(opts.okText || "\u4FDD\u5B58")}</button>
+        </div>
+      </div>`;
+        document.body.appendChild(mask);
+        const close = (val) => {
+          if (mask.parentNode) mask.parentNode.removeChild(mask);
+          resolve(val);
+        };
+        const collect = () => {
+          const out = {};
+          for (const f of fields) {
+            const el = mask.querySelector("#wmf-" + f.key);
+            if (!el) continue;
+            if (f.type === "multiselect") out[f.key] = Array.from(el.selectedOptions || []).map((o) => o.value);
+            else out[f.key] = el.value;
+          }
+          return out;
+        };
+        mask.querySelector('[data-act="x"]').onclick = () => close(null);
+        mask.querySelector('[data-act="cancel"]').onclick = () => close(null);
+        mask.querySelector('[data-act="ok"]').onclick = () => close(collect());
+        mask.addEventListener("mousedown", (e) => {
+          if (e.target === mask) close(null);
+        });
+        const onKey = (e) => {
+          if (e.key === "Escape") {
+            document.removeEventListener("keydown", onKey);
+            close(null);
+          }
+        };
+        document.addEventListener("keydown", onKey);
+        setTimeout(() => {
+          const first = mask.querySelector(".wm-modal-body input, .wm-modal-body textarea, .wm-modal-body select");
+          if (first) first.focus();
+        }, 30);
+      });
+    }
+    const PLOT_STATUS = [
+      { value: "active", label: "\u8FDB\u884C\u4E2D" },
+      { value: "done", label: "\u5DF2\u5B8C\u7ED3" },
+      { value: "abandon", label: "\u5DF2\u5E9F\u5F03" }
+    ];
+    function statusLabel(v) {
+      const h = PLOT_STATUS.find((x) => x.value === v);
+      return h ? h.label : "\u8FDB\u884C\u4E2D";
+    }
+    function fmtTs(ts) {
+      if (!ts) return "";
+      try {
+        const d = new Date(ts);
+        const p = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      } catch (e) {
+        return "";
+      }
+    }
     function renderPlot(body) {
-      const plots = WM.MemoryStore.getPlots();
-      let html = `<div class="wm-card"><div class="wm-h">\u5267\u60C5\u7EBF\uFF08${plots.length}\uFF09</div>
-      <div class="wm-timeline" id="plot-tl">`;
-      const order = { active: 0, done: 1, abandon: 2 };
-      const sorted = plots.slice().sort((a, b) => order[a.status] - order[b.status]);
-      html += sorted.map((p) => `<div class="wm-plot wm-plot-${p.status}">
-        <div class="wm-plot-title">${escapeHtml(p.title)} <span class="wm-badge">${p.status}</span></div>
-        <div class="wm-plot-sum">${escapeHtml(p.summary)}</div></div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u5267\u60C5\u7EBF</div>';
-      html += `</div>
-      <div class="wm-actions"><button id="plot-run" class="wm-btn primary">\u4ECE\u8BB0\u5FC6\u66F4\u65B0\u5267\u60C5\u7EBF</button></div>
-      <div class="wm-status" id="plot-status"></div></div>`;
-      body.innerHTML = html;
-      body.querySelector("#plot-run").onclick = async () => {
-        const st = body.querySelector("#plot-status");
-        st.textContent = "\u5F52\u7EB3\u4E2D\u2026";
-        const r = await WM.Summary.runSummary(WM.Settings.load());
-        st.textContent = r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u66F4\u65B0" : "\u2717 \u5931\u8D25";
+      const plots = WM.MemoryStore.getPlotsSorted ? WM.MemoryStore.getPlotsSorted() : WM.MemoryStore.getPlots().slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      const rows = plots.map((p) => {
+        const recTime = fmtTs(p.ts);
+        const mainTime = p.time || recTime.split(" ")[0] || "\u672A\u6807\u6CE8";
+        const subTime = p.time ? recTime : recTime.split(" ")[1] || "";
+        return `<div class="wm-plot wm-plot-${p.status}" data-id="${p.id}">
+        <div class="wm-plot-time">
+          <div class="wm-plot-time-main">${escapeHtml(mainTime)}</div>
+          ${subTime ? `<div class="wm-plot-time-sub">${escapeHtml(subTime)}</div>` : ""}
+        </div>
+        <div class="wm-plot-body">
+          <div class="wm-plot-head">
+            <span class="wm-plot-title">${escapeHtml(p.title || "\uFF08\u672A\u547D\u540D\uFF09")}</span>
+            <span class="wm-badge">${escapeHtml(statusLabel(p.status))}</span>
+          </div>
+          <div class="wm-plot-sum">${escapeHtml(p.summary || "")}</div>
+          <div class="wm-plot-acts">
+            <button class="wm-btn" data-act="edit" data-id="${p.id}">\u7F16\u8F91</button>
+            <button class="wm-btn" data-act="del" data-id="${p.id}">\u5220\u9664</button>
+          </div>
+        </div>
+      </div>`;
+      }).join("");
+      body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">\u5267\u60C5\u7EBF\uFF08${plots.length}\uFF09</div>
+      <div class="wm-hint">\u6309\u65F6\u95F4\u5012\u5E8F\u6392\u5217\uFF0C\u6700\u65B0\u7684\u5728\u6700\u4E0A\u9762\uFF1B\u5DE6\u4FA7\u4E3A\u65F6\u95F4\uFF0C\u53F3\u4FA7\u4E3A\u5185\u5BB9\u3002\u6240\u6709\u6539\u52A8\u4F1A\u540C\u6B65\u5230\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66\u3002</div>
+      <div class="wm-actions">
+        <button data-act="plot-add" class="wm-btn primary">\uFF0B \u6DFB\u52A0\u5267\u60C5</button>
+        <button data-act="plot-run" class="wm-btn">\u4ECE\u8BB0\u5FC6\u66F4\u65B0\u5267\u60C5\u7EBF</button>
+      </div>
+      <div class="wm-timeline">${rows || '<div class="wm-empty">\u6682\u65E0\u5267\u60C5\u7EBF</div>'}</div>
+      <div class="wm-status"></div></div>`;
+      const plotFields = (p) => [
+        { key: "time", label: "\u65F6\u95F4\uFF08\u5267\u60C5\u5185\u65F6\u95F4\uFF0C\u663E\u793A\u5728\u6700\u5DE6\u4FA7\uFF09", value: p && p.time || "", placeholder: "\u5982\uFF1A\u7B2C\u4E09\u65E5\u6E05\u6668 / \u5EFA\u5143\u4E03\u5E74\u6625" },
+        { key: "title", label: "\u6807\u9898", value: p && p.title || "", placeholder: "\u8FD9\u6BB5\u5267\u60C5\u53EB\u4EC0\u4E48" },
+        { key: "summary", label: "\u5185\u5BB9", type: "textarea", value: p && p.summary || "", placeholder: "\u8FD9\u6BB5\u5267\u60C5\u53D1\u751F\u4E86\u4EC0\u4E48" },
+        { key: "status", label: "\u72B6\u6001", type: "select", value: p && p.status || "active", options: PLOT_STATUS }
+      ];
+      const plotAdd = body.querySelector('[data-act="plot-add"]');
+      if (plotAdd) plotAdd.onclick = async () => {
+        const r = await openModal({ title: "\u6DFB\u52A0\u5267\u60C5", fields: plotFields(null), okText: "\u6DFB\u52A0" });
+        if (!r) return;
+        if (!r.title.trim() && !r.summary.trim()) {
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u6807\u9898\u548C\u5185\u5BB9\u4E0D\u80FD\u90FD\u4E3A\u7A7A");
+          return;
+        }
+        await WM.MemoryStore.addPlot(r);
+        toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderPlot(body);
       };
+      const plotRun = body.querySelector('[data-act="plot-run"]');
+      if (plotRun) plotRun.onclick = async () => {
+        const st = body.querySelector(".wm-status");
+        if (st) st.textContent = "\u5F52\u7EB3\u4E2D\u2026";
+        const r = await WM.Summary.runSummary(WM.Settings.load());
+        if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u66F4\u65B0" : "\u2717 \u5931\u8D25";
+        renderPlot(body);
+      };
+      body.querySelectorAll('[data-act="edit"]').forEach((b) => {
+        b.onclick = async () => {
+          const p = WM.MemoryStore.getPlots().find((x) => x.id === b.dataset.id);
+          if (!p) return;
+          const r = await openModal({ title: "\u7F16\u8F91\u5267\u60C5", fields: plotFields(p), okText: "\u4FDD\u5B58" });
+          if (!r) return;
+          await WM.MemoryStore.updatePlot(p.id, r);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderPlot(body);
+        };
+      });
+      body.querySelectorAll('[data-act="del"]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u6761\u5267\u60C5\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
+          await WM.MemoryStore.removePlot(b.dataset.id);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderPlot(body);
+        };
+      });
     }
     function renderItem(body) {
       const items = WM.MemoryStore.getItems();
-      let html = `<div class="wm-card"><div class="wm-h">\u7269\u54C1 / \u6301\u6709\u7269\u8FFD\u8E2A\uFF08${items.length}\uFF09</div>
-      <div class="wm-row"><input id="it-name" placeholder="\u7269\u54C1\u540D"/><input id="it-desc" placeholder="\u63CF\u8FF0"/><input id="it-owner" placeholder="\u6301\u6709\u8005"/></div>
-      <button id="it-add" class="wm-btn primary">\u6DFB\u52A0</button>
-      <div class="wm-list" id="it-list">`;
-      html += items.map((i) => `<div class="wm-item" data-id="${i.id}"><b>${escapeHtml(i.name)}</b> <span class="wm-muted">\uFF08${escapeHtml(i.owner || "\u672A\u77E5")}\uFF09</span><br/>${escapeHtml(i.desc)} <span class="wm-del" data-id="${i.id}">\u2715</span></div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u7269\u54C1</div>';
-      html += `</div></div>`;
-      body.innerHTML = html;
-      body.querySelector("#it-add").onclick = async () => {
-        const n = body.querySelector("#it-name").value.trim();
-        if (!n) return;
-        await WM.MemoryStore.addItem(n, body.querySelector("#it-desc").value, body.querySelector("#it-owner").value);
+      const plots = WM.MemoryStore.getPlots();
+      const plotTitle = {};
+      for (const p of plots) plotTitle[p.id] = p.title || p.time || p.id;
+      const cards = items.map((i) => {
+        const rel = (i.relatedPlots || []).map((pid) => plotTitle[pid]).filter(Boolean);
+        return `<div class="wm-item-card" data-id="${i.id}">
+        <div class="wm-item-name">${escapeHtml(i.name || "\uFF08\u672A\u547D\u540D\uFF09")}${i.origin ? `<span class="wm-tag">\u6765\u5386\uFF1A${escapeHtml(i.origin)}</span>` : ""}</div>
+        <div class="wm-item-effect">${escapeHtml(i.desc || "\uFF08\u672A\u586B\u5199\u4F5C\u7528\uFF09")}</div>
+        <div class="wm-item-owner">
+          <span><b>\u6301\u6709\u8005\uFF1A</b>${escapeHtml(i.owner || "\u672A\u77E5")}</span>
+          ${rel.length ? `<span><b>\u5173\u8054\u5267\u60C5\uFF1A</b>${escapeHtml(rel.join("\u3001"))}</span>` : ""}
+        </div>
+        <div class="wm-item-acts">
+          <button class="wm-btn" data-act="edit" data-id="${i.id}">\u7F16\u8F91</button>
+          <button class="wm-btn" data-act="del" data-id="${i.id}">\u5220\u9664</button>
+        </div>
+      </div>`;
+      }).join("");
+      body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">\u7269\u54C1 / \u6301\u6709\u7269\u8FFD\u8E2A\uFF08${items.length}\uFF09</div>
+      <div class="wm-hint">\u5361\u7247\u81EA\u4E0A\u800C\u4E0B\u4E3A\uFF1A\u7269\u54C1\u540D\u79F0 \u2192 \u7269\u54C1\u4F5C\u7528 \u2192 \u6301\u6709\u8005\u3002\u7269\u54C1\u4F1A\u5173\u8054\u5230\u89D2\u8272\u4E0E\u5267\u60C5\u7EBF\uFF0C\u6539\u52A8\u5373\u540C\u6B65\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66\u3002</div>
+      <div class="wm-actions"><button data-act="it-add" class="wm-btn primary">\uFF0B \u6DFB\u52A0\u7269\u54C1</button></div>
+      <div class="wm-item-list">${cards || '<div class="wm-empty">\u6682\u65E0\u7269\u54C1\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u7269\u54C1\u300D\u65B0\u5EFA</div>'}</div>
+    </div>`;
+      const itemFields = (it) => [
+        { key: "name", label: "\u7269\u54C1\u540D\u79F0", value: it && it.name || "", placeholder: "\u5982\uFF1A\u9752\u7389\u846B\u82A6" },
+        { key: "desc", label: "\u7269\u54C1\u4F5C\u7528", type: "textarea", value: it && it.desc || "", placeholder: "\u8FD9\u4EF6\u7269\u54C1\u6709\u4EC0\u4E48\u7528\u9014 / \u6548\u679C" },
+        { key: "owner", label: "\u6301\u6709\u8005\uFF08\u89D2\u8272\u540D\uFF09", value: it && it.owner || "", placeholder: "\u73B0\u5728\u5728\u8C01\u624B\u4E0A" },
+        { key: "origin", label: "\u6765\u5386\uFF08\u53EF\u9009\uFF09", value: it && it.origin || "", placeholder: "\u4ECE\u54EA\u6765\u7684" },
+        {
+          key: "relatedPlots",
+          label: "\u5173\u8054\u5267\u60C5\u7EBF\uFF08\u53EF\u591A\u9009\uFF09",
+          type: "multiselect",
+          value: it && it.relatedPlots || [],
+          options: plots.map((p) => ({ value: p.id, label: p.title || p.time || p.id })),
+          hint: plots.length ? "\u6309\u4F4F Ctrl / Cmd \u53EF\u591A\u9009" : "\u6682\u65E0\u5267\u60C5\u7EBF\uFF0C\u53EF\u5148\u5230\u300C\u5267\u60C5\u7EBF\u300D\u9875\u6DFB\u52A0"
+        }
+      ];
+      const addBtn = body.querySelector('[data-act="it-add"]');
+      if (addBtn) addBtn.onclick = async () => {
+        const r = await openModal({ title: "\u6DFB\u52A0\u7269\u54C1", fields: itemFields(null), okText: "\u6DFB\u52A0" });
+        if (!r) return;
+        if (!r.name.trim()) {
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A");
+          return;
+        }
+        await WM.MemoryStore.addItem(r);
+        toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderItem(body);
       };
-      body.querySelectorAll(".wm-del").forEach((d) => d.onclick = async () => {
-        await WM.MemoryStore.removeItem(d.dataset.id);
-        renderItem(body);
+      body.querySelectorAll('[data-act="edit"]').forEach((b) => {
+        b.onclick = async () => {
+          const it = WM.MemoryStore.getItems().find((x) => x.id === b.dataset.id);
+          if (!it) return;
+          const r = await openModal({ title: "\u7F16\u8F91\u7269\u54C1", fields: itemFields(it), okText: "\u4FDD\u5B58" });
+          if (!r) return;
+          if (!r.name.trim()) {
+            toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A");
+            return;
+          }
+          await WM.MemoryStore.updateItem(it.id, r);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderItem(body);
+        };
+      });
+      body.querySelectorAll('[data-act="del"]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u4E2A\u7269\u54C1\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
+          await WM.MemoryStore.removeItem(b.dataset.id);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderItem(body);
+        };
       });
     }
     async function renderWorld(body) {
       const settings = WM.Settings.load();
-      const world = WM.MemoryStore.getWorld();
-      let charName = "";
-      try {
-        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext() || null;
-        charName = ctx && (ctx.name1 || ctx.characters && ctx.character_card && ctx.character_card.data && ctx.character_card.data.name) || "";
-      } catch (e) {
-        charName = "";
-      }
+      const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : { name: "", kind: "", desc: "" };
+      const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
       let loreCount = 0;
       try {
         loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0;
       } catch (e) {
         loreCount = 0;
       }
-      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u4E16\u754C\u8BBE\u5B9A \xB7 ${escapeHtml(charName || "\u5F53\u524D\u89D2\u8272\u5361")}</div>
-      <div class="wm-hint">\u8FD9\u662F\u672C\u5F20\u89D2\u8272\u5361\u7684\u4E16\u754C\u8BBE\u5B9A\uFF0C\u76F4\u63A5\u4E66\u5199\u5E76\u4FDD\u5B58\uFF0C\u4F1A\u81EA\u52A8\u6CE8\u5165\u4E0A\u4E0B\u6587${loreCount ? `\uFF08\u5DF2\u540C\u6B65\u4E16\u754C\u4E66 ${loreCount} \u6761\uFF09` : ""}</div>
-      <textarea id="world-ta" class="wm-ta" placeholder="\u76F4\u63A5\u5199\u4E0B\u5F53\u524D\u89D2\u8272\u5361\u7684\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF0C\u4F8B\u5982\uFF1A\u5927\u9646\u540D\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u65F6\u95F4\u7EBF\u2026\u2026">${escapeHtml(world)}</textarea>
-      <div class="wm-row"><input id="world-extra" placeholder="\u8BA9 AI \u5E2E\u4F60\u6DA6\u8272/\u8865\u5168\u7684\u6307\u4EE4\uFF08\u53EF\u9009\uFF0C\u7559\u7A7A\u5219\u4E0D\u6539\u5199\uFF09" style="flex:1"/></div>
-      <div class="wm-row"><input id="world-lorename" placeholder="\u4E16\u754C\u4E66\u540D\uFF08\u540C\u6B65\u4E16\u754C\u4E66\u7528\uFF0C\u5982 lorebook\uFF09" value="${settings.lorebookName || ""}" style="flex:1"/></div>
-      <label class="wm-row"><input type="checkbox" id="world-lore" ${settings.worldToLorebook ? "checked" : ""}/> \u540C\u6B65\u5199\u5165\u4E16\u754C\u4E66\uFF08\u6240\u6709\u5BF9\u8BDD\u5171\u4EAB\uFF09</label>
-      <div class="wm-actions">
-        <button id="world-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u5B9A</button>
-        <button id="world-gen" class="wm-btn">AI \u6DA6\u8272\u8865\u5168</button>
+      const secHtml = secs.map((w) => `<div class="wm-world-sec" data-id="${w.id}">
+      <div class="wm-world-sec-title">${escapeHtml(w.title || "\uFF08\u672A\u547D\u540D\u8BBE\u5B9A\uFF09")}</div>
+      <div class="wm-world-sec-body">${escapeHtml(w.body || "")}</div>
+      <div class="wm-world-acts">
+        <button class="wm-btn" data-act="sec-edit" data-id="${w.id}">\u7F16\u8F91</button>
+        <button class="wm-btn" data-act="sec-del" data-id="${w.id}">\u5220\u9664</button>
       </div>
-      <div class="wm-status" id="world-status"></div></div>`;
-      body.querySelector("#world-save").onclick = async () => {
-        settings.lorebookName = body.querySelector("#world-lorename").value.trim();
-        WM.Settings.save(settings);
-        await WM.MemoryStore.setWorld(body.querySelector("#world-ta").value);
-        body.querySelector("#world-status").textContent = "\u2713 \u5DF2\u4FDD\u5B58\uFF08\u6CE8\u5165\u5F53\u524D\u89D2\u8272\u5361\u4E0A\u4E0B\u6587\uFF09";
+    </div>`).join("");
+      body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">\u4E16\u754C\u8BBE\u5B9A</div>
+      <div class="wm-hint">\u9876\u90E8\u662F\u8FD9\u4E2A\u4E16\u754C\u300C\u53EB\u4EC0\u4E48\u3001\u662F\u4EC0\u4E48\u7C7B\u578B\u300D\uFF0C\u4E0B\u9762\u6309\u6761\u76EE\u5199\u5177\u4F53\u8BBE\u5B9A\uFF08\u5982\u4FEE\u70BC\u4F53\u7CFB\u3001\u52BF\u529B\u5206\u5E03\uFF09\u3002\u6240\u6709\u6539\u52A8\u5373\u540C\u6B65\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66${loreCount ? `\uFF08\u73B0\u6709 ${loreCount} \u6761\uFF09` : ""}\u3002</div>
+
+      <div class="wm-world-head">
+        <div class="wm-world-name">${escapeHtml(meta.name || "\u672A\u547D\u540D\u4E16\u754C")}</div>
+        ${meta.kind ? `<span class="wm-world-kind">${escapeHtml(meta.kind)}</span>` : ""}
+        <div class="wm-world-desc">${escapeHtml(meta.desc || "\uFF08\u8FD8\u6CA1\u6709\u4E16\u754C\u7B80\u8FF0\uFF0C\u70B9\u4E0B\u65B9\u300C\u7F16\u8F91\u4E16\u754C\u300D\u8865\u5145\uFF09")}</div>
+      </div>
+
+      <div class="wm-actions">
+        <button data-act="world-edit" class="wm-btn primary">\u7F16\u8F91\u4E16\u754C</button>
+        <button data-act="sec-add" class="wm-btn">\uFF0B \u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE</button>
+        <button data-act="world-gen" class="wm-btn">AI \u8865\u5168\u8BBE\u5B9A</button>
+      </div>
+
+      <div class="wm-h" style="margin-top:12px">\u5177\u4F53\u8BBE\u5B9A\uFF08${secs.length}\uFF09</div>
+      <div class="wm-world-secs">${secHtml || '<div class="wm-empty">\u6682\u65E0\u8BBE\u5B9A\u6761\u76EE\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE\u300D\u65B0\u5EFA</div>'}</div>
+
+      <div class="wm-divider"></div>
+      <div class="wm-row"><input data-act="world-lorename" placeholder="\u4E16\u754C\u4E66\u540D\uFF08\u540C\u6B65\u7528\uFF0C\u5982 WarmMemo\uFF09" value="${escapeHtml(settings.lorebookName || "")}" style="flex:1"/></div>
+      <label class="wm-row"><input type="checkbox" data-act="world-lore" ${settings.worldToLorebook !== false ? "checked" : ""}/> \u540C\u6B65\u5199\u5165\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66</label>
+      <div class="wm-actions"><button data-act="world-lore-save" class="wm-btn">\u4FDD\u5B58\u540C\u6B65\u8BBE\u7F6E</button></div>
+      <div class="wm-status"></div>
+    </div>`;
+      const wEdit = body.querySelector('[data-act="world-edit"]');
+      if (wEdit) wEdit.onclick = async () => {
+        const r = await openModal({
+          title: "\u7F16\u8F91\u4E16\u754C",
+          okText: "\u4FDD\u5B58",
+          fields: [
+            { key: "name", label: "\u4E16\u754C\u540D\u79F0", value: meta.name, placeholder: "\u5982\uFF1A\u4E5D\u9704\u5927\u9646" },
+            { key: "kind", label: "\u4E16\u754C\u7C7B\u578B", value: meta.kind, placeholder: "\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C / \u8D5B\u535A\u670B\u514B / westeros \u5F0F\u4E2D\u4E16\u7EAA" },
+            { key: "desc", label: "\u4E16\u754C\u7B80\u8FF0", type: "textarea", value: meta.desc, placeholder: "\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C" }
+          ]
+        });
+        if (!r) return;
+        await WM.MemoryStore.setWorldMeta(r);
+        toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u4E16\u754C\u4FE1\u606F\u5DF2\u4FDD\u5B58\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+        renderWorld(body);
       };
-      body.querySelector("#world-gen").onclick = async () => {
-        const st = body.querySelector("#world-status");
-        st.textContent = "\u6DA6\u8272\u4E2D\u2026";
+      const secAdd = body.querySelector('[data-act="sec-add"]');
+      if (secAdd) secAdd.onclick = async () => {
+        const r = await openModal({
+          title: "\u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE",
+          okText: "\u6DFB\u52A0",
+          fields: [
+            { key: "title", label: "\u8BBE\u5B9A\u540D\u79F0", value: "", placeholder: "\u5982\uFF1A\u4FEE\u70BC\u4F53\u7CFB / \u52BF\u529B\u5206\u5E03 / \u8D27\u5E01\u4E0E\u5EA6\u91CF" },
+            { key: "body", label: "\u8BBE\u5B9A\u5185\u5BB9", type: "textarea", value: "", placeholder: "\u56F4\u7ED5\u8FD9\u4E2A\u4E16\u754C\u7C7B\u578B\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219" }
+          ]
+        });
+        if (!r) return;
+        if (!r.title.trim() && !r.body.trim()) {
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u540D\u79F0\u548C\u5185\u5BB9\u4E0D\u80FD\u90FD\u4E3A\u7A7A");
+          return;
+        }
+        await WM.MemoryStore.addWorldSection(r.title, r.body);
+        toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+        renderWorld(body);
+      };
+      body.querySelectorAll('[data-act="sec-edit"]').forEach((b) => {
+        b.onclick = async () => {
+          const w = (WM.MemoryStore.getWorldSections() || []).find((x) => x.id === b.dataset.id);
+          if (!w) return;
+          const r = await openModal({
+            title: "\u7F16\u8F91\u8BBE\u5B9A\u6761\u76EE",
+            okText: "\u4FDD\u5B58",
+            fields: [
+              { key: "title", label: "\u8BBE\u5B9A\u540D\u79F0", value: w.title },
+              { key: "body", label: "\u8BBE\u5B9A\u5185\u5BB9", type: "textarea", value: w.body }
+            ]
+          });
+          if (!r) return;
+          await WM.MemoryStore.updateWorldSection(w.id, r);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderWorld(body);
+        };
+      });
+      body.querySelectorAll('[data-act="sec-del"]').forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u6761\u8BBE\u5B9A\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
+          await WM.MemoryStore.removeWorldSection(b.dataset.id);
+          toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+          renderWorld(body);
+        };
+      });
+      const loreSave = body.querySelector('[data-act="world-lore-save"]');
+      if (loreSave) loreSave.onclick = async () => {
+        const nameEl = body.querySelector('[data-act="world-lorename"]');
+        const loreEl = body.querySelector('[data-act="world-lore"]');
+        if (nameEl) settings.lorebookName = nameEl.value.trim();
+        if (loreEl) settings.worldToLorebook = loreEl.checked;
+        WM.Settings.save(settings);
+        if (settings.worldToLorebook) await WM.MemoryStore.dispatchLorebook();
+        const st = body.querySelector(".wm-status");
+        if (st) st.textContent = "\u2713 \u540C\u6B65\u8BBE\u7F6E\u5DF2\u4FDD\u5B58";
+      };
+      const wGen = body.querySelector('[data-act="world-gen"]');
+      if (wGen) wGen.onclick = async () => {
+        const st = body.querySelector(".wm-status");
+        if (st) st.textContent = "\u63A8\u65AD\u4E2D\u2026";
         try {
-          settings.lorebookName = body.querySelector("#world-lorename").value.trim();
-          WM.Settings.save(settings);
-          const w = await WM.Worldbook.inferWorldview(settings, { extraInstruction: body.querySelector("#world-extra").value });
-          body.querySelector("#world-ta").value = w;
-          await WM.MemoryStore.setWorld(w);
-          if (body.querySelector("#world-lore").checked) {
-            await WM.Worldbook.writeWorld(w);
-            st.textContent = "\u2713 \u5DF2\u6DA6\u8272\u5E76\u5199\u5165\u4E16\u754C\u4E66\uFF08\u72EC\u7ACB\u6761\u76EE\uFF09";
+          const w = await WM.Worldbook.inferWorldview(settings, {});
+          const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(w) : null;
+          if (parsed) {
+            if (parsed.name || parsed.kind || parsed.desc) {
+              await WM.MemoryStore.setWorldMeta({
+                name: parsed.name || meta.name,
+                kind: parsed.kind || meta.kind,
+                desc: parsed.desc || meta.desc
+              });
+            }
+            for (const sec of parsed.sections) {
+              const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+              if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+              else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+            }
+            if (st) st.textContent = `\u2713 \u5DF2\u8865\u5168\uFF08${parsed.sections.length} \u6761\u8BBE\u5B9A\uFF09\u5E76\u540C\u6B65\u4E16\u754C\u4E66`;
           } else {
-            st.textContent = "\u2713 \u5DF2\u6DA6\u8272\uFF08\u4EC5\u5F53\u524D\u89D2\u8272\u5361\u8BB0\u5FC6+\u6CE8\u5165\uFF09";
+            await WM.MemoryStore.setWorld(w);
+            if (st) st.textContent = "\u2713 \u5DF2\u8865\u5168";
           }
+          renderWorld(body);
         } catch (e) {
-          st.textContent = "\u2717 " + (e.message || e);
+          if (st) st.textContent = "\u2717 " + (e.message || e);
         }
       };
     }

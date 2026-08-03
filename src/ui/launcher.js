@@ -392,89 +392,380 @@
     });
   }
 
+  // ── 通用弹窗：fields=[{key,label,type,value,placeholder,hint,options}] ──
+  // 返回 Promise，确定时 resolve 表单对象，取消时 resolve null。
+  function openModal(opts) {
+    return new Promise((resolve) => {
+      const fields = opts.fields || [];
+      const mask = document.createElement('div');
+      mask.className = 'wm-modal-mask';
+      const fieldHtml = fields.map((f) => {
+        const v = f.value == null ? '' : String(f.value);
+        let ctrl;
+        if (f.type === 'textarea') {
+          ctrl = `<textarea id="wmf-${f.key}" placeholder="${escapeHtml(f.placeholder || '')}">${escapeHtml(v)}</textarea>`;
+        } else if (f.type === 'select') {
+          ctrl = `<select id="wmf-${f.key}">${(f.options || []).map((o) =>
+            `<option value="${escapeHtml(o.value)}" ${String(o.value) === v ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>`;
+        } else if (f.type === 'multiselect') {
+          ctrl = `<select id="wmf-${f.key}" multiple size="${Math.min(5, Math.max(2, (f.options || []).length))}">${(f.options || []).map((o) =>
+            `<option value="${escapeHtml(o.value)}" ${(Array.isArray(f.value) && f.value.map(String).includes(String(o.value))) ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>`;
+        } else {
+          ctrl = `<input type="text" id="wmf-${f.key}" value="${escapeHtml(v)}" placeholder="${escapeHtml(f.placeholder || '')}"/>`;
+        }
+        return `<div class="wm-field"><label for="wmf-${f.key}">${escapeHtml(f.label)}</label>${ctrl}${
+          f.hint ? `<div class="wm-field-hint">${escapeHtml(f.hint)}</div>` : ''}</div>`;
+      }).join('');
+      mask.innerHTML = `<div class="wm-modal" role="dialog" aria-modal="true">
+        <div class="wm-modal-head">
+          <div class="wm-modal-title">${escapeHtml(opts.title || '')}</div>
+          <button class="wm-ctrl" data-act="x" aria-label="关闭">×</button>
+        </div>
+        <div class="wm-modal-body">${fieldHtml}</div>
+        <div class="wm-modal-foot">
+          <button class="wm-btn" data-act="cancel">取消</button>
+          <button class="wm-btn primary" data-act="ok">${escapeHtml(opts.okText || '保存')}</button>
+        </div>
+      </div>`;
+      document.body.appendChild(mask);
+      const close = (val) => { if (mask.parentNode) mask.parentNode.removeChild(mask); resolve(val); };
+      const collect = () => {
+        const out = {};
+        for (const f of fields) {
+          const el = mask.querySelector('#wmf-' + f.key);
+          if (!el) continue;
+          if (f.type === 'multiselect') out[f.key] = Array.from(el.selectedOptions || []).map((o) => o.value);
+          else out[f.key] = el.value;
+        }
+        return out;
+      };
+      mask.querySelector('[data-act="x"]').onclick = () => close(null);
+      mask.querySelector('[data-act="cancel"]').onclick = () => close(null);
+      mask.querySelector('[data-act="ok"]').onclick = () => close(collect());
+      mask.addEventListener('mousedown', (e) => { if (e.target === mask) close(null); });
+      const onKey = (e) => {
+        if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); close(null); }
+      };
+      document.addEventListener('keydown', onKey);
+      setTimeout(() => { const first = mask.querySelector('.wm-modal-body input, .wm-modal-body textarea, .wm-modal-body select'); if (first) first.focus(); }, 30);
+    });
+  }
+
+  const PLOT_STATUS = [
+    { value: 'active', label: '进行中' },
+    { value: 'done', label: '已完结' },
+    { value: 'abandon', label: '已废弃' },
+  ];
+  function statusLabel(v) { const h = PLOT_STATUS.find((x) => x.value === v); return h ? h.label : '进行中'; }
+  function fmtTs(ts) {
+    if (!ts) return '';
+    try {
+      const d = new Date(ts);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    } catch (e) { return ''; }
+  }
+
+  // 剧情线：最新在上；左列时间，右列内容
   function renderPlot(body) {
-    const plots = WM.MemoryStore.getPlots();
-    let html = `<div class="wm-card"><div class="wm-h">剧情线（${plots.length}）</div>
-      <div class="wm-timeline" id="plot-tl">`;
-    const order = { active: 0, done: 1, abandon: 2 };
-    const sorted = plots.slice().sort((a, b) => order[a.status] - order[b.status]);
-    html += sorted.map((p) => `<div class="wm-plot wm-plot-${p.status}">
-        <div class="wm-plot-title">${escapeHtml(p.title)} <span class="wm-badge">${p.status}</span></div>
-        <div class="wm-plot-sum">${escapeHtml(p.summary)}</div></div>`).join('') || '<div class="wm-empty">暂无剧情线</div>';
-    html += `</div>
-      <div class="wm-actions"><button id="plot-run" class="wm-btn primary">从记忆更新剧情线</button></div>
-      <div class="wm-status" id="plot-status"></div></div>`;
-    body.innerHTML = html;
-    body.querySelector('#plot-run').onclick = async () => {
-      const st = body.querySelector('#plot-status'); st.textContent = '归纳中…';
-      const r = await WM.Summary.runSummary(WM.Settings.load());
-      st.textContent = r.ok ? '✓ 剧情线已更新' : '✗ 失败';
+    const plots = WM.MemoryStore.getPlotsSorted
+      ? WM.MemoryStore.getPlotsSorted()
+      : WM.MemoryStore.getPlots().slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+    const rows = plots.map((p) => {
+      const recTime = fmtTs(p.ts);
+      const mainTime = p.time || recTime.split(' ')[0] || '未标注';
+      const subTime = p.time ? recTime : (recTime.split(' ')[1] || '');
+      return `<div class="wm-plot wm-plot-${p.status}" data-id="${p.id}">
+        <div class="wm-plot-time">
+          <div class="wm-plot-time-main">${escapeHtml(mainTime)}</div>
+          ${subTime ? `<div class="wm-plot-time-sub">${escapeHtml(subTime)}</div>` : ''}
+        </div>
+        <div class="wm-plot-body">
+          <div class="wm-plot-head">
+            <span class="wm-plot-title">${escapeHtml(p.title || '（未命名）')}</span>
+            <span class="wm-badge">${escapeHtml(statusLabel(p.status))}</span>
+          </div>
+          <div class="wm-plot-sum">${escapeHtml(p.summary || '')}</div>
+          <div class="wm-plot-acts">
+            <button class="wm-btn" data-act="edit" data-id="${p.id}">编辑</button>
+            <button class="wm-btn" data-act="del" data-id="${p.id}">删除</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">剧情线（${plots.length}）</div>
+      <div class="wm-hint">按时间倒序排列，最新的在最上面；左侧为时间，右侧为内容。所有改动会同步到当前记忆世界书。</div>
+      <div class="wm-actions">
+        <button data-act="plot-add" class="wm-btn primary">＋ 添加剧情</button>
+        <button data-act="plot-run" class="wm-btn">从记忆更新剧情线</button>
+      </div>
+      <div class="wm-timeline">${rows || '<div class="wm-empty">暂无剧情线</div>'}</div>
+      <div class="wm-status"></div></div>`;
+
+    const plotFields = (p) => ([
+      { key: 'time', label: '时间（剧情内时间，显示在最左侧）', value: (p && p.time) || '', placeholder: '如：第三日清晨 / 建元七年春' },
+      { key: 'title', label: '标题', value: (p && p.title) || '', placeholder: '这段剧情叫什么' },
+      { key: 'summary', label: '内容', type: 'textarea', value: (p && p.summary) || '', placeholder: '这段剧情发生了什么' },
+      { key: 'status', label: '状态', type: 'select', value: (p && p.status) || 'active', options: PLOT_STATUS },
+    ]);
+
+    const plotAdd = body.querySelector('[data-act="plot-add"]');
+    if (plotAdd) plotAdd.onclick = async () => {
+      const r = await openModal({ title: '添加剧情', fields: plotFields(null), okText: '添加' });
+      if (!r) return;
+      if (!r.title.trim() && !r.summary.trim()) { toast('🌿 温记：标题和内容不能都为空'); return; }
+      await WM.MemoryStore.addPlot(r);
+      toast('🌿 温记：剧情已添加并同步世界书');
       renderPlot(body);
     };
+    const plotRun = body.querySelector('[data-act="plot-run"]');
+    if (plotRun) plotRun.onclick = async () => {
+      const st = body.querySelector('.wm-status');
+      if (st) st.textContent = '归纳中…';
+      const r = await WM.Summary.runSummary(WM.Settings.load());
+      if (st) st.textContent = r && r.ok ? '✓ 剧情线已更新' : '✗ 失败';
+      renderPlot(body);
+    };
+    body.querySelectorAll('[data-act="edit"]').forEach((b) => {
+      b.onclick = async () => {
+        const p = WM.MemoryStore.getPlots().find((x) => x.id === b.dataset.id);
+        if (!p) return;
+        const r = await openModal({ title: '编辑剧情', fields: plotFields(p), okText: '保存' });
+        if (!r) return;
+        await WM.MemoryStore.updatePlot(p.id, r);
+        toast('🌿 温记：剧情已更新并同步世界书');
+        renderPlot(body);
+      };
+    });
+    body.querySelectorAll('[data-act="del"]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('确定删除这条剧情？世界书中的对应条目也会一并移除。')) return;
+        await WM.MemoryStore.removePlot(b.dataset.id);
+        toast('🌿 温记：剧情已删除并同步世界书');
+        renderPlot(body);
+      };
+    });
   }
 
+  // 物品：弹窗添加/编辑；卡片布局 = 上名称 / 中作用 / 下持有者
   function renderItem(body) {
     const items = WM.MemoryStore.getItems();
-    let html = `<div class="wm-card"><div class="wm-h">物品 / 持有物追踪（${items.length}）</div>
-      <div class="wm-row"><input id="it-name" placeholder="物品名"/><input id="it-desc" placeholder="描述"/><input id="it-owner" placeholder="持有者"/></div>
-      <button id="it-add" class="wm-btn primary">添加</button>
-      <div class="wm-list" id="it-list">`;
-    html += items.map((i) => `<div class="wm-item" data-id="${i.id}"><b>${escapeHtml(i.name)}</b> <span class="wm-muted">（${escapeHtml(i.owner||'未知')}）</span><br/>${escapeHtml(i.desc)} <span class="wm-del" data-id="${i.id}">✕</span></div>`).join('') || '<div class="wm-empty">暂无物品</div>';
-    html += `</div></div>`;
-    body.innerHTML = html;
-    body.querySelector('#it-add').onclick = async () => {
-      const n = body.querySelector('#it-name').value.trim();
-      if (!n) return;
-      await WM.MemoryStore.addItem(n, body.querySelector('#it-desc').value, body.querySelector('#it-owner').value);
+    const plots = WM.MemoryStore.getPlots();
+    const plotTitle = {};
+    for (const p of plots) plotTitle[p.id] = p.title || p.time || p.id;
+
+    const cards = items.map((i) => {
+      const rel = (i.relatedPlots || []).map((pid) => plotTitle[pid]).filter(Boolean);
+      return `<div class="wm-item-card" data-id="${i.id}">
+        <div class="wm-item-name">${escapeHtml(i.name || '（未命名）')}${
+          i.origin ? `<span class="wm-tag">来历：${escapeHtml(i.origin)}</span>` : ''}</div>
+        <div class="wm-item-effect">${escapeHtml(i.desc || '（未填写作用）')}</div>
+        <div class="wm-item-owner">
+          <span><b>持有者：</b>${escapeHtml(i.owner || '未知')}</span>
+          ${rel.length ? `<span><b>关联剧情：</b>${escapeHtml(rel.join('、'))}</span>` : ''}
+        </div>
+        <div class="wm-item-acts">
+          <button class="wm-btn" data-act="edit" data-id="${i.id}">编辑</button>
+          <button class="wm-btn" data-act="del" data-id="${i.id}">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">物品 / 持有物追踪（${items.length}）</div>
+      <div class="wm-hint">卡片自上而下为：物品名称 → 物品作用 → 持有者。物品会关联到角色与剧情线，改动即同步当前记忆世界书。</div>
+      <div class="wm-actions"><button data-act="it-add" class="wm-btn primary">＋ 添加物品</button></div>
+      <div class="wm-item-list">${cards || '<div class="wm-empty">暂无物品，点上方「添加物品」新建</div>'}</div>
+    </div>`;
+
+    const itemFields = (it) => ([
+      { key: 'name', label: '物品名称', value: (it && it.name) || '', placeholder: '如：青玉葫芦' },
+      { key: 'desc', label: '物品作用', type: 'textarea', value: (it && it.desc) || '', placeholder: '这件物品有什么用途 / 效果' },
+      { key: 'owner', label: '持有者（角色名）', value: (it && it.owner) || '', placeholder: '现在在谁手上' },
+      { key: 'origin', label: '来历（可选）', value: (it && it.origin) || '', placeholder: '从哪来的' },
+      {
+        key: 'relatedPlots', label: '关联剧情线（可多选）', type: 'multiselect',
+        value: (it && it.relatedPlots) || [],
+        options: plots.map((p) => ({ value: p.id, label: p.title || p.time || p.id })),
+        hint: plots.length ? '按住 Ctrl / Cmd 可多选' : '暂无剧情线，可先到「剧情线」页添加',
+      },
+    ]);
+
+    const addBtn = body.querySelector('[data-act="it-add"]');
+    if (addBtn) addBtn.onclick = async () => {
+      const r = await openModal({ title: '添加物品', fields: itemFields(null), okText: '添加' });
+      if (!r) return;
+      if (!r.name.trim()) { toast('🌿 温记：物品名称不能为空'); return; }
+      await WM.MemoryStore.addItem(r);
+      toast('🌿 温记：物品已添加并同步世界书');
       renderItem(body);
     };
-    body.querySelectorAll('.wm-del').forEach((d) => d.onclick = async () => { await WM.MemoryStore.removeItem(d.dataset.id); renderItem(body); });
+    body.querySelectorAll('[data-act="edit"]').forEach((b) => {
+      b.onclick = async () => {
+        const it = WM.MemoryStore.getItems().find((x) => x.id === b.dataset.id);
+        if (!it) return;
+        const r = await openModal({ title: '编辑物品', fields: itemFields(it), okText: '保存' });
+        if (!r) return;
+        if (!r.name.trim()) { toast('🌿 温记：物品名称不能为空'); return; }
+        await WM.MemoryStore.updateItem(it.id, r);
+        toast('🌿 温记：物品已更新并同步世界书');
+        renderItem(body);
+      };
+    });
+    body.querySelectorAll('[data-act="del"]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('确定删除这个物品？世界书中的对应条目也会一并移除。')) return;
+        await WM.MemoryStore.removeItem(b.dataset.id);
+        toast('🌿 温记：物品已删除并同步世界书');
+        renderItem(body);
+      };
+    });
   }
 
+  // 世界设定：顶部「世界名 + 世界类型 + 简述」，下方按条目列出具体设定
   async function renderWorld(body) {
     const settings = WM.Settings.load();
-    const world = WM.MemoryStore.getWorld();
-    // 取「当前角色卡」名称（SillyTavern 上下文），明确这是写当前卡的世界设定
-    let charName = '';
-    try {
-      const ctx = (window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext()) || null;
-      charName = (ctx && (ctx.name1 || (ctx.characters && ctx.character_card && ctx.character_card.data && ctx.character_card.data.name))) || '';
-    } catch (e) { charName = ''; }
+    const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : { name: '', kind: '', desc: '' };
+    const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
     let loreCount = 0;
     try { loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0; } catch (e) { loreCount = 0; }
-    body.innerHTML = `<div class="wm-card"><div class="wm-h">世界设定 · ${escapeHtml(charName || '当前角色卡')}</div>
-      <div class="wm-hint">这是本张角色卡的世界设定，直接书写并保存，会自动注入上下文${(loreCount ? `（已同步世界书 ${loreCount} 条）` : '')}</div>
-      <textarea id="world-ta" class="wm-ta" placeholder="直接写下当前角色卡的世界观设定，例如：大陆名、势力、规则、时间线……">${escapeHtml(world)}</textarea>
-      <div class="wm-row"><input id="world-extra" placeholder="让 AI 帮你润色/补全的指令（可选，留空则不改写）" style="flex:1"/></div>
-      <div class="wm-row"><input id="world-lorename" placeholder="世界书名（同步世界书用，如 lorebook）" value="${settings.lorebookName || ''}" style="flex:1"/></div>
-      <label class="wm-row"><input type="checkbox" id="world-lore" ${settings.worldToLorebook?'checked':''}/> 同步写入世界书（所有对话共享）</label>
-      <div class="wm-actions">
-        <button id="world-save" class="wm-btn primary">保存设定</button>
-        <button id="world-gen" class="wm-btn">AI 润色补全</button>
+
+    const secHtml = secs.map((w) => `<div class="wm-world-sec" data-id="${w.id}">
+      <div class="wm-world-sec-title">${escapeHtml(w.title || '（未命名设定）')}</div>
+      <div class="wm-world-sec-body">${escapeHtml(w.body || '')}</div>
+      <div class="wm-world-acts">
+        <button class="wm-btn" data-act="sec-edit" data-id="${w.id}">编辑</button>
+        <button class="wm-btn" data-act="sec-del" data-id="${w.id}">删除</button>
       </div>
-      <div class="wm-status" id="world-status"></div></div>`;
-    body.querySelector('#world-save').onclick = async () => {
-      settings.lorebookName = body.querySelector('#world-lorename').value.trim();
-      WM.Settings.save(settings);
-      await WM.MemoryStore.setWorld(body.querySelector('#world-ta').value);
-      body.querySelector('#world-status').textContent = '✓ 已保存（注入当前角色卡上下文）';
+    </div>`).join('');
+
+    body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">世界设定</div>
+      <div class="wm-hint">顶部是这个世界「叫什么、是什么类型」，下面按条目写具体设定（如修炼体系、势力分布）。所有改动即同步当前记忆世界书${loreCount ? `（现有 ${loreCount} 条）` : ''}。</div>
+
+      <div class="wm-world-head">
+        <div class="wm-world-name">${escapeHtml(meta.name || '未命名世界')}</div>
+        ${meta.kind ? `<span class="wm-world-kind">${escapeHtml(meta.kind)}</span>` : ''}
+        <div class="wm-world-desc">${escapeHtml(meta.desc || '（还没有世界简述，点下方「编辑世界」补充）')}</div>
+      </div>
+
+      <div class="wm-actions">
+        <button data-act="world-edit" class="wm-btn primary">编辑世界</button>
+        <button data-act="sec-add" class="wm-btn">＋ 添加设定条目</button>
+        <button data-act="world-gen" class="wm-btn">AI 补全设定</button>
+      </div>
+
+      <div class="wm-h" style="margin-top:12px">具体设定（${secs.length}）</div>
+      <div class="wm-world-secs">${secHtml || '<div class="wm-empty">暂无设定条目，点上方「添加设定条目」新建</div>'}</div>
+
+      <div class="wm-divider"></div>
+      <div class="wm-row"><input data-act="world-lorename" placeholder="世界书名（同步用，如 WarmMemo）" value="${escapeHtml(settings.lorebookName || '')}" style="flex:1"/></div>
+      <label class="wm-row"><input type="checkbox" data-act="world-lore" ${settings.worldToLorebook !== false ? 'checked' : ''}/> 同步写入当前记忆世界书</label>
+      <div class="wm-actions"><button data-act="world-lore-save" class="wm-btn">保存同步设置</button></div>
+      <div class="wm-status"></div>
+    </div>`;
+
+    const wEdit = body.querySelector('[data-act="world-edit"]');
+    if (wEdit) wEdit.onclick = async () => {
+      const r = await openModal({
+        title: '编辑世界', okText: '保存',
+        fields: [
+          { key: 'name', label: '世界名称', value: meta.name, placeholder: '如：九霄大陆' },
+          { key: 'kind', label: '世界类型', value: meta.kind, placeholder: '如：修仙世界 / 赛博朋克 / westeros 式中世纪' },
+          { key: 'desc', label: '世界简述', type: 'textarea', value: meta.desc, placeholder: '一两句话说明这是个什么样的世界' },
+        ],
+      });
+      if (!r) return;
+      await WM.MemoryStore.setWorldMeta(r);
+      toast('🌿 温记：世界信息已保存并同步世界书');
+      renderWorld(body);
     };
-    body.querySelector('#world-gen').onclick = async () => {
-      const st = body.querySelector('#world-status'); st.textContent = '润色中…';
+
+    const secAdd = body.querySelector('[data-act="sec-add"]');
+    if (secAdd) secAdd.onclick = async () => {
+      const r = await openModal({
+        title: '添加设定条目', okText: '添加',
+        fields: [
+          { key: 'title', label: '设定名称', value: '', placeholder: '如：修炼体系 / 势力分布 / 货币与度量' },
+          { key: 'body', label: '设定内容', type: 'textarea', value: '', placeholder: '围绕这个世界类型展开的具体规则' },
+        ],
+      });
+      if (!r) return;
+      if (!r.title.trim() && !r.body.trim()) { toast('🌿 温记：名称和内容不能都为空'); return; }
+      await WM.MemoryStore.addWorldSection(r.title, r.body);
+      toast('🌿 温记：设定已添加并同步世界书');
+      renderWorld(body);
+    };
+
+    body.querySelectorAll('[data-act="sec-edit"]').forEach((b) => {
+      b.onclick = async () => {
+        const w = (WM.MemoryStore.getWorldSections() || []).find((x) => x.id === b.dataset.id);
+        if (!w) return;
+        const r = await openModal({
+          title: '编辑设定条目', okText: '保存',
+          fields: [
+            { key: 'title', label: '设定名称', value: w.title },
+            { key: 'body', label: '设定内容', type: 'textarea', value: w.body },
+          ],
+        });
+        if (!r) return;
+        await WM.MemoryStore.updateWorldSection(w.id, r);
+        toast('🌿 温记：设定已更新并同步世界书');
+        renderWorld(body);
+      };
+    });
+    body.querySelectorAll('[data-act="sec-del"]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('确定删除这条设定？世界书中的对应条目也会一并移除。')) return;
+        await WM.MemoryStore.removeWorldSection(b.dataset.id);
+        toast('🌿 温记：设定已删除并同步世界书');
+        renderWorld(body);
+      };
+    });
+
+    const loreSave = body.querySelector('[data-act="world-lore-save"]');
+    if (loreSave) loreSave.onclick = async () => {
+      const nameEl = body.querySelector('[data-act="world-lorename"]');
+      const loreEl = body.querySelector('[data-act="world-lore"]');
+      if (nameEl) settings.lorebookName = nameEl.value.trim();
+      if (loreEl) settings.worldToLorebook = loreEl.checked;
+      WM.Settings.save(settings);
+      if (settings.worldToLorebook) await WM.MemoryStore.dispatchLorebook();
+      const st = body.querySelector('.wm-status');
+      if (st) st.textContent = '✓ 同步设置已保存';
+    };
+
+    const wGen = body.querySelector('[data-act="world-gen"]');
+    if (wGen) wGen.onclick = async () => {
+      const st = body.querySelector('.wm-status');
+      if (st) st.textContent = '推断中…';
       try {
-        settings.lorebookName = body.querySelector('#world-lorename').value.trim();
-        WM.Settings.save(settings);
-        const w = await WM.Worldbook.inferWorldview(settings, { extraInstruction: body.querySelector('#world-extra').value });
-        body.querySelector('#world-ta').value = w;
-        await WM.MemoryStore.setWorld(w);
-        if (body.querySelector('#world-lore').checked) {
-          await WM.Worldbook.writeWorld(w);
-          st.textContent = '✓ 已润色并写入世界书（独立条目）';
+        const w = await WM.Worldbook.inferWorldview(settings, {});
+        const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(w) : null;
+        if (parsed) {
+          if (parsed.name || parsed.kind || parsed.desc) {
+            await WM.MemoryStore.setWorldMeta({
+              name: parsed.name || meta.name,
+              kind: parsed.kind || meta.kind,
+              desc: parsed.desc || meta.desc,
+            });
+          }
+          for (const sec of parsed.sections) {
+            const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+            if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+            else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+          }
+          if (st) st.textContent = `✓ 已补全（${parsed.sections.length} 条设定）并同步世界书`;
         } else {
-          st.textContent = '✓ 已润色（仅当前角色卡记忆+注入）';
+          await WM.MemoryStore.setWorld(w);
+          if (st) st.textContent = '✓ 已补全';
         }
+        renderWorld(body);
       } catch (e) {
-        st.textContent = '✗ ' + (e.message || e);
+        if (st) st.textContent = '✗ ' + (e.message || e);
       }
     };
   }

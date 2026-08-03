@@ -163,42 +163,98 @@
     })());
     labels.push('relations');
 
-    // 剧情
+    // 剧情：时间｜标题｜内容｜状态
     tasks.push((async () => {
       const tpl = settings.prompts && settings.prompts.plot;
       const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'), historySummary: histSummaries, relations: relationsText });
-      const out = await callLLM(s, '请输出当前剧情线（标题｜摘要，每行一条）：', settings, { temperature: 0.4, phase: 'plot' });
-      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
+      const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
+      const statusMap = { '进行中': 'active', '已完结': 'done', '完结': 'done', '已废弃': 'abandon', '废弃': 'abandon' };
+      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+        .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l)); // 滤掉表头/分隔线
       for (const ln of lines) {
-        const idx = ln.indexOf('｜');
-        const idx2 = ln.indexOf('|');
-        const sep = idx >= 0 ? idx : idx2;
-        if (sep >= 0) await WM.MemoryStore.addPlot(ln.slice(0, sep).trim(), ln.slice(sep + 1).trim(), 'active');
-        else await WM.MemoryStore.addPlot(ln, '', 'active');
+        const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
+        if (!parts.length) continue;
+        if (parts.length >= 3) {
+          const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? '' : parts[0];
+          await WM.MemoryStore.addPlot({
+            time,
+            title: parts[1] || '',
+            summary: parts[2] || '',
+            status: statusMap[parts[3]] || 'active',
+          });
+        } else if (parts.length === 2) {
+          await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: 'active' });
+        } else if (parts[0]) {
+          await WM.MemoryStore.addPlot({ title: parts[0], summary: '', status: 'active' });
+        }
       }
       return { kind: 'plot', ok: true };
     })());
     labels.push('plot');
 
-    // 世界观
+    // 世界观：解析结构化输出 → worldMeta + worldSections
     tasks.push((async () => {
       const world = await WM.Worldbook.inferWorldview(settings, { recent });
-      if (world && world.trim()) await WM.MemoryStore.setWorld(world);
+      if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
+      const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+      if (parsed) {
+        const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+        await WM.MemoryStore.setWorldMeta({
+          name: parsed.name || cur.name || '',
+          kind: parsed.kind || cur.kind || '',
+          desc: parsed.desc || cur.desc || '',
+        });
+        for (const sec of parsed.sections) {
+          const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+          if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+          else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+        }
+      } else {
+        await WM.MemoryStore.setWorld(world);
+      }
       return { kind: 'worldview', ok: true };
     })());
     labels.push('worldview');
 
-    // 物品
+    // 物品：物品名｜作用｜持有者｜关联剧情｜来历（物品须关联角色与剧情线）
     tasks.push((async () => {
-      // 复用关系提示词里的物品抽取能力：直接在总结后用一个轻量调用
       const tpl = settings.prompts && settings.prompts.itemExtract;
       if (!tpl) return { kind: 'items', ok: true, skipped: true };
-      const s = fillTemplate(tpl, { recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n') });
-      const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜描述｜持有者）：', settings, { temperature: 0.3, phase: 'items' });
-      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
+      // 把已有剧情线标题喂给模型，便于它做关联
+      const knownPlots = (WM.MemoryStore.getPlots() || [])
+        .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
+      const s = fillTemplate(tpl, {
+        recent: recent.map((m) => (m.name ? '【' + m.name + '】' : '') + m.content).join('\n'),
+        plot: knownPlots,
+      });
+      const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
+      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+        .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+      const allPlots = WM.MemoryStore.getPlots() || [];
+      const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
       for (const ln of lines) {
-        const parts = ln.split(/[｜|]/);
-        if (parts[0] && parts[0].trim()) await WM.MemoryStore.addItem(parts[0].trim(), parts[1] ? parts[1].trim() : '', parts[2] ? parts[2].trim() : '');
+        const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
+        const name = parts[0];
+        if (!name) continue;
+        // 关联剧情：把标题映射回剧情 id
+        const relIds = [];
+        if (!blank(parts[3])) {
+          for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+            const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+            if (hit) relIds.push(hit.id);
+          }
+        }
+        // 同名物品则更新，避免重复堆积
+        const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
+        const data = {
+          name,
+          desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
+          owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
+          origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
+          relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
+        };
+        if (exist) await WM.MemoryStore.updateItem(exist.id, data);
+        else await WM.MemoryStore.addItem(data);
       }
       return { kind: 'items', ok: true };
     })());
