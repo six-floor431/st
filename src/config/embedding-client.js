@@ -69,7 +69,8 @@
     if (/generativelanguage\.googleapis\.com/i.test(base)) {
       return { url: base, provider: 'gemini', model: s.embeddingModel || s.model || 'text-embedding-004' };
     }
-    return { url: base, provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3' };
+    // 经 buildEmbedUrl 智能补全 /embeddings 后缀（用户可能填 /v1 或已完整地址）
+    return { url: buildEmbedUrl(base), provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3' };
   }
 
   async function embed(texts, settings) {
@@ -98,7 +99,9 @@
     }
 
     // OpenAI 兼容（支持本地反代/同源代理的 GET 模式）
-    const url = resolveOpenAiUrl(base);
+    // 注意：info.url（即 base）已由 resolveEmbedUrl/buildEmbedUrl 处理为完整 embeddings 地址，
+    // 此处绝不能再二次拼接，否则会出现 .../v1/embeddings/v1/embeddings 的 404。
+    const url = base;
     const useGet = isGetMode(url);
     const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
     let finalUrl = url;

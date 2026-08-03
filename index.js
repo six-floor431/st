@@ -991,7 +991,7 @@ ${it.message}`;
       if (/generativelanguage\.googleapis\.com/i.test(base)) {
         return { url: base, provider: "gemini", model: s.embeddingModel || s.model || "text-embedding-004" };
       }
-      return { url: base, provider: "compatible", model: s.embeddingModel || s.model || "BAAI/bge-m3" };
+      return { url: buildEmbedUrl(base), provider: "compatible", model: s.embeddingModel || s.model || "BAAI/bge-m3" };
     }
     async function embed(texts, settings) {
       const s = settings || {};
@@ -1015,7 +1015,7 @@ ${it.message}`;
         }
         return out.length === 1 ? out[0] : out;
       }
-      const url = resolveOpenAiUrl(base);
+      const url = base;
       const useGet = isGetMode(url);
       const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
       let finalUrl = url;
