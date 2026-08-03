@@ -553,7 +553,7 @@
   inset: 0;
   background: rgba(20,20,18,.5);
   backdrop-filter: blur(2px);
-  z-index: 10050;
+  z-index: 100001;
   display: flex;
   align-items: center;
   justify-content: center;

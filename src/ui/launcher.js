@@ -1250,7 +1250,7 @@
     if (!t) {
       t = document.createElement('div');
       t.id = 'warmmemo-toast';
-      t.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);background:rgba(91,110,87,.95);color:#fff;padding:6px 14px;border-radius:12px;font-size:12px;z-index:10000;box-shadow:0 4px 14px rgba(0,0,0,.2)';
+      t.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);background:rgba(91,110,87,.95);color:#fff;padding:6px 14px;border-radius:12px;font-size:12px;z-index:100002;box-shadow:0 4px 14px rgba(0,0,0,.2)';
       document.body.appendChild(t);
     }
     t.textContent = msg;
