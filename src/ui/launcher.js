@@ -70,6 +70,7 @@
         <button data-tab="item">物品</button>
         <button data-tab="world">世界设定</button>
         <button data-tab="dbg">调试</button>
+        <button data-tab="clear" class="wm-tab-danger">清空数据</button>
         <button data-tab="cfg">设置</button>
       </div>
       <div class="wm-body"></div>`;
@@ -156,6 +157,7 @@
     if (tab === 'item') return renderItem(body);
     if (tab === 'world') return renderWorld(body);
     if (tab === 'dbg') return renderDebug(body);
+    if (tab === 'clear') return renderClear(body);
     if (tab === 'cfg') return renderCfg(body);
   }
 
@@ -924,6 +926,48 @@
     body.querySelector('[data-dbg="llm"]').classList.add('active');
     Object.keys(secs).forEach((k) => { secs[k].style.display = (k === 'llm') ? '' : 'none'; });
     renderAll();
+  }
+
+  // ── 清空数据：一键清空当前角色卡全部记忆数据（不可还原） ──
+  function renderClear(body) {
+    const s = WM.Settings.load();
+    const msgs = (WM.Summary.getChatMessages && WM.Summary.getChatMessages()) || [];
+    const hiddenCount = msgs.filter((m) => m && m.is_wm_hidden).length;
+    body.innerHTML = `
+      <div class="wm-card wm-card-danger">
+        <div class="wm-h">清空当前角色卡数据</div>
+        <div class="wm-hint">此操作将<b>永久删除</b>当前角色卡下由温记记录的全部数据，<b>不可还原</b>：
+          <ul style="margin:6px 0 0 18px;line-height:1.8">
+            <li>记忆条目、总结、关系图、剧情线、物品、世界观设定</li>
+            <li>总结指针（隐藏楼层的记录会被清除）</li>
+          </ul>
+          清空后，之前因总结被隐藏的 <b>${hiddenCount}</b> 条楼层将<b>恢复显示</b>。<br>
+          <span style="color:var(--wm-seal)">注意：全局设置（自动总结开关等）不受影响，不会因清空而突然自动总结。</span>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="clr-confirm" class="wm-btn wm-btn-danger">我确认，清空全部数据</button>
+        </div>
+        <div id="clr-result" class="wm-test-box" style="margin-top:10px"></div>
+      </div>`;
+    const btn = body.querySelector('#clr-confirm');
+    const box = body.querySelector('#clr-result');
+    btn.onclick = async () => {
+      // 二次确认，避免误触
+      if (!window.confirm('真的要清空当前角色卡的全部温记数据吗？\n此操作不可还原！')) return;
+      btn.disabled = true;
+      box.innerHTML = '<div class="wm-test-item">⏳ 清空中…</div>';
+      try {
+        await WM.MemoryStore.clearAll();
+        box.innerHTML = '<div class="wm-test-item wm-ok">✅ 已清空当前角色卡全部温记数据，被隐藏楼层已恢复显示。</div>';
+        toast('🌿 已清空当前角色卡数据');
+        // 同步刷新其它已开面板数据
+        if (WM.Relations && WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
+      } catch (e) {
+        box.innerHTML = '<div class="wm-test-item wm-bad">❌ 清空失败：' + String(e && e.message ? e.message : e) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    };
   }
 
   function renderCfg(body) {

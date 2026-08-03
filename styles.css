@@ -834,3 +834,12 @@
 .wm-debug-item.res .wm-debug-dir { color: var(--wm-seal-soft); }
 .wm-debug-item.err .wm-debug-dir { color: #c0392b; }
 .wm-debug-body { margin: 0; padding: 8px 10px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 11.5px; line-height: 1.5; color: var(--wm-ink); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+
+/* ── 危险操作（清空数据） ── */
+.wm-tab-danger { color: var(--wm-seal) !important; }
+.wm-tab-danger.active { background: var(--wm-seal); color: #fff !important; }
+.wm-card-danger { border: 1px solid var(--wm-seal-soft); }
+.wm-card-danger .wm-h { color: var(--wm-seal); }
+.wm-btn-danger { background: var(--wm-seal); color: #fff; border-color: var(--wm-seal); font-weight: 600; }
+.wm-btn-danger:hover { background: var(--wm-seal-soft); }
+.wm-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -678,6 +678,30 @@ ${it.message}`;
       await save(merged);
       return true;
     }
+    async function clearAll() {
+      await save(emptyStore());
+      try {
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+        const chat = ctx && ctx.chat;
+        if (chat && Array.isArray(chat)) {
+          let changed = false;
+          for (const m of chat) {
+            if (m && m.is_wm_hidden) {
+              m.is_wm_hidden = false;
+              m.is_system = false;
+              changed = true;
+            }
+          }
+          if (changed) {
+            if (typeof ctx.saveChat === "function") await ctx.saveChat();
+            if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
+          }
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] \u6E05\u7A7A\u65F6\u6062\u590D\u9690\u85CF\u697C\u5C42\u5931\u8D25", e);
+      }
+      return true;
+    }
     WM.MemoryStore = {
       FIELD,
       emptyStore,
@@ -711,7 +735,8 @@ ${it.message}`;
       setSummaryPointer,
       getSummaryPointer,
       exportJSON,
-      importJSON
+      importJSON,
+      clearAll
     };
   })();
 
@@ -2178,6 +2203,7 @@ ${p.summary || ""}`.trim() });
         <button data-tab="item">\u7269\u54C1</button>
         <button data-tab="world">\u4E16\u754C\u8BBE\u5B9A</button>
         <button data-tab="dbg">\u8C03\u8BD5</button>
+        <button data-tab="clear" class="wm-tab-danger">\u6E05\u7A7A\u6570\u636E</button>
         <button data-tab="cfg">\u8BBE\u7F6E</button>
       </div>
       <div class="wm-body"></div>`;
@@ -2250,6 +2276,7 @@ ${p.summary || ""}`.trim() });
       if (tab === "item") return renderItem(body);
       if (tab === "world") return renderWorld(body);
       if (tab === "dbg") return renderDebug(body);
+      if (tab === "clear") return renderClear(body);
       if (tab === "cfg") return renderCfg(body);
     }
     function renderAuto(body) {
@@ -3038,6 +3065,44 @@ ${p.summary || ""}`.trim() });
       });
       renderAll();
     }
+    function renderClear(body) {
+      const s = WM.Settings.load();
+      const msgs = WM.Summary.getChatMessages && WM.Summary.getChatMessages() || [];
+      const hiddenCount = msgs.filter((m) => m && m.is_wm_hidden).length;
+      body.innerHTML = `
+      <div class="wm-card wm-card-danger">
+        <div class="wm-h">\u6E05\u7A7A\u5F53\u524D\u89D2\u8272\u5361\u6570\u636E</div>
+        <div class="wm-hint">\u6B64\u64CD\u4F5C\u5C06<b>\u6C38\u4E45\u5220\u9664</b>\u5F53\u524D\u89D2\u8272\u5361\u4E0B\u7531\u6E29\u8BB0\u8BB0\u5F55\u7684\u5168\u90E8\u6570\u636E\uFF0C<b>\u4E0D\u53EF\u8FD8\u539F</b>\uFF1A
+          <ul style="margin:6px 0 0 18px;line-height:1.8">
+            <li>\u8BB0\u5FC6\u6761\u76EE\u3001\u603B\u7ED3\u3001\u5173\u7CFB\u56FE\u3001\u5267\u60C5\u7EBF\u3001\u7269\u54C1\u3001\u4E16\u754C\u89C2\u8BBE\u5B9A</li>
+            <li>\u603B\u7ED3\u6307\u9488\uFF08\u9690\u85CF\u697C\u5C42\u7684\u8BB0\u5F55\u4F1A\u88AB\u6E05\u9664\uFF09</li>
+          </ul>
+          \u6E05\u7A7A\u540E\uFF0C\u4E4B\u524D\u56E0\u603B\u7ED3\u88AB\u9690\u85CF\u7684 <b>${hiddenCount}</b> \u6761\u697C\u5C42\u5C06<b>\u6062\u590D\u663E\u793A</b>\u3002<br>
+          <span style="color:var(--wm-seal)">\u6CE8\u610F\uFF1A\u5168\u5C40\u8BBE\u7F6E\uFF08\u81EA\u52A8\u603B\u7ED3\u5F00\u5173\u7B49\uFF09\u4E0D\u53D7\u5F71\u54CD\uFF0C\u4E0D\u4F1A\u56E0\u6E05\u7A7A\u800C\u7A81\u7136\u81EA\u52A8\u603B\u7ED3\u3002</span>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="clr-confirm" class="wm-btn wm-btn-danger">\u6211\u786E\u8BA4\uFF0C\u6E05\u7A7A\u5168\u90E8\u6570\u636E</button>
+        </div>
+        <div id="clr-result" class="wm-test-box" style="margin-top:10px"></div>
+      </div>`;
+      const btn = body.querySelector("#clr-confirm");
+      const box = body.querySelector("#clr-result");
+      btn.onclick = async () => {
+        if (!window.confirm("\u771F\u7684\u8981\u6E05\u7A7A\u5F53\u524D\u89D2\u8272\u5361\u7684\u5168\u90E8\u6E29\u8BB0\u6570\u636E\u5417\uFF1F\n\u6B64\u64CD\u4F5C\u4E0D\u53EF\u8FD8\u539F\uFF01")) return;
+        btn.disabled = true;
+        box.innerHTML = '<div class="wm-test-item">\u23F3 \u6E05\u7A7A\u4E2D\u2026</div>';
+        try {
+          await WM.MemoryStore.clearAll();
+          box.innerHTML = '<div class="wm-test-item wm-ok">\u2705 \u5DF2\u6E05\u7A7A\u5F53\u524D\u89D2\u8272\u5361\u5168\u90E8\u6E29\u8BB0\u6570\u636E\uFF0C\u88AB\u9690\u85CF\u697C\u5C42\u5DF2\u6062\u590D\u663E\u793A\u3002</div>';
+          toast("\u{1F33F} \u5DF2\u6E05\u7A7A\u5F53\u524D\u89D2\u8272\u5361\u6570\u636E");
+          if (WM.Relations && WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
+        } catch (e) {
+          box.innerHTML = '<div class="wm-test-item wm-bad">\u274C \u6E05\u7A7A\u5931\u8D25\uFF1A' + String(e && e.message ? e.message : e) + "</div>";
+        } finally {
+          btn.disabled = false;
+        }
+      };
+    }
     function renderCfg(body) {
       const s = WM.Settings.load();
       const tabs = [
@@ -3430,7 +3495,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-cfgtab-url-sync";
+  window.WarmMemo.version = "add-clear-data-tab";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

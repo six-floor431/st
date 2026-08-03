@@ -393,6 +393,34 @@
     return true;
   }
 
+  // ── 清空当前角色卡全部数据（不可还原） ──
+  // 1) chat_metadata 中的 warm_memo_v2 整体重置为空库；
+  // 2) 把之前因总结而被隐藏的楼层（is_wm_hidden）恢复显示，不再隐藏；
+  // 不影响全局设置（autoSummaryEnabled 等存在 localStorage，保留）。
+  async function clearAll() {
+    await save(emptyStore());
+    // 反隐藏：清除所有被本扩展标记隐藏的消息标记
+    try {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+      const chat = ctx && ctx.chat;
+      if (chat && Array.isArray(chat)) {
+        let changed = false;
+        for (const m of chat) {
+          if (m && m.is_wm_hidden) {
+            m.is_wm_hidden = false;
+            m.is_system = false; // 仅去掉隐藏标记，不破坏其它 is_system（如系统提示）
+            changed = true;
+          }
+        }
+        if (changed) {
+          if (typeof ctx.saveChat === 'function') await ctx.saveChat();
+          if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
+        }
+      }
+    } catch (e) { console.warn('[WarmMemo] 清空时恢复隐藏楼层失败', e); }
+    return true;
+  }
+
   WM.MemoryStore = {
     FIELD, emptyStore, load, save,
     addMemory, getMemories,
@@ -405,6 +433,6 @@
     setRelations, getRelations,
     dispatchLorebook,
     setSummaryPointer, getSummaryPointer,
-    exportJSON, importJSON,
+    exportJSON, importJSON, clearAll,
   };
 })();
