@@ -15,7 +15,7 @@
 状态说明：active=进行中, done=已完成, abandon=已放弃。已有剧情线若已结束请改状态。只基于记忆，不编造。`;
     const userMsg = `【已有剧情线】\n${existing || '（无）'}\n\n【近期记忆】\n${recent}\n\n请输出更新后的剧情线：`;
     try {
-      const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900, profileKey: 'plot' });
+      const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });
       if (!raw) return [];
       return raw.split('\n').map((l) => l.trim()).filter((l) => l.includes('|')).map((l) => {
         const [title, summary, status] = l.split('|').map((x) => x.trim());

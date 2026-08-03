@@ -22,15 +22,17 @@
   // 由 profile 组装酒馆 custom_api 配置（custom 来源时）
   function buildCustomApi(p) {
     if (!p) return null;
-    // 优先使用酒馆代理预设（proxy_preset）
-    if (p.proxyPreset) {
-      return { proxy_preset: p.proxyPreset, preset_sources: [] };
-    }
+    // 代理预设名（proxy_preset）与自定义 url/key/model 不互斥：都能带上，
+    // 让酒馆按预设+覆盖字段去调用，不丢失用户指定的模型。
+    const api = {};
+    if (p.proxyPreset) { api.proxy_preset = p.proxyPreset; api.preset_sources = []; }
     if (p.apiUrl || p.apiKey || p.model) {
-      const api = { source: 'custom', apiurl: p.apiUrl || '', key: p.apiKey || '', model: p.model || '' };
-      return api;
+      api.source = 'custom';
+      if (p.apiUrl) api.apiurl = p.apiUrl;
+      if (p.apiKey) api.key = p.apiKey;
+      if (p.model) api.model = p.model;
     }
-    return null;
+    return (api.proxy_preset || api.source) ? api : null;
   }
 
   // 核心：用酒馆官方接口完成一次对话补全

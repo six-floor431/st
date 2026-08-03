@@ -12,7 +12,7 @@
 要求：每行一个三元组，格式严格为 实体A|关系|实体B|权重(1-5)。
 权重表示关系强度/互动频率。只抽取明确提到或明显暗示的关系。最多 18 条。`;
     try {
-      const raw = await WM.Summary.callLLM(sys, memoryText, settings, { profileKey: 'relations' });
+      const raw = await WM.Summary.callLLM(sys, memoryText, settings, {});
       if (!raw) return [];
       return raw
         .split('\n')

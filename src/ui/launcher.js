@@ -457,47 +457,34 @@
     };
   }
 
-  // 各功能的独立 LLM 配置（不挤在一起）
-  const LLM_FUNCS = [
-    { key: 'summary', name: '总结记忆' },
-    { key: 'relations', name: '关系图' },
-    { key: 'plot', name: '剧情线' },
-    { key: 'world', name: '世界观' },
-    { key: 'items', name: '物品追踪' },
-  ];
-
-  function renderLlmProfiles(s) {
-    return LLM_FUNCS.map((f) => {
-      const p = (s.llmProfiles && s.llmProfiles[f.key]) || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
-      return `
-      <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <span class="wm-h" style="margin:0">${f.name}</span>
-          <select class="p-src" title="调用来源">
-            <option value="local" ${p.source === 'local' ? 'selected' : ''}>本地酒馆(当前源)</option>
-            <option value="custom" ${p.source === 'custom' ? 'selected' : ''}>自定义配置</option>
+  // 统一的 LLM 调用配置（所有功能共用这一个）
+  function renderLlmConfig(s) {
+    const c = s.llmConfig || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
+    return `
+      <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
+        <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。选择 <b>本地酒馆</b> 即用酒馆当前对话源；选择 <b>自定义配置</b> 可指定代理预设或独立 API。配完可点「测试连接」验证可用性。</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0">
+          <span class="wm-h" style="margin:0">调用来源</span>
+          <select id="llm-src" title="调用来源">
+            <option value="local" ${c.source === 'local' ? 'selected' : ''}>本地酒馆(当前源)</option>
+            <option value="custom" ${c.source === 'custom' ? 'selected' : ''}>自定义配置</option>
           </select>
         </div>
-        <div class="p-custom" style="${p.source === 'custom' ? '' : 'display:none'};margin-top:6px">
-          <label class="wm-row">代理预设名<input class="p-preset" value="${escapeHtml(p.proxyPreset)}" placeholder="留空则填下方 URL（酒馆代理预设名）"/></label>
-          <label class="wm-row">API URL<input class="p-url" value="${escapeHtml(p.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
-          <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
-          <label class="wm-row">模型名<input class="p-model" value="${escapeHtml(p.model)}" placeholder="如 gpt-4o-mini"/></label>
+        <div id="llm-custom" style="${c.source === 'custom' ? '' : 'display:none'};margin-top:6px">
+          <label class="wm-row">代理预设名<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="留空则填下方 URL（酒馆代理预设名）"/></label>
+          <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
+          <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini"/></label>
         </div>
       </div>`;
-    }).join('');
   }
 
   function renderCfg(body) {
     const s = WM.Settings.load();
-    body.innerHTML = `<div class="wm-card"><div class="wm-h">设置 · 各功能独立 LLM 调用</div>
-      <div class="wm-hint">每个功能可单独选择调用来源：<b>本地酒馆</b>（用酒馆自带 shared-api，无需额外配置）或 <b>自定义配置</b>（独立 BaseURL/Key/模型直连）。各功能互不干扰，不会挤在一起。</div>
-      <div id="llm-profiles">${renderLlmProfiles(s)}</div>
+    body.innerHTML = `${renderLlmConfig(s)}
+      <div class="wm-card">
       <div class="wm-divider"></div>
-      <div class="wm-h">默认自定义配置（用于「自定义」模式的初始值，可逐功能覆盖）</div>
-      <label class="wm-row">Base URL<input id="c-base" value="${s.summaryBaseUrl}"/></label>
-      <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
-      <label class="wm-row">模型名<input id="c-model" value="${s.summaryModel}" placeholder="如 gpt-4o-mini"/></label>
+      <div class="wm-h">记忆与注入</div>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索
         <input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories?'checked':''}/> 注入记忆到上下文（确保角色真的记得）
@@ -525,31 +512,22 @@
         <button id="c-save" class="wm-btn primary">保存设置</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">默认选「本地酒馆」即回退酒馆自带 shared-api（textgeneration）。自定义模式本地反代填 127.0.0.1。</div></div>`;
+      <div class="wm-hint">默认选「本地酒馆」即用酒馆当前对话源。自定义模式本地反代填 127.0.0.1。</div></div>`;
 
-    // 各功能 source 切换时显示/隐藏自定义字段
-    body.querySelectorAll('#llm-profiles .wm-llm-func').forEach((card) => {
-      const src = card.querySelector('.p-src');
-      const custom = card.querySelector('.p-custom');
-      src.onchange = () => { custom.style.display = src.value === 'custom' ? '' : 'none'; };
-    });
+    // 来源切换时显示/隐藏自定义字段
+    const srcSel = body.querySelector('#llm-src');
+    const customBox = body.querySelector('#llm-custom');
+    srcSel.onchange = () => { customBox.style.display = srcSel.value === 'custom' ? '' : 'none'; };
 
     // 保存
     body.querySelector('#c-save').onclick = () => {
-      s.llmProfiles = s.llmProfiles || {};
-      body.querySelectorAll('#llm-profiles .wm-llm-func').forEach((card) => {
-        const key = card.dataset.func;
-        s.llmProfiles[key] = {
-          source: card.querySelector('.p-src').value,
-          proxyPreset: card.querySelector('.p-preset').value.trim(),
-          apiUrl: card.querySelector('.p-url').value.trim(),
-          apiKey: card.querySelector('.p-key').value.trim(),
-          model: card.querySelector('.p-model').value.trim(),
-        };
-      });
-      s.summaryBaseUrl = body.querySelector('#c-base').value;
-      s.summaryApiKey = body.querySelector('#c-key').value;
-      s.summaryModel = body.querySelector('#c-model').value;
+      s.llmConfig = {
+        source: body.querySelector('#llm-src').value,
+        proxyPreset: body.querySelector('#llm-preset').value.trim(),
+        apiUrl: body.querySelector('#llm-url').value.trim(),
+        apiKey: body.querySelector('#llm-key').value.trim(),
+        model: body.querySelector('#llm-model').value.trim(),
+      };
       s.vectorEnabled = body.querySelector('#c-vec').checked;
       s.rerankEnabled = body.querySelector('#c-rerank').checked;
       s.injectMemories = body.querySelector('#c-inj').checked;
@@ -569,14 +547,19 @@
       body.querySelector('.wm-hint').textContent = '✓ 已保存（世界书已绑定当前角色卡）';
     };
 
-    // 测试连接：逐项验证各 API 是否连通
+    // 测试连接：验证统一 LLM 配置 + 世界书 + 向量/重排
     body.querySelector('#c-test').onclick = async () => {
       const box = body.querySelector('#c-test-result');
-      // 先按当前输入构造临时 settings（不覆盖已保存）
+      // 按当前输入构造临时 llmConfig（不覆盖已保存）
+      const tmpLlm = {
+        source: body.querySelector('#llm-src').value,
+        proxyPreset: body.querySelector('#llm-preset').value.trim(),
+        apiUrl: body.querySelector('#llm-url').value.trim(),
+        apiKey: body.querySelector('#llm-key').value.trim(),
+        model: body.querySelector('#llm-model').value.trim(),
+      };
       const tmp = Object.assign({}, WM.Settings.load(), {
-        summaryBaseUrl: body.querySelector('#c-base').value,
-        summaryApiKey: body.querySelector('#c-key').value,
-        summaryModel: body.querySelector('#c-model').value,
+        llmConfig: tmpLlm,
         embeddingBaseUrl: body.querySelector('#c-emb-url').value,
         embeddingApiKey: body.querySelector('#c-emb-key').value,
         embeddingModel: body.querySelector('#c-emb-model').value,
@@ -590,20 +573,17 @@
         const ok = r && r.success;
         rows.push(`<div class="wm-test-item ${ok?'wm-ok':'wm-bad'}">${ok?'✅':'❌'} ${name}${ok?('：'+(detail||'')):('：'+(r&&r.error||'失败'))}</div>`);
       };
-      // 1) 世界书（酒馆 TavernHelper）
+      // 1) 统一 LLM 配置
+      try {
+        const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
+        add('LLM(' + (tmpLlm.source === 'local' ? '本地酒馆' : '自定义') + ')', r, '');
+      } catch (e) { add('LLM(统一配置)', { success: false }, String(e.message || e)); }
+      // 2) 世界书（酒馆 TavernHelper）
       try {
         const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
         if (wbOk) { const b = await WM.Worldbook.ensureLorebook(); add('世界书(酒馆)', { success: b }, b ? ('已就绪：'+WM.Worldbook.targetName()) : ''); }
         else add('世界书(酒馆)', { success: false }, 'TavernHelper 不可用');
       } catch (e) { add('世界书(酒馆)', { success: false }, String(e.message || e)); }
-      // 2) 各功能独立 LLM（按各自的 profile 分别测试）
-      for (const f of LLM_FUNCS) {
-        const profile = (tmp.llmProfiles && tmp.llmProfiles[f.key]) || null;
-        try {
-          const r = await WM.LLMClient.testConnection({ settings: tmp, profile });
-          add(f.name + '(LLM)', r, '');
-        } catch (e) { add(f.name + '(LLM)', { success: false }, String(e.message || e)); }
-      }
       // 3) Embedding（仅在启用时测）
       try {
         if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)

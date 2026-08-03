@@ -38,19 +38,18 @@
       { name: 'think', open: '<think>', close: '</think>', wrap: true, singleBefore: true, singleAfter: false, enabled: true },
     ],
     worldToLorebook: true,        // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
-    // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
+    // 统一的 LLM 调用配置（所有功能共用这一个）：
     //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
     //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
     //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
     //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
-    // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
-    // 用户可在设置里为每个功能单独覆盖。
-    llmProfiles: {
-      summary:   { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
-      relations: { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
-      plot:      { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
-      world:     { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
-      items:     { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' },
+    // 该配置在设置面板可一键「测试连接」验证 API 可用。
+    llmConfig: {
+      source: 'local',
+      proxyPreset: '',
+      apiUrl: '',
+      apiKey: '',
+      model: '',
     },
     lorebookName: 'WarmMemo',     // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
     // 接管酒馆内置向量与重排序（开启后用我们自己的 VectorStore + Rerank 召回世界书条目）
@@ -64,7 +63,26 @@
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return Object.assign({}, DEFAULTS);
-      return Object.assign({}, DEFAULTS, JSON.parse(raw));
+      const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
+      // 迁移：旧的 5 份独立 llmProfiles 或旧的 summary* 默认配置 → 单一 llmConfig
+      if (!s.llmConfig) {
+        s.llmConfig = { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
+        const profiles = s.llmProfiles;
+        if (profiles && profiles.summary) {
+          // 取 summary 那份作为统一配置
+          s.llmConfig = Object.assign(s.llmConfig, profiles.summary);
+        } else if (s.summaryBaseUrl || s.summaryApiKey || s.summaryModel) {
+          // 旧默认自定义配置迁移
+          s.llmConfig = {
+            source: (s.summaryBaseUrl || s.summaryApiKey) ? 'custom' : 'local',
+            proxyPreset: '',
+            apiUrl: s.summaryBaseUrl || '',
+            apiKey: s.summaryApiKey || '',
+            model: s.summaryModel || '',
+          };
+        }
+      }
+      return s;
     } catch (e) { return Object.assign({}, DEFAULTS); }
   }
   function save(s) {

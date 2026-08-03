@@ -45,19 +45,18 @@
       ],
       worldToLorebook: true,
       // 是否把世界观/总结/物品/关系拆分写入世界书条目（默认开启，实现条目隔离）
-      // 各功能的独立 LLM 配置（不挤在一起）：每个功能可单独选择
+      // 统一的 LLM 调用配置（所有功能共用这一个）：
       //   source: 'local'  => 用酒馆当前源（shared-api），无需额外配置
       //   source: 'custom' => 用 custom_api 切换：优先填「代理预设名」(proxyPreset)，
       //                       否则填 apiUrl/apiKey/model 直连（全部交给酒馆 generate 处理，
       //                       不再自造 fetch，以复用酒馆的源管理/模型列表/流式等能力）
-      // 把"默认自定义配置"（summaryBaseUrl/summaryApiKey/summaryModel）作为各 custom 的初始值，
-      // 用户可在设置里为每个功能单独覆盖。
-      llmProfiles: {
-        summary: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
-        relations: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
-        plot: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
-        world: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" },
-        items: { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" }
+      // 该配置在设置面板可一键「测试连接」验证 API 可用。
+      llmConfig: {
+        source: "local",
+        proxyPreset: "",
+        apiUrl: "",
+        apiKey: "",
+        model: ""
       },
       lorebookName: "WarmMemo",
       // 世界书名（可自定义；绑定到当前角色卡实现数据隔离）
@@ -74,7 +73,23 @@
       try {
         const raw = localStorage.getItem(LS_KEY);
         if (!raw) return Object.assign({}, DEFAULTS);
-        return Object.assign({}, DEFAULTS, JSON.parse(raw));
+        const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
+        if (!s.llmConfig) {
+          s.llmConfig = { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
+          const profiles = s.llmProfiles;
+          if (profiles && profiles.summary) {
+            s.llmConfig = Object.assign(s.llmConfig, profiles.summary);
+          } else if (s.summaryBaseUrl || s.summaryApiKey || s.summaryModel) {
+            s.llmConfig = {
+              source: s.summaryBaseUrl || s.summaryApiKey ? "custom" : "local",
+              proxyPreset: "",
+              apiUrl: s.summaryBaseUrl || "",
+              apiKey: s.summaryApiKey || "",
+              model: s.summaryModel || ""
+            };
+          }
+        }
+        return s;
       } catch (e) {
         return Object.assign({}, DEFAULTS);
       }
@@ -411,14 +426,18 @@ ${it.desc || ""}`.trim(),
     }
     function buildCustomApi(p) {
       if (!p) return null;
+      const api = {};
       if (p.proxyPreset) {
-        return { proxy_preset: p.proxyPreset, preset_sources: [] };
+        api.proxy_preset = p.proxyPreset;
+        api.preset_sources = [];
       }
       if (p.apiUrl || p.apiKey || p.model) {
-        const api = { source: "custom", apiurl: p.apiUrl || "", key: p.apiKey || "", model: p.model || "" };
-        return api;
+        api.source = "custom";
+        if (p.apiUrl) api.apiurl = p.apiUrl;
+        if (p.apiKey) api.key = p.apiKey;
+        if (p.model) api.model = p.model;
       }
-      return null;
+      return api.proxy_preset || api.source ? api : null;
     }
     async function complete(messages, opts) {
       opts = opts || {};
@@ -889,7 +908,7 @@ ${opts && opts.extraInstruction ? "\u989D\u5916\u6307\u4EE4\uFF1A" + opts.extraI
 \u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011${prev || "\uFF08\u65E0\uFF09"}
 \u8BF7\u8F93\u51FA\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
-      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4, profileKey: "world" });
+      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4 });
       return out && out.trim() ? out.trim() : prev;
     }
     WM.Worldbook = {
@@ -932,7 +951,7 @@ ${recent}
 
 \u8BF7\u8F93\u51FA\u66F4\u65B0\u540E\u7684\u5267\u60C5\u7EBF\uFF1A`;
       try {
-        const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900, profileKey: "plot" });
+        const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const [title, summary, status] = l.split("|").map((x) => x.trim());
@@ -952,15 +971,12 @@ ${recent}
     async function callLLM(system, user, settings, opts) {
       settings = settings || WM.Settings.load();
       opts = opts || {};
-      const profileKey = opts.profileKey || "summary";
-      const profile = settings.llmProfiles && settings.llmProfiles[profileKey] || null;
+      const profile = settings.llmConfig || { source: "local" };
       const prompt = [{ role: "system", content: system }, { role: "user", content: user }];
       const out = await WM.LLMClient.complete(prompt, {
         temperature: opts.temperature != null ? opts.temperature : 0.3,
         max_tokens: opts.maxTokens || 700,
-        model: opts.model || profile && profile.model || "",
-        profile,
-        settings
+        profile
       });
       return out || "";
     }
@@ -1056,7 +1072,7 @@ ${prevMem || "\uFF08\u65E0\uFF09"}
 ${slice}
 
 \u8BF7\u8F93\u51FA\u672C\u6B21\u63D0\u70BC\u7684\u8BB0\u5FC6\uFF1A`;
-      const out = await callLLM(sys, userMsg, settings, { maxTokens: 1e3, temperature: 0.35, profileKey: "summary" });
+      const out = await callLLM(sys, userMsg, settings, { maxTokens: 1e3, temperature: 0.35 });
       if (!out || !out.trim()) return { ok: false, reason: "llm_empty_or_failed" };
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
       for (const line of lines) await dedupeMemory(line, [start, end]);
@@ -1123,7 +1139,7 @@ ${recent}
 \u3010\u672C\u6279\u8BB0\u5FC6\u3011
 ${text}
 
-\u8BF7\u5217\u51FA\u7269\u54C1\uFF1A`, settings, { maxTokens: 500, profileKey: "items" });
+\u8BF7\u5217\u51FA\u7269\u54C1\uFF1A`, settings, { maxTokens: 500 });
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const [name, desc, owner] = l.split("|").map((x) => x.trim());
@@ -1146,7 +1162,7 @@ ${text}
 \u8981\u6C42\uFF1A\u6BCF\u884C\u4E00\u4E2A\u4E09\u5143\u7EC4\uFF0C\u683C\u5F0F\u4E25\u683C\u4E3A \u5B9E\u4F53A|\u5173\u7CFB|\u5B9E\u4F53B|\u6743\u91CD(1-5)\u3002
 \u6743\u91CD\u8868\u793A\u5173\u7CFB\u5F3A\u5EA6/\u4E92\u52A8\u9891\u7387\u3002\u53EA\u62BD\u53D6\u660E\u786E\u63D0\u5230\u6216\u660E\u663E\u6697\u793A\u7684\u5173\u7CFB\u3002\u6700\u591A 18 \u6761\u3002`;
       try {
-        const raw = await WM.Summary.callLLM(sys, memoryText, settings, { profileKey: "relations" });
+        const raw = await WM.Summary.callLLM(sys, memoryText, settings, {});
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const parts = l.split("|").map((x) => x.trim());
@@ -1819,44 +1835,32 @@ ${it.desc || ""}` }));
         }
       };
     }
-    const LLM_FUNCS = [
-      { key: "summary", name: "\u603B\u7ED3\u8BB0\u5FC6" },
-      { key: "relations", name: "\u5173\u7CFB\u56FE" },
-      { key: "plot", name: "\u5267\u60C5\u7EBF" },
-      { key: "world", name: "\u4E16\u754C\u89C2" },
-      { key: "items", name: "\u7269\u54C1\u8FFD\u8E2A" }
-    ];
-    function renderLlmProfiles(s) {
-      return LLM_FUNCS.map((f) => {
-        const p = s.llmProfiles && s.llmProfiles[f.key] || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
-        return `
-      <div class="wm-llm-func" data-func="${f.key}" style="border:1px solid var(--wm-line);border-radius:8px;padding:8px;margin:8px 0">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <span class="wm-h" style="margin:0">${f.name}</span>
-          <select class="p-src" title="\u8C03\u7528\u6765\u6E90">
-            <option value="local" ${p.source === "local" ? "selected" : ""}>\u672C\u5730\u9152\u9986(\u5F53\u524D\u6E90)</option>
-            <option value="custom" ${p.source === "custom" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u914D\u7F6E</option>
+    function renderLlmConfig(s) {
+      const c = s.llmConfig || { source: "local", proxyPreset: "", apiUrl: "", apiKey: "", model: "" };
+      return `
+      <div class="wm-card"><div class="wm-h">LLM \u8C03\u7528\u914D\u7F6E\uFF08\u7EDF\u4E00\uFF09</div>
+        <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1\uFF09\u5171\u7528\u8FD9\u4E00\u4E2A LLM \u914D\u7F6E\u3002\u9009\u62E9 <b>\u672C\u5730\u9152\u9986</b> \u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\uFF1B\u9009\u62E9 <b>\u81EA\u5B9A\u4E49\u914D\u7F6E</b> \u53EF\u6307\u5B9A\u4EE3\u7406\u9884\u8BBE\u6216\u72EC\u7ACB API\u3002\u914D\u5B8C\u53EF\u70B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u9A8C\u8BC1\u53EF\u7528\u6027\u3002</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0">
+          <span class="wm-h" style="margin:0">\u8C03\u7528\u6765\u6E90</span>
+          <select id="llm-src" title="\u8C03\u7528\u6765\u6E90">
+            <option value="local" ${c.source === "local" ? "selected" : ""}>\u672C\u5730\u9152\u9986(\u5F53\u524D\u6E90)</option>
+            <option value="custom" ${c.source === "custom" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u914D\u7F6E</option>
           </select>
         </div>
-        <div class="p-custom" style="${p.source === "custom" ? "" : "display:none"};margin-top:6px">
-          <label class="wm-row">\u4EE3\u7406\u9884\u8BBE\u540D<input class="p-preset" value="${escapeHtml(p.proxyPreset)}" placeholder="\u7559\u7A7A\u5219\u586B\u4E0B\u65B9 URL\uFF08\u9152\u9986\u4EE3\u7406\u9884\u8BBE\u540D\uFF09"/></label>
-          <label class="wm-row">API URL<input class="p-url" value="${escapeHtml(p.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
-          <label class="wm-row">API Key<input class="p-key" type="password" value="${escapeHtml(p.apiKey)}" placeholder="sk-..."/></label>
-          <label class="wm-row">\u6A21\u578B\u540D<input class="p-model" value="${escapeHtml(p.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
+        <div id="llm-custom" style="${c.source === "custom" ? "" : "display:none"};margin-top:6px">
+          <label class="wm-row">\u4EE3\u7406\u9884\u8BBE\u540D<input id="llm-preset" value="${escapeHtml(c.proxyPreset)}" placeholder="\u7559\u7A7A\u5219\u586B\u4E0B\u65B9 URL\uFF08\u9152\u9986\u4EE3\u7406\u9884\u8BBE\u540D\uFF09"/></label>
+          <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
+          <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
+          <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
         </div>
       </div>`;
-      }).join("");
     }
     function renderCfg(body) {
       const s = WM.Settings.load();
-      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u8BBE\u7F6E \xB7 \u5404\u529F\u80FD\u72EC\u7ACB LLM \u8C03\u7528</div>
-      <div class="wm-hint">\u6BCF\u4E2A\u529F\u80FD\u53EF\u5355\u72EC\u9009\u62E9\u8C03\u7528\u6765\u6E90\uFF1A<b>\u672C\u5730\u9152\u9986</b>\uFF08\u7528\u9152\u9986\u81EA\u5E26 shared-api\uFF0C\u65E0\u9700\u989D\u5916\u914D\u7F6E\uFF09\u6216 <b>\u81EA\u5B9A\u4E49\u914D\u7F6E</b>\uFF08\u72EC\u7ACB BaseURL/Key/\u6A21\u578B\u76F4\u8FDE\uFF09\u3002\u5404\u529F\u80FD\u4E92\u4E0D\u5E72\u6270\uFF0C\u4E0D\u4F1A\u6324\u5728\u4E00\u8D77\u3002</div>
-      <div id="llm-profiles">${renderLlmProfiles(s)}</div>
+      body.innerHTML = `${renderLlmConfig(s)}
+      <div class="wm-card">
       <div class="wm-divider"></div>
-      <div class="wm-h">\u9ED8\u8BA4\u81EA\u5B9A\u4E49\u914D\u7F6E\uFF08\u7528\u4E8E\u300C\u81EA\u5B9A\u4E49\u300D\u6A21\u5F0F\u7684\u521D\u59CB\u503C\uFF0C\u53EF\u9010\u529F\u80FD\u8986\u76D6\uFF09</div>
-      <label class="wm-row">Base URL<input id="c-base" value="${s.summaryBaseUrl}"/></label>
-      <label class="wm-row">API Key<input id="c-key" type="password" value="${s.summaryApiKey}" placeholder="sk-..."/></label>
-      <label class="wm-row">\u6A21\u578B\u540D<input id="c-model" value="${s.summaryModel}" placeholder="\u5982 gpt-4o-mini"/></label>
+      <div class="wm-h">\u8BB0\u5FC6\u4E0E\u6CE8\u5165</div>
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22
         <input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
       <label class="wm-row"><input type="checkbox" id="c-inj" ${s.injectMemories ? "checked" : ""}/> \u6CE8\u5165\u8BB0\u5FC6\u5230\u4E0A\u4E0B\u6587\uFF08\u786E\u4FDD\u89D2\u8272\u771F\u7684\u8BB0\u5F97\uFF09
@@ -1884,29 +1888,20 @@ ${it.desc || ""}` }));
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>
-      <div class="wm-hint">\u9ED8\u8BA4\u9009\u300C\u672C\u5730\u9152\u9986\u300D\u5373\u56DE\u9000\u9152\u9986\u81EA\u5E26 shared-api\uFF08textgeneration\uFF09\u3002\u81EA\u5B9A\u4E49\u6A21\u5F0F\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
-      body.querySelectorAll("#llm-profiles .wm-llm-func").forEach((card) => {
-        const src = card.querySelector(".p-src");
-        const custom = card.querySelector(".p-custom");
-        src.onchange = () => {
-          custom.style.display = src.value === "custom" ? "" : "none";
-        };
-      });
+      <div class="wm-hint">\u9ED8\u8BA4\u9009\u300C\u672C\u5730\u9152\u9986\u300D\u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\u3002\u81EA\u5B9A\u4E49\u6A21\u5F0F\u672C\u5730\u53CD\u4EE3\u586B 127.0.0.1\u3002</div></div>`;
+      const srcSel = body.querySelector("#llm-src");
+      const customBox = body.querySelector("#llm-custom");
+      srcSel.onchange = () => {
+        customBox.style.display = srcSel.value === "custom" ? "" : "none";
+      };
       body.querySelector("#c-save").onclick = () => {
-        s.llmProfiles = s.llmProfiles || {};
-        body.querySelectorAll("#llm-profiles .wm-llm-func").forEach((card) => {
-          const key = card.dataset.func;
-          s.llmProfiles[key] = {
-            source: card.querySelector(".p-src").value,
-            proxyPreset: card.querySelector(".p-preset").value.trim(),
-            apiUrl: card.querySelector(".p-url").value.trim(),
-            apiKey: card.querySelector(".p-key").value.trim(),
-            model: card.querySelector(".p-model").value.trim()
-          };
-        });
-        s.summaryBaseUrl = body.querySelector("#c-base").value;
-        s.summaryApiKey = body.querySelector("#c-key").value;
-        s.summaryModel = body.querySelector("#c-model").value;
+        s.llmConfig = {
+          source: body.querySelector("#llm-src").value,
+          proxyPreset: body.querySelector("#llm-preset").value.trim(),
+          apiUrl: body.querySelector("#llm-url").value.trim(),
+          apiKey: body.querySelector("#llm-key").value.trim(),
+          model: body.querySelector("#llm-model").value.trim()
+        };
         s.vectorEnabled = body.querySelector("#c-vec").checked;
         s.rerankEnabled = body.querySelector("#c-rerank").checked;
         s.injectMemories = body.querySelector("#c-inj").checked;
@@ -1927,10 +1922,15 @@ ${it.desc || ""}` }));
       };
       body.querySelector("#c-test").onclick = async () => {
         const box = body.querySelector("#c-test-result");
+        const tmpLlm = {
+          source: body.querySelector("#llm-src").value,
+          proxyPreset: body.querySelector("#llm-preset").value.trim(),
+          apiUrl: body.querySelector("#llm-url").value.trim(),
+          apiKey: body.querySelector("#llm-key").value.trim(),
+          model: body.querySelector("#llm-model").value.trim()
+        };
         const tmp = Object.assign({}, WM.Settings.load(), {
-          summaryBaseUrl: body.querySelector("#c-base").value,
-          summaryApiKey: body.querySelector("#c-key").value,
-          summaryModel: body.querySelector("#c-model").value,
+          llmConfig: tmpLlm,
           embeddingBaseUrl: body.querySelector("#c-emb-url").value,
           embeddingApiKey: body.querySelector("#c-emb-key").value,
           embeddingModel: body.querySelector("#c-emb-model").value,
@@ -1945,6 +1945,12 @@ ${it.desc || ""}` }));
           rows.push(`<div class="wm-test-item ${ok ? "wm-ok" : "wm-bad"}">${ok ? "\u2705" : "\u274C"} ${name}${ok ? "\uFF1A" + (detail || "") : "\uFF1A" + (r && r.error || "\u5931\u8D25")}</div>`);
         };
         try {
+          const r = await WM.LLMClient.testConnection({ profile: tmpLlm });
+          add("LLM(" + (tmpLlm.source === "local" ? "\u672C\u5730\u9152\u9986" : "\u81EA\u5B9A\u4E49") + ")", r, "");
+        } catch (e) {
+          add("LLM(\u7EDF\u4E00\u914D\u7F6E)", { success: false }, String(e.message || e));
+        }
+        try {
           const wbOk = WM.Worldbook && WM.Worldbook.available && WM.Worldbook.available();
           if (wbOk) {
             const b = await WM.Worldbook.ensureLorebook();
@@ -1952,15 +1958,6 @@ ${it.desc || ""}` }));
           } else add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, "TavernHelper \u4E0D\u53EF\u7528");
         } catch (e) {
           add("\u4E16\u754C\u4E66(\u9152\u9986)", { success: false }, String(e.message || e));
-        }
-        for (const f of LLM_FUNCS) {
-          const profile = tmp.llmProfiles && tmp.llmProfiles[f.key] || null;
-          try {
-            const r = await WM.LLMClient.testConnection({ settings: tmp, profile });
-            add(f.name + "(LLM)", r, "");
-          } catch (e) {
-            add(f.name + "(LLM)", { success: false }, String(e.message || e));
-          }
         }
         try {
           if (tmp.embeddingBaseUrl || tmp.embeddingApiKey || tmp.embeddingModel)
