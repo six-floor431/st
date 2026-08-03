@@ -777,8 +777,7 @@ ${it.message}`;
         model: profile.model || "",
         messages: messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : "system", content: String(m.content || "") })),
         max_tokens: maxTokens,
-        temperature,
-        stream: false
+        temperature
       };
       const headers = { "Content-Type": "application/json" };
       if (profile.apiKey) headers["Authorization"] = "Bearer " + profile.apiKey;
@@ -805,28 +804,65 @@ ${it.message}`;
         throw new Error("[LLM HTTP " + res.status + "] \u5730\u5740\uFF1A" + url + "\uFF5C\u54CD\u5E94\uFF1A" + rawText.slice(0, 500));
       }
       let j;
+      let parseErr = null;
       try {
         j = JSON.parse(rawText);
       } catch (e) {
-        if (WM.DebugLog) WM.DebugLog.logError("llm", { url, error: "\u8FD4\u56DE\u975E JSON", response: rawText.slice(0, 500) });
-        throw new Error("[LLM \u8FD4\u56DE\u975E JSON] " + rawText.slice(0, 500));
+        parseErr = e;
+        j = null;
       }
-      let text = "";
-      if (j && j.choices && j.choices[0]) {
-        text = j.choices[0].message && j.choices[0].message.content || j.choices[0].text || "";
-      } else if (typeof j === "string") {
-        text = j;
-      }
+      let text = extractText(j, rawText);
       if (WM.DebugLog) {
         WM.DebugLog.logResponse("llm", {
           url,
           model: j && j.model || body.model,
           output: String(text || ""),
           usage: j && j.usage,
-          finish_reason: j && j.choices && j.choices[0] && j.choices[0].finish_reason
+          finish_reason: j && j.choices && j.choices[0] && j.choices[0].finish_reason,
+          rawPreview: rawText.slice(0, 600)
         });
       }
-      return text ? String(text).trim() : "";
+      if (!text) {
+        const hint = parseErr ? "\u8FD4\u56DE\u975E JSON\uFF08" + String(parseErr.message) + "\uFF09" : "\u54CD\u5E94\u4F53\u5DF2\u6536\u5230\u4F46\u63D0\u53D6\u4E0D\u5230\u6587\u672C\u5185\u5BB9";
+        throw new Error("[LLM \u8FD4\u56DE\u4E3A\u7A7A] " + hint + "\uFF5C\u539F\u59CB\u54CD\u5E94\u524D500\u5B57\uFF1A" + rawText.slice(0, 500));
+      }
+      return String(text).trim();
+    }
+    function extractText(j, rawText) {
+      if (j == null) {
+        return extractFromSSE(rawText);
+      }
+      let t = "";
+      if (j.choices && j.choices[0]) {
+        t = j.choices[0].message && j.choices[0].message.content || j.choices[0].text || "";
+      } else if (j.candidates && j.candidates[0]) {
+        const c = j.candidates[0];
+        const parts = c.content && c.content.parts || [];
+        t = parts.map((p) => p.text || "").join("");
+      } else if (typeof j === "string") {
+        t = j;
+      }
+      if (t) return String(t).trim();
+      return extractFromSSE(rawText);
+    }
+    function extractFromSSE(rawText) {
+      if (!rawText) return "";
+      const lines = rawText.split("\n");
+      let acc = "";
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s.startsWith("data:")) continue;
+        const payload = s.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const o = JSON.parse(payload);
+          const c = o.choices && o.choices[0] || {};
+          const txt = c.message && c.message.content || c.text || c.delta && c.delta.content || "";
+          if (txt) acc += txt;
+        } catch (e) {
+        }
+      }
+      return acc.trim();
     }
     async function testConnection(opts) {
       opts = opts || {};
@@ -3503,7 +3539,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-summary-stale-settings";
+  window.WarmMemo.version = "fix-llm-empty-sse-parse";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

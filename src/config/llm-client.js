@@ -58,7 +58,6 @@
       messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : (m.role === 'user' ? 'user' : 'system'), content: String(m.content || '') })),
       max_tokens: maxTokens,
       temperature: temperature,
-      stream: false,
     };
     const headers = { 'Content-Type': 'application/json' };
     if (profile.apiKey) headers['Authorization'] = 'Bearer ' + profile.apiKey;
@@ -88,18 +87,14 @@
       throw new Error('[LLM HTTP ' + res.status + '] 地址：' + url + '｜响应：' + rawText.slice(0, 500));
     }
     let j;
+    let parseErr = null;
     try { j = JSON.parse(rawText); }
-    catch (e) { if (WM.DebugLog) WM.DebugLog.logError('llm', { url, error: '返回非 JSON', response: rawText.slice(0, 500) }); throw new Error('[LLM 返回非 JSON] ' + rawText.slice(0, 500)); }
+    catch (e) { parseErr = e; j = null; }
 
-    // 提取输出文本
-    let text = '';
-    if (j && j.choices && j.choices[0]) {
-      text = (j.choices[0].message && j.choices[0].message.content) || j.choices[0].text || '';
-    } else if (typeof j === 'string') {
-      text = j;
-    }
+    // 提取输出文本（兼容多种返回结构，避免"返回为空"误报）
+    let text = extractText(j, rawText);
 
-    // —— 调试记录：AI 输出结果 ——
+    // —— 调试记录：AI 输出结果（无论成败都记录原始返回，方便定位） ——
     if (WM.DebugLog) {
       WM.DebugLog.logResponse('llm', {
         url,
@@ -107,9 +102,61 @@
         output: String(text || ''),
         usage: j && j.usage,
         finish_reason: j && j.choices && j.choices[0] && j.choices[0].finish_reason,
+        rawPreview: rawText.slice(0, 600),
       });
     }
-    return text ? String(text).trim() : '';
+
+    if (!text) {
+      // text 为空：把真实返回抛出来，便于用户从调试面板/错误信息看到 DeepSeek 到底回了什么
+      const hint = parseErr ? ('返回非 JSON（' + String(parseErr.message) + '）') : '响应体已收到但提取不到文本内容';
+      throw new Error('[LLM 返回为空] ' + hint + '｜原始响应前500字：' + rawText.slice(0, 500));
+    }
+    return String(text).trim();
+  }
+
+  // 从多种可能的返回结构中提取文本：
+  //   OpenAI:    choices[].message.content / choices[].text
+  //   Gemini:    candidates[].content.parts[].text
+  //   SSE 流:    data: {...} 行里 message.content（兼容忽略 stream:false 的端点）
+  //   裸字符串 / 其它
+  function extractText(j, rawText) {
+    if (j == null) {
+      // 尝试当作 SSE / NDJSON 解析
+      return extractFromSSE(rawText);
+    }
+    let t = '';
+    if (j.choices && j.choices[0]) {
+      t = (j.choices[0].message && j.choices[0].message.content) || j.choices[0].text || '';
+    } else if (j.candidates && j.candidates[0]) {
+      const c = j.candidates[0];
+      const parts = (c.content && c.content.parts) || [];
+      t = parts.map((p) => p.text || '').join('');
+    } else if (typeof j === 'string') {
+      t = j;
+    }
+    if (t) return String(t).trim();
+    // JSON 合法但结构不匹配：再试 SSE（某些端点即便 stream:false 也回 SSE）
+    return extractFromSSE(rawText);
+  }
+
+  function extractFromSSE(rawText) {
+    if (!rawText) return '';
+    // 取最后一个 data: 行（跳过 [DONE]）
+    const lines = rawText.split('\n');
+    let acc = '';
+    for (const line of lines) {
+      const s = line.trim();
+      if (!s.startsWith('data:')) continue;
+      const payload = s.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try {
+        const o = JSON.parse(payload);
+        const c = (o.choices && o.choices[0]) || {};
+        const txt = (c.message && c.message.content) || c.text || (c.delta && c.delta.content) || '';
+        if (txt) acc += txt;
+      } catch (e) { /* 忽略该行 */ }
+    }
+    return acc.trim();
   }
 
   // 测试连接：一次极简请求，验证连通性。
