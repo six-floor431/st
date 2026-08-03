@@ -146,7 +146,7 @@
       const out = await Promise.race([
         complete(
           [{ role: 'system', content: '你是一个连通性测试工具。只输出指令要求的内容，不要回答任何其它问题，不要使用聊天历史。' },
-           { role: 'user', content: '请只回复「连通」两个字，不要回复其它任何内容。' }],
+           { role: 'user', content: '这是测试连接的，请发「成功」两个字，知不知道？只回复「成功」，不要回复其它任何内容。' }],
           { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
         ),
         guard,

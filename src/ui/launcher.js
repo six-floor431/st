@@ -785,12 +785,17 @@
       { key: 'plot', title: '剧情提示词', holder: '支持 {{relations}} {{recent}}', def: '你是剧情梳理者。请基于【关系】和【最近对话】，梳理当前剧情主线、支线、悬念与下一步可能发展。输出条目，每条一行。\n\n【关系】\n{{relations}}\n\n【最近对话】\n{{recent}}' },
       { key: 'worldview', title: '世界观提示词', holder: '支持 {{plot}} {{recent}}', def: '你是世界观提炼者。请基于【剧情线】和【最近对话】，抽取本世界的关键设定：地点、势力、规则、物品、概念。输出条目，每条一行。\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}' },
     ];
-    const promptHtml = promptEditors.map((p) => `
-      <div style="margin:8px 0">
-        <div class="wm-h" style="margin:4px 0">${p.title}</div>
-        <div class="wm-hint">占位符：${p.holder}（运行时自动替换为真实数据）</div>
-        <textarea id="pprompt-${p.key}" rows="${p.key==='summary'?4:3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
-      </div>`).join('');
+    const promptHtml = `
+      <div class="wm-subtabs lv3" data-lv3="prompts">
+        ${promptEditors.map((p, i) => `<button data-ptab="${p.key}" class="${i === 0 ? 'active' : ''}">${p.title.replace('提示词', '')}</button>`).join('')}
+      </div>
+      <div class="wm-ptabs">
+        ${promptEditors.map((p, i) => `
+          <div class="wm-ptab-pane" data-ptab-pane="${p.key}" style="${i === 0 ? '' : 'display:none'}">
+            <div class="wm-hint">占位符：${p.holder}（运行时自动替换为真实数据）</div>
+            <textarea id="pprompt-${p.key}" rows="${p.key==='summary'?4:3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
+          </div>`).join('')}
+      </div>`;
     return `
       <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
         <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。选择 <b>本地酒馆</b> 即用酒馆当前对话源；选择 <b>自定义配置</b> 可指定代理预设或独立 API。配完可点「测试连接」验证可用性。</div>
@@ -1013,6 +1018,21 @@
       };
       rkSrc.onchange = sync; sync();
     }
+
+    // 三级标签：任意 [data-lv3] 容器内按钮切换对应 [data-ptab-pane]
+    body.querySelectorAll('.wm-subtabs[data-lv3]').forEach((bar) => {
+      const group = bar.getAttribute('data-lv3');
+      const paneWrap = bar.parentElement.querySelector('.wm-ptabs');
+      bar.querySelectorAll('button').forEach((btn) => {
+        btn.onclick = () => {
+          const key = btn.dataset.ptab;
+          bar.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+          if (paneWrap) paneWrap.querySelectorAll('.wm-ptab-pane').forEach((p) => {
+            p.style.display = (p.getAttribute('data-ptab-pane') === key) ? '' : 'none';
+          });
+        };
+      });
+    });
 
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');

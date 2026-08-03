@@ -810,7 +810,7 @@ ${it.message}`;
           complete(
             [
               { role: "system", content: "\u4F60\u662F\u4E00\u4E2A\u8FDE\u901A\u6027\u6D4B\u8BD5\u5DE5\u5177\u3002\u53EA\u8F93\u51FA\u6307\u4EE4\u8981\u6C42\u7684\u5185\u5BB9\uFF0C\u4E0D\u8981\u56DE\u7B54\u4EFB\u4F55\u5176\u5B83\u95EE\u9898\uFF0C\u4E0D\u8981\u4F7F\u7528\u804A\u5929\u5386\u53F2\u3002" },
-              { role: "user", content: "\u8BF7\u53EA\u56DE\u590D\u300C\u8FDE\u901A\u300D\u4E24\u4E2A\u5B57\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
+              { role: "user", content: "\u8FD9\u662F\u6D4B\u8BD5\u8FDE\u63A5\u7684\uFF0C\u8BF7\u53D1\u300C\u6210\u529F\u300D\u4E24\u4E2A\u5B57\uFF0C\u77E5\u4E0D\u77E5\u9053\uFF1F\u53EA\u56DE\u590D\u300C\u6210\u529F\u300D\uFF0C\u4E0D\u8981\u56DE\u590D\u5176\u5B83\u4EFB\u4F55\u5185\u5BB9\u3002" }
             ],
             { profile, maxTokens: 8, temperature: 0, max_chat_history: 0, should_silence: true }
           ),
@@ -2779,12 +2779,17 @@ ${p.summary || ""}`.trim() });
         { key: "plot", title: "\u5267\u60C5\u63D0\u793A\u8BCD", holder: "\u652F\u6301 {{relations}} {{recent}}", def: "\u4F60\u662F\u5267\u60C5\u68B3\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5173\u7CFB\u3011\u548C\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u68B3\u7406\u5F53\u524D\u5267\u60C5\u4E3B\u7EBF\u3001\u652F\u7EBF\u3001\u60AC\u5FF5\u4E0E\u4E0B\u4E00\u6B65\u53EF\u80FD\u53D1\u5C55\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}" },
         { key: "worldview", title: "\u4E16\u754C\u89C2\u63D0\u793A\u8BCD", holder: "\u652F\u6301 {{plot}} {{recent}}", def: "\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u548C\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u62BD\u53D6\u672C\u4E16\u754C\u7684\u5173\u952E\u8BBE\u5B9A\uFF1A\u5730\u70B9\u3001\u52BF\u529B\u3001\u89C4\u5219\u3001\u7269\u54C1\u3001\u6982\u5FF5\u3002\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}" }
       ];
-      const promptHtml = promptEditors.map((p) => `
-      <div style="margin:8px 0">
-        <div class="wm-h" style="margin:4px 0">${p.title}</div>
-        <div class="wm-hint">\u5360\u4F4D\u7B26\uFF1A${p.holder}\uFF08\u8FD0\u884C\u65F6\u81EA\u52A8\u66FF\u6362\u4E3A\u771F\u5B9E\u6570\u636E\uFF09</div>
-        <textarea id="pprompt-${p.key}" rows="${p.key === "summary" ? 4 : 3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
-      </div>`).join("");
+      const promptHtml = `
+      <div class="wm-subtabs lv3" data-lv3="prompts">
+        ${promptEditors.map((p, i) => `<button data-ptab="${p.key}" class="${i === 0 ? "active" : ""}">${p.title.replace("\u63D0\u793A\u8BCD", "")}</button>`).join("")}
+      </div>
+      <div class="wm-ptabs">
+        ${promptEditors.map((p, i) => `
+          <div class="wm-ptab-pane" data-ptab-pane="${p.key}" style="${i === 0 ? "" : "display:none"}">
+            <div class="wm-hint">\u5360\u4F4D\u7B26\uFF1A${p.holder}\uFF08\u8FD0\u884C\u65F6\u81EA\u52A8\u66FF\u6362\u4E3A\u771F\u5B9E\u6570\u636E\uFF09</div>
+            <textarea id="pprompt-${p.key}" rows="${p.key === "summary" ? 4 : 3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
+          </div>`).join("")}
+      </div>`;
       return `
       <div class="wm-card"><div class="wm-h">LLM \u8C03\u7528\u914D\u7F6E\uFF08\u7EDF\u4E00\uFF09</div>
         <div class="wm-hint">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2/\u7269\u54C1\uFF09\u5171\u7528\u8FD9\u4E00\u4E2A LLM \u914D\u7F6E\u3002\u9009\u62E9 <b>\u672C\u5730\u9152\u9986</b> \u5373\u7528\u9152\u9986\u5F53\u524D\u5BF9\u8BDD\u6E90\uFF1B\u9009\u62E9 <b>\u81EA\u5B9A\u4E49\u914D\u7F6E</b> \u53EF\u6307\u5B9A\u4EE3\u7406\u9884\u8BBE\u6216\u72EC\u7ACB API\u3002\u914D\u5B8C\u53EF\u70B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u9A8C\u8BC1\u53EF\u7528\u6027\u3002</div>
@@ -2996,6 +3001,19 @@ ${p.summary || ""}`.trim() });
         rkSrc.onchange = sync;
         sync();
       }
+      body.querySelectorAll(".wm-subtabs[data-lv3]").forEach((bar) => {
+        const group = bar.getAttribute("data-lv3");
+        const paneWrap = bar.parentElement.querySelector(".wm-ptabs");
+        bar.querySelectorAll("button").forEach((btn) => {
+          btn.onclick = () => {
+            const key = btn.dataset.ptab;
+            bar.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+            if (paneWrap) paneWrap.querySelectorAll(".wm-ptab-pane").forEach((p) => {
+              p.style.display = p.getAttribute("data-ptab-pane") === key ? "" : "none";
+            });
+          };
+        });
+      });
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = () => {
         const scope = WM._cfgTab || "llm";
