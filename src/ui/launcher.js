@@ -698,7 +698,10 @@
   async function renderWorld(body) {
     const settings = WM.Settings.load();
     const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : { name: '', kind: '', desc: '' };
-    const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
+    // 过滤掉历史数据中误存的具体实体条目（物品/角色/势力/地点名），仅展示世界规则设定
+    const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
+    const secs = (WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [])
+      .filter((w) => !(w.title && ENTITY_NOISE.test(w.title) && /[:：·]/.test(w.title)));
     let loreCount = 0;
     try { loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0; } catch (e) { loreCount = 0; }
 

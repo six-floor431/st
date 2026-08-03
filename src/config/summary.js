@@ -225,72 +225,76 @@
     labels.push('plot');
 
     // 世界观：解析结构化输出 → worldMeta + worldSections
-    tasks.push((async () => {
-      const world = await WM.Worldbook.inferWorldview(settings, { recent });
-      if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
-      const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
-      if (parsed) {
-        const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
-        await WM.MemoryStore.setWorldMeta({
-          name: parsed.name || cur.name || '',
-          kind: parsed.kind || cur.kind || '',
-          desc: parsed.desc || cur.desc || '',
-        });
-        for (const sec of parsed.sections) {
-          const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
-          if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
-          else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+    if (settings.autoWorld !== false) {
+      tasks.push((async () => {
+        const world = await WM.Worldbook.inferWorldview(settings, { recent });
+        if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
+        const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+        if (parsed) {
+          const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+          await WM.MemoryStore.setWorldMeta({
+            name: parsed.name || cur.name || '',
+            kind: parsed.kind || cur.kind || '',
+            desc: parsed.desc || cur.desc || '',
+          });
+          for (const sec of parsed.sections) {
+            const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+            if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+            else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+          }
+        } else {
+          await WM.MemoryStore.setWorld(world);
         }
-      } else {
-        await WM.MemoryStore.setWorld(world);
-      }
-      return { kind: 'worldview', ok: true };
-    })());
-    labels.push('worldview');
+        return { kind: 'worldview', ok: true };
+      })());
+      labels.push('worldview');
+    }
 
     // 物品：物品名｜作用｜持有者｜关联剧情｜来历（物品须关联角色与剧情线）
-    tasks.push((async () => {
-      const tpl = settings.prompts && settings.prompts.itemExtract;
-      if (!tpl) return { kind: 'items', ok: true, skipped: true };
-      // 把已有剧情线标题喂给模型，便于它做关联
-      const knownPlots = (WM.MemoryStore.getPlots() || [])
-        .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
-      const s = fillTemplate(tpl, {
-        recent: buildDialogue(recent, settings),
-        plot: knownPlots,
-      });
-      const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
-      const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
-        .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
-      const allPlots = WM.MemoryStore.getPlots() || [];
-      const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-      for (const ln of lines) {
-        const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
-        const name = parts[0];
-        if (!name) continue;
-        // 关联剧情：把标题映射回剧情 id
-        const relIds = [];
-        if (!blank(parts[3])) {
-          for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
-            const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
-            if (hit) relIds.push(hit.id);
+    if (settings.autoItems !== false) {
+      tasks.push((async () => {
+        const tpl = settings.prompts && settings.prompts.itemExtract;
+        if (!tpl) return { kind: 'items', ok: true, skipped: true };
+        // 把已有剧情线标题喂给模型，便于它做关联
+        const knownPlots = (WM.MemoryStore.getPlots() || [])
+          .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
+        const s = fillTemplate(tpl, {
+          recent: buildDialogue(recent, settings),
+          plot: knownPlots,
+        });
+        const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
+        const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+          .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+        const allPlots = WM.MemoryStore.getPlots() || [];
+        const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
+        for (const ln of lines) {
+          const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
+          const name = parts[0];
+          if (!name) continue;
+          // 关联剧情：把标题映射回剧情 id
+          const relIds = [];
+          if (!blank(parts[3])) {
+            for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+              const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+              if (hit) relIds.push(hit.id);
+            }
           }
+          // 同名物品则更新，避免重复堆积
+          const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
+          const data = {
+            name,
+            desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
+            owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
+            origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
+            relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
+          };
+          if (exist) await WM.MemoryStore.updateItem(exist.id, data);
+          else await WM.MemoryStore.addItem(data);
         }
-        // 同名物品则更新，避免重复堆积
-        const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
-        const data = {
-          name,
-          desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
-          owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
-          origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
-          relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
-        };
-        if (exist) await WM.MemoryStore.updateItem(exist.id, data);
-        else await WM.MemoryStore.addItem(data);
-      }
-      return { kind: 'items', ok: true };
-    })());
-    labels.push('items');
+        return { kind: 'items', ok: true };
+      })());
+      labels.push('items');
+    }
 
     // 并行执行 + 全部失败收集
     const results = await Promise.allSettled(tasks);

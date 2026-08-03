@@ -233,9 +233,14 @@
       else descBuf.push(line);
     }
     out.desc = descBuf.join('\n').trim();
+    // 世界设定只保留「世界通用规则/法则」，剔除明显属于具体实体（物品/角色/地点）的条目，
+    // 避免污染「世界设定」一级标签（这类内容应出现在各自的物品/关系面板）。
+    // 仅当标题命中实体词「且」带具体命名标记（冒号/·）时才丢弃，避免误删纯规则名（如「势力格局」）。
+    const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
     out.sections = out.sections
       .map((s) => ({ title: s.title, body: s.body.join('\n').trim() }))
-      .filter((s) => s.title || s.body);
+      .filter((s) => s.title || s.body)
+      .filter((s) => !(s.title && ENTITY_NOISE.test(s.title) && /[:：·]/.test(s.title)));
     if (!out.name && !out.kind && !out.desc && !out.sections.length) return null;
     return out;
   }
@@ -276,7 +281,7 @@ ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction +
     return out && out.trim() ? out.trim() : prev;
   }
 
-  const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【角色设定】【剧情线】【已知物品】，提炼这个故事所处世界的设定。
+  const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个故事所处世界本身的「底层规则设定」。
 
 严格按以下格式输出，不要添加任何多余说明：
 
@@ -285,21 +290,19 @@ ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction +
 简述：（一到两句话说明这是个什么样的世界）
 
 ## 设定标题一
-（围绕"世界类型"展开的具体规则。例如修仙世界就写修炼体系的境界划分；赛博朋克就写义体与企业规则）
+（围绕"世界类型"展开的具体规则与法则。例如修仙世界就写修炼体系的境界划分、灵气运行法则；赛博朋克就写义体改造规则、企业与财阀的运行法则）
 
 ## 设定标题二
 （内容）
 
 要求：
-1. 「世界类型」决定了下面写什么。修仙世界就必须有修炼体系、灵气、宗门等设定，不要写无关内容。
-2. 每条设定要具体、可被后续剧情引用，不要空泛。
-3. 输出 3-6 条设定条目。
+1. 「世界设定」只写世界本身的通用规则、法则、历史背景、力量体系，绝不写单个具体物品、单个具体角色姓名、单个具体地点名称。
+2. 「世界类型」决定了下面写什么。修仙世界就必须写修炼体系、灵气、法则等，不要写无关内容。
+3. 每条设定要具体、可被后续剧情引用，不要空泛。
+4. 输出 3-6 条设定条目。
 
 【剧情线】
 {{plot}}
-
-【已知物品】
-{{items}}
 
 【最近对话】
 {{recent}}`;

@@ -88,7 +88,7 @@
         summary: "\u4F60\u662F\u6211\u7684\u4E13\u5C5E\u8BB0\u5F55\u5458\u3002\u8BF7\u57FA\u4E8E\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u6309\u300C\u65F6\u95F4\u987A\u5E8F\u300D\u63D0\u70BC\u51FA\u300C\u5173\u952E\u4E8B\u5B9E\u3001\u7EA6\u5B9A\u3001\u72B6\u6001\u53D8\u5316\u3001\u4EBA\u540D/\u5730\u70B9/\u7EC4\u7EC7\u3001\u672A\u5B8C\u6210\u7684\u627F\u8BFA\u6216\u5F85\u529E\u300D\u3002\u4E0D\u8981\u7F16\u9020\uFF0C\u4E0D\u786E\u5B9A\u5C31\u5199\u201C\u672A\u77E5\u201D\u3002\u4EC5\u8F93\u51FA\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\uFF0C\u4E0D\u8D85\u8FC7 12 \u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         relations: "\u4F60\u662F\u5173\u7CFB\u5206\u6790\u5E08\u3002\u8BF7\u57FA\u4E8E\u300C\u5386\u53F2\u603B\u7ED3\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u5206\u6790\u300C\u6211\uFF08\u7528\u6237\uFF09\u4E0E\u89D2\u8272\u4E4B\u95F4\u300D\u7684\u5173\u7CFB\u72B6\u6001\u3001\u4EB2\u5BC6\u5EA6\u3001\u5F20\u529B\u3001\u672A\u89E3\u5FC3\u7ED3\u3002\u8F93\u51FA\u7ED3\u6784\u5316\u6761\u76EE\uFF0C\u6BCF\u6761\u4E00\u884C\u3002\n\n\u3010\u5386\u53F2\u603B\u7ED3\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
         plot: "\u4F60\u662F\u5267\u60C5\u68B3\u7406\u8005\u3002\u8BF7\u57FA\u4E8E\u300C\u5173\u7CFB\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u68B3\u7406\u8FD9\u4E00\u6BB5\u53D1\u751F\u7684\u5267\u60C5\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\n\n\u8BF4\u660E\uFF1A\n- \u65F6\u95F4\uFF1A\u5267\u60C5\u5185\u7684\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E09\u65E5\u6E05\u6668\u300D\u300C\u5EFA\u5143\u4E03\u5E74\u6625\u300D\uFF09\u3002\u82E5\u5BF9\u8BDD\u672A\u63D0\u53CA\uFF0C\u5199\u300C\u672A\u6807\u6CE8\u300D\u3002\n- \u6807\u9898\uFF1A\u8FD9\u6BB5\u5267\u60C5\u7684\u7B80\u77ED\u547D\u540D\uFF0C\u4E0D\u8D85\u8FC7 15 \u5B57\u3002\n- \u5185\u5BB9\uFF1A\u8FD9\u6BB5\u5267\u60C5\u53D1\u751F\u4E86\u4EC0\u4E48\uFF0C\u4E00\u5230\u4E24\u53E5\u8BDD\u3002\n- \u72B6\u6001\uFF1A\u53EA\u80FD\u586B \u8FDB\u884C\u4E2D / \u5DF2\u5B8C\u7ED3 / \u5DF2\u5E9F\u5F03 \u4E09\u8005\u4E4B\u4E00\u3002\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\uFF0C\u4E0D\u8981\u7F16\u53F7\uFF0C\u4E0D\u8981\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        worldview: '\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u5267\u60C5\u7EBF\u3011\u3010\u5DF2\u77E5\u7269\u54C1\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u7684\u8BBE\u5B9A\u3002\n\n\u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A\n\n\u4E16\u754C\u540D\uFF1A\uFF08\u8FD9\u4E2A\u4E16\u754C/\u5927\u9646/\u57CE\u5E02\u53EB\u4EC0\u4E48\uFF0C\u6CA1\u6709\u5C31\u8D77\u4E00\u4E2A\u8D34\u5207\u7684\uFF09\n\u4E16\u754C\u7C7B\u578B\uFF1A\uFF08\u7528\u4E00\u4E2A\u8BCD\u6982\u62EC\uFF0C\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C\u3001\u8D5B\u535A\u670B\u514B\u3001\u84B8\u6C7D\u670B\u514B\u3001\u73B0\u4EE3\u90FD\u5E02\u3001\u5251\u4E0E\u9B54\u6CD5\uFF09\n\u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E00\n\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u4E0E\u4F01\u4E1A\u89C4\u5219\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E8C\n\uFF08\u5185\u5BB9\uFF09\n\n\u8981\u6C42\uFF1A\n1. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u6709\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u5B97\u95E8\u7B49\u8BBE\u5B9A\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002\n2. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002\n3. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u5DF2\u77E5\u7269\u54C1\u3011\n{{items}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        worldview: '\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u672C\u8EAB\u7684\u300C\u5E95\u5C42\u89C4\u5219\u8BBE\u5B9A\u300D\u3002\n\n\u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A\n\n\u4E16\u754C\u540D\uFF1A\uFF08\u8FD9\u4E2A\u4E16\u754C/\u5927\u9646/\u57CE\u5E02\u53EB\u4EC0\u4E48\uFF0C\u6CA1\u6709\u5C31\u8D77\u4E00\u4E2A\u8D34\u5207\u7684\uFF09\n\u4E16\u754C\u7C7B\u578B\uFF1A\uFF08\u7528\u4E00\u4E2A\u8BCD\u6982\u62EC\uFF0C\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C\u3001\u8D5B\u535A\u670B\u514B\u3001\u84B8\u6C7D\u670B\u514B\u3001\u73B0\u4EE3\u90FD\u5E02\u3001\u5251\u4E0E\u9B54\u6CD5\uFF09\n\u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E00\n\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u4E0E\u6CD5\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\u3001\u7075\u6C14\u8FD0\u884C\u6CD5\u5219\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u6539\u9020\u89C4\u5219\u3001\u4F01\u4E1A\u4E0E\u8D22\u9600\u7684\u8FD0\u884C\u6CD5\u5219\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E8C\n\uFF08\u5185\u5BB9\uFF09\n\n\u8981\u6C42\uFF1A\n1. \u300C\u4E16\u754C\u8BBE\u5B9A\u300D\u53EA\u5199\u4E16\u754C\u672C\u8EAB\u7684\u901A\u7528\u89C4\u5219\u3001\u6CD5\u5219\u3001\u5386\u53F2\u80CC\u666F\u3001\u529B\u91CF\u4F53\u7CFB\uFF0C\u7EDD\u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1\u3001\u5355\u4E2A\u5177\u4F53\u89D2\u8272\u59D3\u540D\u3001\u5355\u4E2A\u5177\u4F53\u5730\u70B9\u540D\u79F0\u3002\n2. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u5199\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u6CD5\u5219\u7B49\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002\n3. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002\n4. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u7269\u54C1\u5FC5\u987B\u4E0E\u300C\u89D2\u8272\u300D\u548C\u300C\u5267\u60C5\u300D\u4EA7\u751F\u5173\u8054\uFF0C\u5B64\u7ACB\u7684\u666E\u901A\u9053\u5177\u4E0D\u8981\u8BB0\u5F55\u3002\n\n\u8BF7\u57FA\u4E8E\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u62BD\u53D6\u672C\u6BB5\u51FA\u73B0\u7684\u5177\u6709\u5267\u60C5\u610F\u4E49\u7684\u7269\u54C1/\u9053\u5177/\u4FE1\u7269/\u88C5\u5907\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\n\n\u8BF4\u660E\uFF1A\n- \u7269\u54C1\u540D\uFF1A\u7269\u54C1\u7684\u540D\u79F0\u3002\n- \u4F5C\u7528\uFF1A\u8FD9\u4EF6\u7269\u54C1\u6709\u4EC0\u4E48\u7528\u9014\u3001\u6548\u679C\u6216\u8C61\u5F81\u610F\u4E49\uFF08\u5FC5\u586B\uFF0C\u4E0D\u53EF\u5199\u300C\u65E0\u300D\uFF09\u3002\n- \u6301\u6709\u8005\uFF1A\u73B0\u5728\u5728\u54EA\u4E2A\u89D2\u8272\u624B\u4E0A\u3002\u5FC5\u987B\u662F\u3010\u5267\u60C5\u7EBF\u3011\u6216\u5BF9\u8BDD\u4E2D\u51FA\u73B0\u8FC7\u7684\u89D2\u8272\u540D\uFF1B\u786E\u5B9E\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n- \u5173\u8054\u5267\u60C5\uFF1A\u8FD9\u4EF6\u7269\u54C1\u7275\u6D89\u5230\u54EA\u6761\u5267\u60C5\u7EBF\uFF0C\u8BF7\u4ECE\u4E0B\u9762\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u7684\u6807\u9898\u4E2D\u6311\u9009\uFF0C\u53EF\u591A\u4E2A\u7528\u987F\u53F7\u5206\u9694\uFF1B\u90FD\u4E0D\u6CBE\u8FB9\u5199\u300C\u65E0\u300D\u3002\n- \u6765\u5386\uFF1A\u4ECE\u54EA\u91CC\u83B7\u5F97\u7684\uFF0C\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n\n\u5224\u65AD\u6807\u51C6\uFF1A\u53EA\u8BB0\u5F55\u6EE1\u8DB3\u4EE5\u4E0B\u4EFB\u4E00\u6761\u4EF6\u7684\u7269\u54C1\u2014\u2014\n(a) \u88AB\u67D0\u4E2A\u89D2\u8272\u660E\u786E\u6301\u6709\u6216\u4E89\u593A\uFF1B\n(b) \u63A8\u52A8\u4E86\u67D0\u6761\u5267\u60C5\u7EBF\u7684\u53D1\u5C55\uFF1B\n(c) \u662F\u89D2\u8272\u5173\u7CFB\u6216\u8EAB\u4EFD\u7684\u4FE1\u7269\u3002\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\uFF0C\u4E0D\u8981\u7F16\u53F7\uFF0C\u4E0D\u8981\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
       }
     };
@@ -1566,7 +1566,8 @@ ${it.message}`;
         else descBuf.push(line);
       }
       out.desc = descBuf.join("\n").trim();
-      out.sections = out.sections.map((s) => ({ title: s.title, body: s.body.join("\n").trim() })).filter((s) => s.title || s.body);
+      const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
+      out.sections = out.sections.map((s) => ({ title: s.title, body: s.body.join("\n").trim() })).filter((s) => s.title || s.body).filter((s) => !(s.title && ENTITY_NOISE.test(s.title) && /[:：·]/.test(s.title)));
       if (!out.name && !out.kind && !out.desc && !out.sections.length) return null;
       return out;
     }
@@ -1602,7 +1603,7 @@ ${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.
       const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
       return out && out.trim() ? out.trim() : prev;
     }
-    const DEFAULT_WORLDVIEW_PROMPT = `\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u89D2\u8272\u8BBE\u5B9A\u3011\u3010\u5267\u60C5\u7EBF\u3011\u3010\u5DF2\u77E5\u7269\u54C1\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u7684\u8BBE\u5B9A\u3002
+    const DEFAULT_WORLDVIEW_PROMPT = `\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u672C\u8EAB\u7684\u300C\u5E95\u5C42\u89C4\u5219\u8BBE\u5B9A\u300D\u3002
 
 \u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A
 
@@ -1611,21 +1612,19 @@ ${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.
 \u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09
 
 ## \u8BBE\u5B9A\u6807\u9898\u4E00
-\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u4E0E\u4F01\u4E1A\u89C4\u5219\uFF09
+\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u4E0E\u6CD5\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\u3001\u7075\u6C14\u8FD0\u884C\u6CD5\u5219\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u6539\u9020\u89C4\u5219\u3001\u4F01\u4E1A\u4E0E\u8D22\u9600\u7684\u8FD0\u884C\u6CD5\u5219\uFF09
 
 ## \u8BBE\u5B9A\u6807\u9898\u4E8C
 \uFF08\u5185\u5BB9\uFF09
 
 \u8981\u6C42\uFF1A
-1. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u6709\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u5B97\u95E8\u7B49\u8BBE\u5B9A\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002
-2. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002
-3. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002
+1. \u300C\u4E16\u754C\u8BBE\u5B9A\u300D\u53EA\u5199\u4E16\u754C\u672C\u8EAB\u7684\u901A\u7528\u89C4\u5219\u3001\u6CD5\u5219\u3001\u5386\u53F2\u80CC\u666F\u3001\u529B\u91CF\u4F53\u7CFB\uFF0C\u7EDD\u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1\u3001\u5355\u4E2A\u5177\u4F53\u89D2\u8272\u59D3\u540D\u3001\u5355\u4E2A\u5177\u4F53\u5730\u70B9\u540D\u79F0\u3002
+2. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u5199\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u6CD5\u5219\u7B49\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002
+3. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002
+4. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002
 
 \u3010\u5267\u60C5\u7EBF\u3011
 {{plot}}
-
-\u3010\u5DF2\u77E5\u7269\u54C1\u3011
-{{items}}
 
 \u3010\u6700\u8FD1\u5BF9\u8BDD\u3011
 {{recent}}`;
@@ -1872,65 +1871,69 @@ ${recent}
           return { kind: "plot", ok: true };
         })());
         labels.push("plot");
-        tasks.push((async () => {
-          const world = await WM.Worldbook.inferWorldview(settings, { recent });
-          if (!world || !world.trim()) return { kind: "worldview", ok: true, skipped: true };
-          const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
-          if (parsed) {
-            const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
-            await WM.MemoryStore.setWorldMeta({
-              name: parsed.name || cur.name || "",
-              kind: parsed.kind || cur.kind || "",
-              desc: parsed.desc || cur.desc || ""
-            });
-            for (const sec of parsed.sections) {
-              const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
-              if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
-              else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
-            }
-          } else {
-            await WM.MemoryStore.setWorld(world);
-          }
-          return { kind: "worldview", ok: true };
-        })());
-        labels.push("worldview");
-        tasks.push((async () => {
-          const tpl = settings.prompts && settings.prompts.itemExtract;
-          if (!tpl) return { kind: "items", ok: true, skipped: true };
-          const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
-          const s = fillTemplate(tpl, {
-            recent: buildDialogue(recent, settings),
-            plot: knownPlots
-          });
-          const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
-          const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
-          const allPlots = WM.MemoryStore.getPlots() || [];
-          const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-          for (const ln of lines) {
-            const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
-            const name = parts[0];
-            if (!name) continue;
-            const relIds = [];
-            if (!blank(parts[3])) {
-              for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
-                const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
-                if (hit) relIds.push(hit.id);
+        if (settings.autoWorld !== false) {
+          tasks.push((async () => {
+            const world = await WM.Worldbook.inferWorldview(settings, { recent });
+            if (!world || !world.trim()) return { kind: "worldview", ok: true, skipped: true };
+            const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+            if (parsed) {
+              const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+              await WM.MemoryStore.setWorldMeta({
+                name: parsed.name || cur.name || "",
+                kind: parsed.kind || cur.kind || "",
+                desc: parsed.desc || cur.desc || ""
+              });
+              for (const sec of parsed.sections) {
+                const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+                if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+                else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
               }
+            } else {
+              await WM.MemoryStore.setWorld(world);
             }
-            const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
-            const data = {
-              name,
-              desc: blank(parts[1]) ? exist ? exist.desc : "" : parts[1],
-              owner: blank(parts[2]) ? exist ? exist.owner : "" : parts[2],
-              origin: blank(parts[4]) ? exist ? exist.origin : "" : parts[4],
-              relatedPlots: relIds.length ? relIds : exist ? exist.relatedPlots : []
-            };
-            if (exist) await WM.MemoryStore.updateItem(exist.id, data);
-            else await WM.MemoryStore.addItem(data);
-          }
-          return { kind: "items", ok: true };
-        })());
-        labels.push("items");
+            return { kind: "worldview", ok: true };
+          })());
+          labels.push("worldview");
+        }
+        if (settings.autoItems !== false) {
+          tasks.push((async () => {
+            const tpl = settings.prompts && settings.prompts.itemExtract;
+            if (!tpl) return { kind: "items", ok: true, skipped: true };
+            const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
+            const s = fillTemplate(tpl, {
+              recent: buildDialogue(recent, settings),
+              plot: knownPlots
+            });
+            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+            const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+            const allPlots = WM.MemoryStore.getPlots() || [];
+            const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
+            for (const ln of lines) {
+              const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
+              const name = parts[0];
+              if (!name) continue;
+              const relIds = [];
+              if (!blank(parts[3])) {
+                for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+                  const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+                  if (hit) relIds.push(hit.id);
+                }
+              }
+              const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
+              const data = {
+                name,
+                desc: blank(parts[1]) ? exist ? exist.desc : "" : parts[1],
+                owner: blank(parts[2]) ? exist ? exist.owner : "" : parts[2],
+                origin: blank(parts[4]) ? exist ? exist.origin : "" : parts[4],
+                relatedPlots: relIds.length ? relIds : exist ? exist.relatedPlots : []
+              };
+              if (exist) await WM.MemoryStore.updateItem(exist.id, data);
+              else await WM.MemoryStore.addItem(data);
+            }
+            return { kind: "items", ok: true };
+          })());
+          labels.push("items");
+        }
         const results = await Promise.allSettled(tasks);
         const failures = [];
         const successes = [];
@@ -2946,7 +2949,8 @@ ${p.summary || ""}`.trim() });
     async function renderWorld(body) {
       const settings = WM.Settings.load();
       const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : { name: "", kind: "", desc: "" };
-      const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
+      const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
+      const secs = (WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : []).filter((w) => !(w.title && ENTITY_NOISE.test(w.title) && /[:：·]/.test(w.title)));
       let loreCount = 0;
       try {
         loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0;
