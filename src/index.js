@@ -1,6 +1,11 @@
 // WarmMemo 入口（源码）
 // 各模块为独立 IIFE，挂在 window.WarmMemo 上互相解耦。
 // 用 esbuild 打包为本目录的 index.js（单产物，供酒馆加载，零子请求）。
+
+// 构建版本标记：每次发布时同步修改，用于确认酒馆加载的是否为最新版
+window.WarmMemo = window.WarmMemo || {};
+window.WarmMemo.version = '1.0.4';
+
 import './config/settings.js';
 import './config/storage.js';
 import './config/errlog.js';

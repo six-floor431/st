@@ -154,7 +154,8 @@
         guard,
       ]);
       if (out && String(out).trim().length > 0) {
-        return { success: true, detail: '连通，返回：' + String(out).trim().slice(0, 30) };
+        const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
+        return { success: true, detail: '连通[v' + ver + ']，返回：' + String(out).trim().slice(0, 30) };
       }
       return { success: false, error: '返回为空' };
     } catch (e) {

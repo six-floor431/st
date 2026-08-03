@@ -819,7 +819,8 @@ ${it.message}`;
           guard
         ]);
         if (out && String(out).trim().length > 0) {
-          return { success: true, detail: "\u8FDE\u901A\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
+          const ver = window.WarmMemo && window.WarmMemo.version || "?";
+          return { success: true, detail: "\u8FDE\u901A[v" + ver + "]\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
         }
         return { success: false, error: "\u8FD4\u56DE\u4E3A\u7A7A" };
       } catch (e) {
@@ -3327,6 +3328,8 @@ ${p.summary || ""}`.trim() });
   })();
 
   // src/index.js
+  window.WarmMemo = window.WarmMemo || {};
+  window.WarmMemo.version = "1.0.4";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
