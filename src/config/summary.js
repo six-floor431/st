@@ -186,20 +186,34 @@
       const tpl = settings.prompts && settings.prompts.plot;
       const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
       const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
-      const statusMap = { '进行中': 'active', '已完结': 'done', '完结': 'done', '已废弃': 'abandon', '废弃': 'abandon' };
+      // 宽松状态识别：把各种说法归一为 active/done/abandon
+      function normStatus(raw) {
+        if (!raw) return 'active';
+        const t = String(raw).replace(/[【】\[\]（）()]/g, '').trim();
+        if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return 'done';
+        if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return 'abandon';
+        if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return 'active';
+        // 含关键词兜底
+        if (/(完结|完成|结束|告一段落)/.test(t)) return 'done';
+        if (/(废弃|放弃|停止|作废|取消)/.test(t)) return 'abandon';
+        return 'active';
+      }
       const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
         .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l)); // 滤掉表头/分隔线
       for (const ln of lines) {
         const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
         if (!parts.length) continue;
-        if (parts.length >= 3) {
+        if (parts.length >= 4) {
           const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? '' : parts[0];
           await WM.MemoryStore.addPlot({
             time,
             title: parts[1] || '',
             summary: parts[2] || '',
-            status: statusMap[parts[3]] || 'active',
+            status: normStatus(parts[3]),
           });
+        } else if (parts.length === 3) {
+          // 标题｜内容｜状态（缺时间列）
+          await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: normStatus(parts[2]) });
         } else if (parts.length === 2) {
           await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: 'active' });
         } else if (parts[0]) {

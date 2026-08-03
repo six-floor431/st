@@ -1839,19 +1839,30 @@ ${recent}
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
           const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
-          const statusMap = { "\u8FDB\u884C\u4E2D": "active", "\u5DF2\u5B8C\u7ED3": "done", "\u5B8C\u7ED3": "done", "\u5DF2\u5E9F\u5F03": "abandon", "\u5E9F\u5F03": "abandon" };
+          function normStatus(raw) {
+            if (!raw) return "active";
+            const t = String(raw).replace(/[【】\[\]（）()]/g, "").trim();
+            if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return "done";
+            if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return "abandon";
+            if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return "active";
+            if (/(完结|完成|结束|告一段落)/.test(t)) return "done";
+            if (/(废弃|放弃|停止|作废|取消)/.test(t)) return "abandon";
+            return "active";
+          }
           const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
           for (const ln of lines) {
             const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
             if (!parts.length) continue;
-            if (parts.length >= 3) {
+            if (parts.length >= 4) {
               const time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
               await WM.MemoryStore.addPlot({
                 time,
                 title: parts[1] || "",
                 summary: parts[2] || "",
-                status: statusMap[parts[3]] || "active"
+                status: normStatus(parts[3])
               });
+            } else if (parts.length === 3) {
+              await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: normStatus(parts[2]) });
             } else if (parts.length === 2) {
               await WM.MemoryStore.addPlot({ title: parts[0], summary: parts[1], status: "active" });
             } else if (parts[0]) {
@@ -2518,15 +2529,17 @@ ${p.summary || ""}`.trim() });
       return dt.getMonth() + 1 + "/" + dt.getDate();
     }
     function renderMem(body) {
-      const mem = WM.MemoryStore.getMemories();
-      let html = `<div class="wm-card"><div class="wm-h">\u6709\u6E29\u5EA6\u8BB0\u5FC6\uFF08${mem.length}\uFF09</div>
-      <div class="wm-hint">\u5168\u90E8\u8BB0\u5FC6\u6309\u65F6\u95F4\u5012\u5E8F\u76F4\u63A5\u5217\u51FA\uFF0C\u6EDA\u8F6E / \u624B\u6307\u5373\u53EF\u5212\u52A8\u6D4F\u89C8</div>
+      const mem = WM.MemoryStore.getMemories().map((m) => ({ ts: m.ts, kind: "\u8BB0\u5FC6", text: m.text }));
+      const sums = (WM.MemoryStore.getSummaries() || []).map((s) => ({ ts: s.ts, kind: s.kind === "plot" ? "\u5267\u60C5\u6458\u8981" : "\u603B\u7ED3", text: s.text, title: s.title }));
+      const all = mem.concat(sums).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      let html = `<div class="wm-card"><div class="wm-h">\u6709\u6E29\u5EA6\u8BB0\u5FC6\uFF08${all.length}\uFF09</div>
+      <div class="wm-hint">\u5305\u542B\u624B\u52A8\u8BB0\u5FC6\u4E0E\u6BCF\u6B21\u300C\u603B\u7ED3\u300D\u751F\u6210\u7684\u53D9\u4E8B\uFF08\u6309\u771F\u5B9E\u89C6\u89D2\u8BB0\u5F55\u4E8B\u60C5\u7684\u5F00\u59CB\u3001\u7ECF\u8FC7\u3001\u7ED3\u679C\uFF09\u3002\u6309\u65F6\u95F4\u5012\u5E8F\u6392\u5217\u3002</div>
       <div class="wm-actions">
         <button id="mem-export" class="wm-btn">\u5BFC\u51FA</button>
         <button id="mem-import" class="wm-btn">\u5BFC\u5165</button>
       </div>
       <div class="wm-list" id="mem-list">`;
-      html += mem.slice().reverse().map((m) => `<div class="wm-item">${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ""}${escapeHtml(m.text)}</div>`).join("") || '<div class="wm-empty">\u6682\u65E0\u8BB0\u5FC6\uFF0C\u5148\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u751F\u6210</div>';
+      html += all.length ? all.map((m) => `<div class="wm-item"><div class="wm-item-head"><span class="wm-tag">${escapeHtml(m.kind || "\u8BB0\u5FC6")}</span>${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ""}</div>${escapeHtml(m.text)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u8BB0\u5FC6\uFF0C\u5148\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u751F\u6210</div>';
       html += `</div></div>`;
       body.innerHTML = html;
       body.querySelector("#mem-export").onclick = () => {
@@ -2562,32 +2575,98 @@ ${p.summary || ""}`.trim() });
       const rels = WM.MemoryStore.getRelations();
       body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(r.weight)}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\uFF0C\u5148\u603B\u7ED3</div>';
     }
+    function getUserName() {
+      try {
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+        if (ctx) {
+          if (ctx.user && ctx.user.name) return ctx.user.name;
+          if (ctx.name1) return ctx.name1;
+          const um = (ctx.chat || []).find((m) => m.is_user && m.name);
+          if (um) return um.name;
+        }
+      } catch (e) {
+      }
+      return "\u7528\u6237";
+    }
     function drawGraph(svg) {
       const rels = WM.MemoryStore.getRelations();
       const names = /* @__PURE__ */ new Set();
       rels.forEach((r) => {
-        names.add(r.from);
-        names.add(r.to);
+        if (r.from) names.add(r.from);
+        if (r.to) names.add(r.to);
       });
       const nodes = Array.from(names).map((id) => ({ id }));
       if (!nodes.length) {
         svg.innerHTML = '<text x="160" y="160" text-anchor="middle" fill="#9b8579">\u6682\u65E0\u5173\u7CFB</text>';
         return;
       }
-      const W = 320, H = 320;
-      WM.Relations.forceLayout(nodes, rels, W, H);
+      const W = 320, H = 320, cx = W / 2, cy = H / 2;
+      const user = getUserName();
+      const degree = {};
+      rels.forEach((r) => {
+        degree[r.from] = (degree[r.from] || 0) + 1;
+        degree[r.to] = (degree[r.to] || 0) + 1;
+      });
+      let center = nodes.find((n) => n.id === user);
+      if (!center) {
+        let best = null, bestD = -1;
+        nodes.forEach((n) => {
+          if ((degree[n.id] || 0) > bestD) {
+            bestD = degree[n.id] || 0;
+            best = n;
+          }
+        });
+        center = best || nodes[0];
+      }
+      const adj = {};
+      rels.forEach((r) => {
+        (adj[r.from] = adj[r.from] || []).push(r.to);
+        (adj[r.to] = adj[r.to] || []).push(r.from);
+      });
+      const dist = { [center.id]: 0 };
+      const q = [center.id];
+      while (q.length) {
+        const cur = q.shift();
+        (adj[cur] || []).forEach((nb) => {
+          if (dist[nb] == null) {
+            dist[nb] = dist[cur] + 1;
+            q.push(nb);
+          }
+        });
+      }
+      nodes.forEach((n) => {
+        if (dist[n.id] == null) dist[n.id] = 99;
+      });
       const pos = {};
-      nodes.forEach((n) => pos[n.id] = { x: n.x, y: n.y });
+      pos[center.id] = { x: cx, y: cy };
+      const rings = {};
+      nodes.forEach((n) => {
+        if (n.id === center.id) return;
+        const d = Math.min(dist[n.id], 3);
+        (rings[d] = rings[d] || []).push(n);
+      });
+      const ringRadius = { 1: 95, 2: 140, 3: 150 };
+      Object.keys(rings).forEach((d) => {
+        const arr = rings[d];
+        const R = ringRadius[d] || 150;
+        arr.forEach((n, i) => {
+          const a = i / arr.length * Math.PI * 2 - Math.PI / 2;
+          pos[n.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+        });
+      });
       let s = "";
       rels.forEach((r) => {
         const a = pos[r.from], b = pos[r.to];
         if (!a || !b) return;
         const w = Number.isFinite(r.weight) ? r.weight : 2;
-        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${w}" stroke-opacity="0.6" class="wm-edge"/>`;
+        const isUserEdge = r.from === center.id || r.to === center.id;
+        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${Math.min(w, 6)}" stroke-opacity="${isUserEdge ? 0.85 : 0.45}" class="wm-edge"/>`;
       });
       nodes.forEach((n) => {
-        s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-        s += `<text x="${(n.x + 8).toFixed(0)}" y="${(n.y + 4).toFixed(0)}" font-size="9" fill="var(--wm-ink-soft)">${escapeHtml(n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id)}</text>`;
+        const isCenter = n.id === center.id;
+        s += `<circle cx="${pos[n.id].x.toFixed(0)}" cy="${pos[n.id].y.toFixed(0)}" r="${isCenter ? 9 : 6}" fill="${isCenter ? "var(--wm-rose)" : "var(--wm-jade)"}" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
+        const lbl = n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id;
+        s += `<text x="${(pos[n.id].x + (isCenter ? 11 : 8)).toFixed(0)}" y="${(pos[n.id].y + 4).toFixed(0)}" font-size="${isCenter ? 10 : 9}" fill="var(--wm-ink-soft)" ${isCenter ? 'font-weight="bold"' : ""}>${escapeHtml(lbl)}</text>`;
       });
       svg.innerHTML = s;
       svg.querySelectorAll(".wm-node").forEach((c) => {
@@ -2609,7 +2688,6 @@ ${p.summary || ""}`.trim() });
       svg.querySelectorAll(".wm-node").forEach((c) => {
         c.addEventListener("mousedown", (ev) => {
           ev.preventDefault();
-          const name = c.getAttribute("data-name");
           const move = (e) => {
             const pt = svg.createSVGPoint();
             pt.x = e.clientX;
@@ -3602,7 +3680,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "fix-summary-forced-run";
+  window.WarmMemo.version = "fix-relgraph-centered-and-plot-status-and-mem-tab";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

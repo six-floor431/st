@@ -308,15 +308,18 @@
   }
 
   function renderMem(body) {
-    const mem = WM.MemoryStore.getMemories();
-    let html = `<div class="wm-card"><div class="wm-h">有温度记忆（${mem.length}）</div>
-      <div class="wm-hint">全部记忆按时间倒序直接列出，滚轮 / 手指即可划动浏览</div>
+    // 记忆 = 手动记忆(memories) + 总结(summaries，即「以真实视角写的开始/经过/结果」叙事)
+    const mem = WM.MemoryStore.getMemories().map((m) => ({ ts: m.ts, kind: '记忆', text: m.text }));
+    const sums = (WM.MemoryStore.getSummaries() || []).map((s) => ({ ts: s.ts, kind: (s.kind === 'plot' ? '剧情摘要' : '总结'), text: s.text, title: s.title }));
+    const all = mem.concat(sums).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    let html = `<div class="wm-card"><div class="wm-h">有温度记忆（${all.length}）</div>
+      <div class="wm-hint">包含手动记忆与每次「总结」生成的叙事（按真实视角记录事情的开始、经过、结果）。按时间倒序排列。</div>
       <div class="wm-actions">
         <button id="mem-export" class="wm-btn">导出</button>
         <button id="mem-import" class="wm-btn">导入</button>
       </div>
       <div class="wm-list" id="mem-list">`;
-    html += mem.slice().reverse().map((m) => `<div class="wm-item">${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ''}${escapeHtml(m.text)}</div>`).join('') || '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
+    html += all.length ? all.map((m) => `<div class="wm-item"><div class="wm-item-head"><span class="wm-tag">${escapeHtml(m.kind || '记忆')}</span>${m.ts ? `<span class="wm-ts">${relTime(m.ts)}</span>` : ''}</div>${escapeHtml(m.text)}</div>`).join('') : '<div class="wm-empty">暂无记忆，先去「自动总结」生成</div>';
     html += `</div></div>`;
     body.innerHTML = html;
     // 导出
@@ -350,26 +353,83 @@
     body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系，先总结</div>';
   }
 
+  // 取得对话中的 user 名字（作为关系图中心）
+  function getUserName() {
+    try {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+      if (ctx) {
+        if (ctx.user && ctx.user.name) return ctx.user.name;
+        if (ctx.name1) return ctx.name1;
+        const um = (ctx.chat || []).find((m) => m.is_user && m.name);
+        if (um) return um.name;
+      }
+    } catch (e) {}
+    return '用户';
+  }
+
+  // 关系图：以 user 为中心，关系线向外辐射（中心 + 内环直接关联 + 外环间接关联）
   function drawGraph(svg) {
     const rels = WM.MemoryStore.getRelations();
     const names = new Set();
-    rels.forEach((r) => { names.add(r.from); names.add(r.to); });
+    rels.forEach((r) => { if (r.from) names.add(r.from); if (r.to) names.add(r.to); });
     const nodes = Array.from(names).map((id) => ({ id }));
     if (!nodes.length) { svg.innerHTML = '<text x="160" y="160" text-anchor="middle" fill="#9b8579">暂无关系</text>'; return; }
-    const W = 320, H = 320;
-    WM.Relations.forceLayout(nodes, rels, W, H);
+
+    const W = 320, H = 320, cx = W / 2, cy = H / 2;
+    // 1) 选定中心：优先对话 user 名；否则取度数最高的实体
+    const user = getUserName();
+    const degree = {};
+    rels.forEach((r) => { degree[r.from] = (degree[r.from] || 0) + 1; degree[r.to] = (degree[r.to] || 0) + 1; });
+    let center = nodes.find((n) => n.id === user);
+    if (!center) {
+      let best = null, bestD = -1;
+      nodes.forEach((n) => { if ((degree[n.id] || 0) > bestD) { bestD = degree[n.id] || 0; best = n; } });
+      center = best || nodes[0];
+    }
+    // 2) 计算每个节点到中心的最短跳数（BFS），决定环层
+    const adj = {};
+    rels.forEach((r) => {
+      (adj[r.from] = adj[r.from] || []).push(r.to);
+      (adj[r.to] = adj[r.to] || []).push(r.from);
+    });
+    const dist = { [center.id]: 0 };
+    const q = [center.id];
+    while (q.length) {
+      const cur = q.shift();
+      (adj[cur] || []).forEach((nb) => {
+        if (dist[nb] == null) { dist[nb] = dist[cur] + 1; q.push(nb); }
+      });
+    }
+    nodes.forEach((n) => { if (dist[n.id] == null) dist[n.id] = 99; }); // 孤立节点丢最外环
+
     const pos = {};
-    nodes.forEach((n) => (pos[n.id] = { x: n.x, y: n.y }));
+    pos[center.id] = { x: cx, y: cy };
+    // 按环层分组
+    const rings = {};
+    nodes.forEach((n) => { if (n.id === center.id) return; const d = Math.min(dist[n.id], 3); (rings[d] = rings[d] || []).push(n); });
+    const ringRadius = { 1: 95, 2: 140, 3: 150 };
+    Object.keys(rings).forEach((d) => {
+      const arr = rings[d];
+      const R = ringRadius[d] || 150;
+      arr.forEach((n, i) => {
+        const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2;
+        pos[n.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+      });
+    });
+
     let s = '';
     rels.forEach((r) => {
       const a = pos[r.from], b = pos[r.to];
       if (!a || !b) return;
       const w = Number.isFinite(r.weight) ? r.weight : 2;
-      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${w}" stroke-opacity="0.6" class="wm-edge"/>`;
+      const isUserEdge = (r.from === center.id || r.to === center.id);
+      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${Math.min(w, 6)}" stroke-opacity="${isUserEdge ? 0.85 : 0.45}" class="wm-edge"/>`;
     });
     nodes.forEach((n) => {
-      s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-      s += `<text x="${(n.x+8).toFixed(0)}" y="${(n.y+4).toFixed(0)}" font-size="9" fill="var(--wm-ink-soft)">${escapeHtml(n.id.length>6?n.id.slice(0,6)+'…':n.id)}</text>`;
+      const isCenter = n.id === center.id;
+      s += `<circle cx="${pos[n.id].x.toFixed(0)}" cy="${pos[n.id].y.toFixed(0)}" r="${isCenter ? 9 : 6}" fill="${isCenter ? 'var(--wm-rose)' : 'var(--wm-jade)'}" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
+      const lbl = n.id.length > 6 ? n.id.slice(0, 6) + '…' : n.id;
+      s += `<text x="${(pos[n.id].x + (isCenter ? 11 : 8)).toFixed(0)}" y="${(pos[n.id].y + 4).toFixed(0)}" font-size="${isCenter ? 10 : 9}" fill="var(--wm-ink-soft)" ${isCenter ? 'font-weight="bold"' : ''}>${escapeHtml(lbl)}</text>`;
     });
     svg.innerHTML = s;
     // 点击节点：显示该实体关系详情
@@ -390,7 +450,6 @@
     svg.querySelectorAll('.wm-node').forEach((c) => {
       c.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
-        const name = c.getAttribute('data-name');
         const move = (e) => {
           const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
           const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
