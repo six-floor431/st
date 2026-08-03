@@ -71,6 +71,11 @@
   async function triggerSummary(settings, opts) {
     opts = opts || {};
     settings = settings || {};
+    // 若传入的配置缺少可用的 LLM Base URL，强制回退到已持久化的最新设置，
+    // 避免「填了 URL 没保存 / 面板旧配置」导致总结拿到空 apiUrl 而失败。
+    if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
+      try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
+    }
     const auto = settings.autoSummaryMode || 'new';
     if (!settings.autoSummaryEnabled) return false;
 

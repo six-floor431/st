@@ -280,7 +280,9 @@
       const st = body.querySelector('#auto-status');
       st.textContent = '总结中…';
       try {
-        const r = await WM.Summary.runSummary(s);
+        // 强制重新读取已保存设置，避免用到面板打开时的旧配置（未保存的 BaseURL 不会漏）
+        const fresh = WM.Settings.load();
+        const r = await WM.Summary.runSummary(fresh);
         st.textContent = r.ok
           ? `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}），关系${r.results.relations} 剧情${r.results.plots} 世界${r.results.world ? '✓' : '×'} 物品${r.results.items}`
           : '✗ ' + (r.reason || '失败');

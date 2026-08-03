@@ -1658,6 +1658,13 @@ ${recent}
     async function triggerSummary(settings, opts) {
       opts = opts || {};
       settings = settings || {};
+      if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
+        try {
+          const fresh = WM.Settings && WM.Settings.load && WM.Settings.load();
+          if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh;
+        } catch (e) {
+        }
+      }
       const auto = settings.autoSummaryMode || "new";
       if (!settings.autoSummaryEnabled) return false;
       if (_summarizing) return false;
@@ -2393,7 +2400,8 @@ ${p.summary || ""}`.trim() });
         const st = body.querySelector("#auto-status");
         st.textContent = "\u603B\u7ED3\u4E2D\u2026";
         try {
-          const r = await WM.Summary.runSummary(s);
+          const fresh = WM.Settings.load();
+          const r = await WM.Summary.runSummary(fresh);
           st.textContent = r.ok ? `\u2713 \u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u5173\u7CFB${r.results.relations} \u5267\u60C5${r.results.plots} \u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}` : "\u2717 " + (r.reason || "\u5931\u8D25");
         } catch (e) {
           st.textContent = "\u2717 " + (e.message || e);
@@ -3495,7 +3503,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "add-clear-data-tab";
+  window.WarmMemo.version = "fix-summary-stale-settings";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
