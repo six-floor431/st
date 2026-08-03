@@ -1040,14 +1040,13 @@ ${it.message}`;
         });
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
-        const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-        throw new Error(
-          (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u3002"
-        );
+        const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
+        const hint = isCors ? "\u8FD9\u662F\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\uFF08\u4E0D\u662F\u540E\u7AEF\u95EE\u9898\uFF09\u3002\u8BF7\u786E\u8BA4\uFF1A\u2460\u5730\u5740\u662F\u540C\u6E90\u4EE3\u7406\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\uFF1B\u2461\u53CD\u4EE3\u5DF2\u8FD4\u56DE access-control-allow-origin \u5934\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
+        throw new Error("[Embedding \u8BF7\u6C42\u5931\u8D25] \u5B9E\u9645\u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C" + hint);
       }
       const rawText = await r.text();
       if (!r.ok) {
-        throw new Error("embedding \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+        throw new Error("[Embedding HTTP " + r.status + "] \u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C\u54CD\u5E94\uFF1A" + rawText.slice(0, 200));
       }
       let j;
       try {
@@ -1060,11 +1059,12 @@ ${it.message}`;
       return Array.isArray(texts) ? vecs : vecs[0];
     }
     async function testConnection(settings) {
+      const ver = window.WarmMemo && window.WarmMemo.version || "?";
       try {
         const v = await embed("test", settings);
-        return { success: true, dimension: Array.isArray(v) ? v.length : 0 };
+        return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver };
       } catch (e) {
-        return { success: false, error: String(e.message || e) };
+        return { success: false, error: String(e.message || e), version: ver };
       }
     }
     WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };

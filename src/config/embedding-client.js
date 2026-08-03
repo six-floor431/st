@@ -123,17 +123,18 @@
         body,
       });
     } catch (netErr) {
-      // 典型：跨域(CORS)被浏览器拦截 / 地址不可达。终端可能显示 200（后端收到），但浏览器拿不到响应。
+      // fetch 抛错只可能是「连接层面」失败（CORS / 地址不可达 / 证书等）。
+      // 注意：若后端已返回 200，fetch 不会进这里，而是进下面 r.text() 分支。
       const msg = String(netErr && netErr.message ? netErr.message : netErr);
-      const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-      throw new Error(
-        (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
-        ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/embeddings）。'
-      );
+      const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
+      const hint = isCors
+        ? '这是浏览器层面的跨域/CORS 拦截（不是后端问题）。请确认：①地址是同源代理（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434；②反代已返回 access-control-allow-origin 头。'
+        : ('网络请求失败：' + msg + '。');
+      throw new Error('[Embedding 请求失败] 实际请求地址：' + finalUrl + '｜' + hint);
     }
     const rawText = await r.text();
     if (!r.ok) {
-      throw new Error('embedding 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+      throw new Error('[Embedding HTTP ' + r.status + '] 请求地址：' + finalUrl + '｜响应：' + rawText.slice(0, 200));
     }
     let j;
     try { j = JSON.parse(rawText); }
@@ -144,11 +145,12 @@
   }
 
   async function testConnection(settings) {
+    const ver = (window.WarmMemo && window.WarmMemo.version) || '?';
     try {
       const v = await embed('test', settings);
-      return { success: true, dimension: Array.isArray(v) ? v.length : 0 };
+      return { success: true, dimension: Array.isArray(v) ? v.length : 0, version: ver };
     } catch (e) {
-      return { success: false, error: String(e.message || e) };
+      return { success: false, error: String(e.message || e), version: ver };
     }
   }
 
