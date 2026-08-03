@@ -97,10 +97,14 @@
       throw new Error('酒馆 generateRaw 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
     }
     const ordered_prompts = (messages || []).map((m) => ({ role: m.role || 'user', content: m.content || '' }));
+    // 输出 token 上限：优先用本次 opts.maxTokens，否则用统一配置 profile.maxTokens（所有功能共用），再兜底 512
+    const maxTokens = opts.maxTokens || profile.maxTokens || 512;
     const config = {
       ordered_prompts,
       should_stream: false,
-      max_new_tokens: opts.maxTokens || 512,
+      max_new_tokens: maxTokens,
+      // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
+      temperature: opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3),
     };
     if (profile.source === 'custom') {
       const custom_api = buildCustomApi(profile);
@@ -111,7 +115,9 @@
     }
     // local：不传 custom_api，用酒馆当前对话源
     const out = await gr(config);
-    return typeof out === 'string' ? out : (out && out.reply) ? out.reply : String(out || '');
+    const text = typeof out === 'string' ? out : (out && out.reply) ? out.reply : String(out || '');
+    // 清理：去首尾空白、去常见代码围栏，保证返回内容准确干净
+    return text ? String(text).trim() : '';
   }
 
   // 测试连接：按 profile 发一句测试
@@ -120,8 +126,8 @@
     const profile = opts.profile || { source: 'local' };
     try {
       const out = await complete(
-        [{ role: 'system', content: '你是测试助手。' }, { role: 'user', content: '只回复一个字：好' }],
-        { profile, maxTokens: 16 }
+        [{ role: 'user', content: '请回复：你好' }],
+        { profile, maxTokens: 16, temperature: 0.1 }
       );
       if (out && String(out).trim().length > 0) {
         return { success: true, detail: '连通，返回：' + String(out).trim().slice(0, 30) };

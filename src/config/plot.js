@@ -14,7 +14,7 @@
     const sys = WM.Summary.fillTemplate(tpl, { recent, relations: existing });
     const userMsg = `【已有剧情线】\n${existing || '（无）'}\n\n【近期记忆】\n${recent}\n\n请输出更新后的剧情线：`;
     try {
-      const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });
+      const raw = await WM.Summary.callLLM(sys, userMsg, settings, {});
       if (!raw) return [];
       return raw.split('\n').map((l) => l.trim()).filter((l) => l.includes('|')).map((l) => {
         const [title, summary, status] = l.split('|').map((x) => x.trim());

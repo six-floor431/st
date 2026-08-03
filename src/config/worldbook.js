@@ -203,7 +203,7 @@
 【已有世界观】${prev || '（无）'}
 请输出世界观设定：`;
     if (!WM.Summary || !WM.Summary.callLLM) return prev;
-    const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4 });
+    const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
     return out && out.trim() ? out.trim() : prev;
   }
 

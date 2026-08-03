@@ -493,6 +493,7 @@
           <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini"/></label>
+          <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能（总结/关系/剧情/世界观）共用，模型会在该范围内完整输出</span></label>
         </div>
         <div class="wm-divider"></div>
         <div class="wm-h" style="margin-top:0">预设前置（拼在我们提示词之前）</div>
@@ -580,6 +581,7 @@
         apiUrl: body.querySelector('#llm-url').value.trim(),
         apiKey: body.querySelector('#llm-key').value.trim(),
         model: body.querySelector('#llm-model').value.trim(),
+        maxTokens: Math.max(50, parseInt(body.querySelector('#llm-maxtok').value, 10) || 700),
       };
       s.presetPrefix = {
         mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none',
@@ -621,6 +623,7 @@
         apiUrl: body.querySelector('#llm-url').value.trim(),
         apiKey: body.querySelector('#llm-key').value.trim(),
         model: body.querySelector('#llm-model').value.trim(),
+        maxTokens: Math.max(50, parseInt(body.querySelector('#llm-maxtok').value, 10) || 700),
       };
       const tmp = Object.assign({}, WM.Settings.load(), {
         llmConfig: tmpLlm,

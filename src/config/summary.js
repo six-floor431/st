@@ -23,9 +23,10 @@
     // 预设前置：拼在我们自己可编辑的提示词「之前」
     const prefix = WM.LLMClient.resolvePrefix(settings);
     const prompt = [...prefix, { role: 'system', content: system }, { role: 'user', content: user }];
+    // 输出 token 上限统一取自配置 llmConfig.maxTokens（所有功能共用），本次未指定时回退
     const out = await WM.LLMClient.complete(prompt, {
       temperature: opts.temperature != null ? opts.temperature : 0.3,
-      max_tokens: opts.maxTokens || 700,
+      maxTokens: opts.maxTokens != null ? opts.maxTokens : (profile.maxTokens || 700),
       profile,
     });
     return out || '';
@@ -132,7 +133,7 @@
     userMsg += `【已有记忆】\n${prevMem || '（无）'}\n\n`;
     userMsg += `【新对话（楼层 ${start}-${end}）】\n${slice}\n\n请输出本次提炼的记忆：`;
 
-    const out = await callLLM(sys, userMsg, settings, { maxTokens: 1000, temperature: 0.35 });
+    const out = await callLLM(sys, userMsg, settings, { temperature: 0.35 });
     if (!out || !out.trim()) return { ok: false, reason: 'llm_empty_or_failed' };
 
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);

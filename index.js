@@ -53,7 +53,9 @@
         proxyPreset: "",
         apiUrl: "",
         apiKey: "",
-        model: ""
+        model: "",
+        maxTokens: 700
+        // 输出 token 上限：所有功能共用，模型会在该上限内尽量输出完整内容
       },
       // 预设前置：拼在我们自己可编辑的提示词「之前」
       //   mode: 'none'   => 不使用
@@ -507,10 +509,13 @@ ${it.desc || ""}`.trim(),
         throw new Error("\u9152\u9986 generateRaw \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
       }
       const ordered_prompts = (messages || []).map((m) => ({ role: m.role || "user", content: m.content || "" }));
+      const maxTokens = opts.maxTokens || profile.maxTokens || 512;
       const config = {
         ordered_prompts,
         should_stream: false,
-        max_new_tokens: opts.maxTokens || 512
+        max_new_tokens: maxTokens,
+        // 低温度保证输出稳定、准确；让模型在 maxTokens 限制内完整输出
+        temperature: opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3
       };
       if (profile.source === "custom") {
         const custom_api = buildCustomApi(profile);
@@ -520,15 +525,16 @@ ${it.desc || ""}`.trim(),
         config.custom_api = custom_api;
       }
       const out = await gr(config);
-      return typeof out === "string" ? out : out && out.reply ? out.reply : String(out || "");
+      const text = typeof out === "string" ? out : out && out.reply ? out.reply : String(out || "");
+      return text ? String(text).trim() : "";
     }
     async function testConnection(opts) {
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
       try {
         const out = await complete(
-          [{ role: "system", content: "\u4F60\u662F\u6D4B\u8BD5\u52A9\u624B\u3002" }, { role: "user", content: "\u53EA\u56DE\u590D\u4E00\u4E2A\u5B57\uFF1A\u597D" }],
-          { profile, maxTokens: 16 }
+          [{ role: "user", content: "\u8BF7\u56DE\u590D\uFF1A\u4F60\u597D" }],
+          { profile, maxTokens: 16, temperature: 0.1 }
         );
         if (out && String(out).trim().length > 0) {
           return { success: true, detail: "\u8FDE\u901A\uFF0C\u8FD4\u56DE\uFF1A" + String(out).trim().slice(0, 30) };
@@ -951,7 +957,7 @@ ${it.desc || ""}`.trim(),
 \u3010\u5DF2\u6709\u4E16\u754C\u89C2\u3011${prev || "\uFF08\u65E0\uFF09"}
 \u8BF7\u8F93\u51FA\u4E16\u754C\u89C2\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
-      const out = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 700, temperature: 0.4 });
+      const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
       return out && out.trim() ? out.trim() : prev;
     }
     WM.Worldbook = {
@@ -992,7 +998,7 @@ ${recent}
 
 \u8BF7\u8F93\u51FA\u66F4\u65B0\u540E\u7684\u5267\u60C5\u7EBF\uFF1A`;
       try {
-        const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });
+        const raw = await WM.Summary.callLLM(sys, userMsg, settings, {});
         if (!raw) return [];
         return raw.split("\n").map((l) => l.trim()).filter((l) => l.includes("|")).map((l) => {
           const [title, summary, status] = l.split("|").map((x) => x.trim());
@@ -1021,7 +1027,7 @@ ${recent}
       const prompt = [...prefix, { role: "system", content: system }, { role: "user", content: user }];
       const out = await WM.LLMClient.complete(prompt, {
         temperature: opts.temperature != null ? opts.temperature : 0.3,
-        max_tokens: opts.maxTokens || 700,
+        maxTokens: opts.maxTokens != null ? opts.maxTokens : profile.maxTokens || 700,
         profile
       });
       return out || "";
@@ -1114,7 +1120,7 @@ ${prevMem || "\uFF08\u65E0\uFF09"}
 ${slice}
 
 \u8BF7\u8F93\u51FA\u672C\u6B21\u63D0\u70BC\u7684\u8BB0\u5FC6\uFF1A`;
-      const out = await callLLM(sys, userMsg, settings, { maxTokens: 1e3, temperature: 0.35 });
+      const out = await callLLM(sys, userMsg, settings, { temperature: 0.35 });
       if (!out || !out.trim()) return { ok: false, reason: "llm_empty_or_failed" };
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
       for (const line of lines) await dedupeMemory(line, [start, end]);
@@ -1913,6 +1919,7 @@ ${it.desc || ""}` }));
           <label class="wm-row">API URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1"/></label>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini"/></label>
+          <label class="wm-row">\u8F93\u51FA Token \u4E0A\u9650<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="\u9650\u5236\u6A21\u578B\u8F93\u51FA\u957F\u5EA6\uFF0C\u6240\u6709\u529F\u80FD\u5171\u7528\u6B64\u4E0A\u9650"/> <span class="wm-hint" style="margin:0">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2\uFF09\u5171\u7528\uFF0C\u6A21\u578B\u4F1A\u5728\u8BE5\u8303\u56F4\u5185\u5B8C\u6574\u8F93\u51FA</span></label>
         </div>
         <div class="wm-divider"></div>
         <div class="wm-h" style="margin-top:0">\u9884\u8BBE\u524D\u7F6E\uFF08\u62FC\u5728\u6211\u4EEC\u63D0\u793A\u8BCD\u4E4B\u524D\uFF09</div>
@@ -1994,7 +2001,8 @@ ${it.desc || ""}` }));
           proxyPreset: body.querySelector("#llm-preset").value.trim(),
           apiUrl: body.querySelector("#llm-url").value.trim(),
           apiKey: body.querySelector("#llm-key").value.trim(),
-          model: body.querySelector("#llm-model").value.trim()
+          model: body.querySelector("#llm-model").value.trim(),
+          maxTokens: Math.max(50, parseInt(body.querySelector("#llm-maxtok").value, 10) || 700)
         };
         s.presetPrefix = {
           mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || "none",
@@ -2032,7 +2040,8 @@ ${it.desc || ""}` }));
           proxyPreset: body.querySelector("#llm-preset").value.trim(),
           apiUrl: body.querySelector("#llm-url").value.trim(),
           apiKey: body.querySelector("#llm-key").value.trim(),
-          model: body.querySelector("#llm-model").value.trim()
+          model: body.querySelector("#llm-model").value.trim(),
+          maxTokens: Math.max(50, parseInt(body.querySelector("#llm-maxtok").value, 10) || 700)
         };
         const tmp = Object.assign({}, WM.Settings.load(), {
           llmConfig: tmpLlm,
