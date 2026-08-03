@@ -71,9 +71,10 @@
       edges.forEach((e) => {
         const a = nodes.find((n) => n.id === e.from), b = nodes.find((n) => n.id === e.to);
         if (!a || !b) return;
+        const w = Number.isFinite(e.weight) ? e.weight : 2; // 防御：权重缺失/非数字导致 NaN 传染全部节点
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const target = 70 - e.weight * 6; // 强关系更近
+        const target = 70 - w * 6; // 强关系更近
         const f = (d - target) * 0.02;
         const fx = (dx / d) * f, fy = (dy / d) * f;
         a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
@@ -86,6 +87,15 @@
         n.x += n.vx; n.y += n.vy;
         n.x = Math.max(14, Math.min(W - 14, n.x));
         n.y = Math.max(14, Math.min(H - 14, n.y));
+      });
+    }
+    // 兜底：若仍有非有限坐标（异常输入），回退到确定性圆环布局，避免渲染 NaN
+    const hasBad = nodes.some((n) => !Number.isFinite(n.x) || !Number.isFinite(n.y));
+    if (hasBad) {
+      nodes.forEach((n, i) => {
+        const a = (i / nodes.length) * Math.PI * 2;
+        n.x = cx + 110 * Math.cos(a);
+        n.y = cy + 110 * Math.sin(a);
       });
     }
     return nodes;

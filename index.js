@@ -1877,9 +1877,10 @@ ${recent}
         edges.forEach((e) => {
           const a = nodes.find((n) => n.id === e.from), b = nodes.find((n) => n.id === e.to);
           if (!a || !b) return;
+          const w = Number.isFinite(e.weight) ? e.weight : 2;
           const dx = b.x - a.x, dy = b.y - a.y;
           const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-          const target = 70 - e.weight * 6;
+          const target = 70 - w * 6;
           const f = (d - target) * 0.02;
           const fx = dx / d * f, fy = dy / d * f;
           a.vx += fx;
@@ -1896,6 +1897,14 @@ ${recent}
           n.y += n.vy;
           n.x = Math.max(14, Math.min(W - 14, n.x));
           n.y = Math.max(14, Math.min(H - 14, n.y));
+        });
+      }
+      const hasBad = nodes.some((n) => !Number.isFinite(n.x) || !Number.isFinite(n.y));
+      if (hasBad) {
+        nodes.forEach((n, i) => {
+          const a = i / nodes.length * Math.PI * 2;
+          n.x = cx + 110 * Math.cos(a);
+          n.y = cy + 110 * Math.sin(a);
         });
       }
       return nodes;
@@ -2414,7 +2423,8 @@ ${p.summary || ""}`.trim() });
       rels.forEach((r) => {
         const a = pos[r.from], b = pos[r.to];
         if (!a || !b) return;
-        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${r.weight}" stroke-opacity="0.6" class="wm-edge"/>`;
+        const w = Number.isFinite(r.weight) ? r.weight : 2;
+        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${w}" stroke-opacity="0.6" class="wm-edge"/>`;
       });
       nodes.forEach((n) => {
         s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
@@ -3298,7 +3308,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "generateRaw-ownprompt";
+  window.WarmMemo.version = "graph-nan-fix";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

@@ -355,7 +355,8 @@
     rels.forEach((r) => {
       const a = pos[r.from], b = pos[r.to];
       if (!a || !b) return;
-      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${r.weight}" stroke-opacity="0.6" class="wm-edge"/>`;
+      const w = Number.isFinite(r.weight) ? r.weight : 2;
+      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${w}" stroke-opacity="0.6" class="wm-edge"/>`;
     });
     nodes.forEach((n) => {
       s += `<circle cx="${n.x.toFixed(0)}" cy="${n.y.toFixed(0)}" r="6" fill="var(--wm-jade)" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
