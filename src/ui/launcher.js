@@ -461,14 +461,23 @@
   function renderLlmConfig(s) {
     const c = s.llmConfig || { source: 'local', proxyPreset: '', apiUrl: '', apiKey: '', model: '' };
     const pp = s.presetPrefix || { mode: 'none', importText: '', presetName: '' };
+    const prompts = s.prompts || {};
+    // 读取酒馆已保存预设名（修复：getPresetNames 是酒馆注入的顶层全局函数）
     let presetNames = [];
-    try {
-      const gpn = (typeof window.getPresetNames === 'function') ? window.getPresetNames
-        : (window.SillyTavern && typeof window.SillyTavern.getContext === 'function'
-            ? (() => { try { return window.SillyTavern.getContext().getPresetNames; } catch (e) { return null; } })()
-            : null);
-      if (gpn) presetNames = gpn() || [];
-    } catch (e) { presetNames = []; }
+    try { presetNames = (WM.LLMClient && WM.LLMClient.listPresetNames) ? WM.LLMClient.listPresetNames() : []; } catch (e) { presetNames = []; }
+    // 提示词编辑区块（可编辑：总结 / 关系 / 剧情 / 世界观）
+    const promptEditors = [
+      { key: 'summary', title: '总结提示词', holder: '支持 {{recent}}', def: '你是我的专属记录员。请基于【最近对话】，按时间顺序提炼关键事实、约定、状态变化、人名/地点/组织、未完成待办。输出条目，每条一行。\n\n【最近对话】\n{{recent}}' },
+      { key: 'relations', title: '关系提示词', holder: '支持 {{historySummary}} {{recent}}', def: '你是关系分析师。请基于【历史总结】和【最近对话】，分析「我（用户）与角色之间」的关系状态、亲密度、张力、未解心结。输出结构化条目，每条一行。\n\n【历史总结】\n{{historySummary}}\n\n【最近对话】\n{{recent}}' },
+      { key: 'plot', title: '剧情提示词', holder: '支持 {{relations}} {{recent}}', def: '你是剧情梳理者。请基于【关系】和【最近对话】，梳理当前剧情主线、支线、悬念与下一步可能发展。输出条目，每条一行。\n\n【关系】\n{{relations}}\n\n【最近对话】\n{{recent}}' },
+      { key: 'worldview', title: '世界观提示词', holder: '支持 {{plot}} {{recent}}', def: '你是世界观提炼者。请基于【剧情线】和【最近对话】，抽取本世界的关键设定：地点、势力、规则、物品、概念。输出条目，每条一行。\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}' },
+    ];
+    const promptHtml = promptEditors.map((p) => `
+      <div style="margin:8px 0">
+        <div class="wm-h" style="margin:4px 0">${p.title}</div>
+        <div class="wm-hint">占位符：${p.holder}（运行时自动替换为真实数据）</div>
+        <textarea id="pprompt-${p.key}" rows="${p.key==='summary'?4:3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
+      </div>`).join('');
     return `
       <div class="wm-card"><div class="wm-h">LLM 调用配置（统一）</div>
         <div class="wm-hint">所有功能（总结/关系/剧情/世界观/物品）共用这一个 LLM 配置。选择 <b>本地酒馆</b> 即用酒馆当前对话源；选择 <b>自定义配置</b> 可指定代理预设或独立 API。配完可点「测试连接」验证可用性。</div>
@@ -505,6 +514,10 @@
             </select>
           </label>
         </div>
+        <div class="wm-divider"></div>
+        <div class="wm-h" style="margin-top:0">扩展提示词（均可编辑）</div>
+        <div class="wm-hint">下面四套提示词负责「总结 / 关系 / 剧情 / 世界观」的具体写法，<b>直接改即可生效</b>。可保留 <code>{{recent}}</code> 等占位符，运行时会自动替换成真实数据。</div>
+        ${promptHtml}
       </div>`;
   }
 
@@ -572,6 +585,12 @@
         mode: (body.querySelector('input[name="pp-mode"]:checked') || {}).value || 'none',
         importText: body.querySelector('#pp-import-text').value,
         presetName: body.querySelector('#pp-preset-name') ? body.querySelector('#pp-preset-name').value : '',
+      };
+      s.prompts = {
+        summary: body.querySelector('#pprompt-summary').value,
+        relations: body.querySelector('#pprompt-relations').value,
+        plot: body.querySelector('#pprompt-plot').value,
+        worldview: body.querySelector('#pprompt-worldview').value,
       };
       s.vectorEnabled = body.querySelector('#c-vec').checked;
       s.rerankEnabled = body.querySelector('#c-rerank').checked;

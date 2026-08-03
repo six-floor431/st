@@ -7,6 +7,12 @@
   'use strict';
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
+  // 把提示词模板里的 {{key}} 占位符替换为真实数据
+  function fillTemplate(tpl, data) {
+    if (!tpl) return '';
+    return String(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (data && data[k] != null ? data[k] : ''));
+  }
+
   // 统一的 LLM 调用入口（供 summary/relations/plot/worldbook/items 共用）
   // 所有功能使用 settings.llmConfig 这一个配置：local=酒馆当前源 / custom=代理预设或自定义 URL。
   // 真实调用：直接 await LLMClient.complete，失败则抛出明确错误（不伪装成功）。
@@ -116,12 +122,9 @@
     const lore = (WM.Worldbook.getLorebookEntries && await WM.Worldbook.getLorebookEntries()) || [];
     const loreTxt = lore.length ? lore.map((l) => `· ${l.key}: ${l.content.slice(0, 160)}`).join('\n') : '（无）';
 
-    const sys = `你是有温度的记忆整理者。请基于【角色设定】【用户设定】【世界书】【已有记忆】与【新对话】，提炼「有温度记忆」。
-要求：
-- 用第三人称、客观但有温度的口吻，记录角色与用户之间发生的关键事件、情感互动、约定、细节、性格展现。
-- 重点保留：人物关系变化、重要约定、关键物品、剧情进展、角色情绪与性格细节。
-- 不要复述无关寒暄；不要编造未发生的；与已有记忆冲突以新对话为准。
-- 输出若干条，每条一行；不要加序号前缀外的格式。`;
+    const sysTpl = (settings.prompts && settings.prompts.summary) ||
+      '你是我的专属记录员。请基于【最近对话】，按时间顺序提炼关键事实、约定、状态变化、人名/地点/组织、未完成待办。每条一行，不超过 12 条。\n\n【最近对话】\n{{recent}}';
+    const sys = fillTemplate(sysTpl, { recent: slice });
 
     let userMsg = `【角色设定】${char.name || '未知'}：${char.description || ''} | 性格：${char.personality || ''}\n`;
     userMsg += `【用户设定】${user.name || '未知'}：${user.description || ''}\n`;
@@ -197,5 +200,5 @@
     } catch (e) { return []; }
   }
 
-  WM.Summary = { callLLM, runSummary, getChatMessages, extractItems, stripTagged };
+  WM.Summary = { callLLM, runSummary, getChatMessages, extractItems, stripTagged, fillTemplate };
 })();

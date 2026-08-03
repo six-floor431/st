@@ -6,11 +6,12 @@
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
   // 用 LLM 从总结文本抽取关系三元组（带权重），返回 [{from,to,label,weight}]
+  // 提示词可编辑：settings.prompts.relations（支持 {{historySummary}} {{recent}} 占位符）
   async function extractRelations(memoryText, settings) {
     if (!memoryText || !memoryText.trim()) return [];
-    const sys = `从下面的「有温度记忆」中，抽取实体（角色、用户、地点、事物）之间的关系。
-要求：每行一个三元组，格式严格为 实体A|关系|实体B|权重(1-5)。
-权重表示关系强度/互动频率。只抽取明确提到或明显暗示的关系。最多 18 条。`;
+    const tpl = (settings && settings.prompts && settings.prompts.relations) ||
+      '从下面的「有温度记忆」中，抽取实体（角色、用户、地点、事物）之间的关系。\n要求：每行一个三元组，格式严格为 实体A|关系|实体B|权重(1-5)。\n权重表示关系强度/互动频率。只抽取明确提到或明显暗示的关系。最多 18 条。\n\n【最近对话】\n{{recent}}';
+    const sys = WM.Summary.fillTemplate(tpl, { recent: memoryText, historySummary: memoryText });
     try {
       const raw = await WM.Summary.callLLM(sys, memoryText, settings, {});
       if (!raw) return [];

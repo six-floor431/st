@@ -9,10 +9,9 @@
     const recent = memories.slice(-40).map((m) => m.text).join('\n');
     const existing = WM.MemoryStore.getPlots().map((p) => `· ${p.title}（${p.status}）：${p.summary}`).join('\n');
     if (!recent.trim()) return [];
-    const sys = `从「有温度记忆」中归纳当前的【剧情线】。
-要求：最多 8 条仍在推进或重要的剧情线。每行一条，格式严格为：
-标题|进展摘要|状态(active/done/abandon)
-状态说明：active=进行中, done=已完成, abandon=已放弃。已有剧情线若已结束请改状态。只基于记忆，不编造。`;
+    const tpl = (settings && settings.prompts && settings.prompts.plot) ||
+      '你是剧情梳理者。请基于【关系】和【最近对话】，梳理当前剧情主线、支线、悬念与下一步可能发展。输出条目，每条一行。\n\n【关系】\n{{relations}}\n\n【最近对话】\n{{recent}}';
+    const sys = WM.Summary.fillTemplate(tpl, { recent, relations: existing });
     const userMsg = `【已有剧情线】\n${existing || '（无）'}\n\n【近期记忆】\n${recent}\n\n请输出更新后的剧情线：`;
     try {
       const raw = await WM.Summary.callLLM(sys, userMsg, settings, { maxTokens: 900 });

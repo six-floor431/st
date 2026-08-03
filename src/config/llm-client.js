@@ -31,21 +31,45 @@
     return (api.proxy_preset || api.apiurl || api.model) ? api : undefined;
   }
 
-  // 取酒馆已保存预设的提示词内容（作为「预设前置」用）
+  // 酒馆注入的顶层全局函数 getPresetNames() / getPreset(name)
+  // 参考 @types/function/preset.d.ts：它们是 `declare function`（直接挂在 window 上），
+  // 不在 SillyTavern.getContext() 返回的 context 上。所以必须从 window 直接取。
+  function getPresetNamesFn() {
+    if (typeof window.getPresetNames === 'function') return window.getPresetNames;
+    if (window.tavern_events && typeof window.tavern_events.getPresetNames === 'function') return window.tavern_events.getPresetNames;
+    return null;
+  }
+  function getPresetFn() {
+    if (typeof window.getPreset === 'function') return window.getPreset;
+    if (window.tavern_events && typeof window.tavern_events.getPreset === 'function') return window.tavern_events.getPreset;
+    return null;
+  }
+  // 暴露给 UI 取预设名列表
+  function listPresetNames() {
+    const f = getPresetNamesFn();
+    if (typeof f !== 'function') return [];
+    try { return f() || []; } catch (e) { return []; }
+  }
+
+  // preset prompt 的 role 是数字（0=system 1=user 2=assistant 3=neutral 4=system_example）
+  // 转成 generateRaw 需要的字符串
+  function mapRole(r) {
+    if (r === 1) return 'user';
+    if (r === 2) return 'assistant';
+    return 'system'; // 0/3/4 或未知都当 system
+  }
+
+  // 取酒馆已保存预设中「启用且非空」的提示词（作为「预设前置」用）
   function getPresetPromptItems(name) {
     if (!name) return [];
-    let getPreset = null;
-    if (typeof window.getPreset === 'function') getPreset = window.getPreset;
-    else if (window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-      try { const ctx = window.SillyTavern.getContext(); if (ctx && typeof ctx.getPreset === 'function') getPreset = ctx.getPreset; } catch (e) {}
-    }
-    if (!getPreset) return [];
+    const getPreset = getPresetFn();
+    if (typeof getPreset !== 'function') return [];
     let preset;
     try { preset = getPreset(name); } catch (e) { return []; }
     const prompts = (preset && preset.prompts) || [];
     return prompts
       .filter((p) => p && p.enabled !== false && p.content && String(p.content).trim().length > 0)
-      .map((p) => ({ role: p.role || 'system', content: String(p.content) }));
+      .map((p) => ({ role: mapRole(p.role), content: String(p.content) }));
   }
 
   // 解析「预设前置」：返回拼在用户提示词之前的前缀 prompt 列表
@@ -108,5 +132,5 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw, resolvePrefix, getPresetPromptItems };
+  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerateRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
 })();

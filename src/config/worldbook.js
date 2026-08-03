@@ -188,14 +188,16 @@
   }
 
   // 用 LLM 推断世界观（真实调用），返回文本
+  // 提示词可编辑：settings.prompts.worldview（支持 {{plot}} {{recent}} 占位符）
   async function inferWorldview(settings, opts) {
     settings = settings || (WM.Settings && WM.Settings.load) || {};
     const char = getCharacterCard();
     const user = getUserCard();
     const prev = WM.MemoryStore ? WM.MemoryStore.getWorld() : '';
-    const sys = `你是世界观整理者。基于【角色设定】【用户设定】与【已有世界观】，推断并补全当前故事的世界观设定。
-要求：客观、紧凑，涵盖时代/地点/势力/规则/关键设定。与已有不冲突则合并。最多 600 字。
-${opts && opts.extraInstruction ? '额外指令：' + opts.extraInstruction : ''}`;
+    const plots = (WM.MemoryStore && WM.MemoryStore.getPlots ? WM.MemoryStore.getPlots() : []).map((p) => `· ${p.title}：${p.summary}`).join('\n');
+    const tpl = (settings && settings.prompts && settings.prompts.worldview) ||
+      '你是世界观提炼者。请基于【剧情线】和【最近对话】，抽取本世界的关键设定：地点、势力、规则、物品、概念。输出条目，每条一行。\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}';
+    const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: '' });
     const userMsg = `【角色设定】${char.name || '未知'}：${char.description || ''}
 【用户设定】${user.name || '未知'}：${user.description || ''}
 【已有世界观】${prev || '（无）'}
