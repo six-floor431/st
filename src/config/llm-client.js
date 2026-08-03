@@ -6,19 +6,21 @@
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
   // 取酒馆官方 generate / generateRaw 入口。
-  // 优先使用 window.generate（ST 原生，最稳，内容一定能进入请求）；
-  // 回退到 generateRaw（自定义提示词顺序）。
-  function getGenerate() {
-    if (typeof window.generate === 'function') return window.generate;
+  // 取 LLM 生成入口。
+  // 优先 generateRaw：它【不携带酒馆预设】，只按我们给的 ordered_prompts 发自定义提示词
+  // （参考 @types：generate 携带酒馆预设，generateRaw 不携带）。这正是"只传自己的提示词、
+  // 不掺酒馆角色卡/预设"的需求。回退到 generate（会带预设，但至少能用）。
+  function getRaw() {
+    if (typeof window.generateRaw === 'function') return window.generateRaw;
     try {
       const ST = window.SillyTavern;
       if (ST && typeof ST.getContext === 'function') {
         const ctx = ST.getContext();
-        if (ctx && typeof ctx.generate === 'function') return ctx.generate;
+        if (ctx && typeof ctx.generateRaw === 'function') return ctx.generateRaw;
       }
-      if (ST && typeof ST.generate === 'function') return ST.generate;
+      if (ST && typeof ST.generateRaw === 'function') return ST.generateRaw;
     } catch (e) { /* ignore */ }
-    if (typeof window.generateRaw === 'function') return window.generateRaw;
+    if (typeof window.generate === 'function') return window.generate;
     return null;
   }
 
@@ -92,8 +94,9 @@
     return [];
   }
 
-  // 核心：调用酒馆 generate（ST 原生，最稳），通过 injects 注入自定义 system 提示词，
-  // user_input 放用户内容，保证内容一定真正进入请求（修复此前 generateRaw 导致 context 全空的 bug）。
+  // 核心：调用酒馆 generateRaw（不携带酒馆预设，只发我们自己的自定义提示词）。
+  // ordered_prompts 里只放：我们自己的 system 提示词 + 必须的 'user_input' 占位符。
+  // 不列 char_description / chat_history 等内置占位符 → 酒馆角色卡/预设不会进入请求。
   // 支持两种签名（向后兼容）：
   //   新：complete(messages, opts)  —— messages: [{role:'system'|'user', content}]
   //   旧：complete(systemText, userText, settings, opts)
@@ -110,25 +113,23 @@
     }
     opts = opts || {};
     const profile = opts.profile || { source: 'local' };
-    const gr = getGenerate();
+    const gr = getRaw();
     if (!gr) {
-      throw new Error('酒馆 generate 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
+      throw new Error('酒馆 generateRaw 接口不可用（请确认在酒馆环境中运行，且扩展已正确加载）');
     }
-    // 拆出 user_input（最后一条 user 内容）和 system 提示词（其余角色），
-    // system 提示词通过 injects 注入，保证 100% 进入请求体。
+    // 拆出 user_input（最后一条 user 内容）和我们自己的 system 提示词
     const userMsg = (messages || []).filter((m) => m.role === 'user').pop();
     const user_input = (userMsg && userMsg.content) || (opts.fallbackUserInput || '');
     const systemPrompts = (messages || [])
       .filter((m) => m.role !== 'user' || m !== userMsg)
       .map((m) => String(m.content || ''))
       .filter(Boolean);
-    const injects = systemPrompts.map((content) => ({
-      position: 'in_chat',
-      depth: 0,
-      role: 'system',
-      content,
-      should_scan: false,
-    }));
+
+    // 关键：ordered_prompts 只放我们自己的提示词 + 必须的 'user_input' 占位符。
+    // 不列 char_description/chat_history 等 → 酒馆预设/角色卡不进入请求，只发我们自己的。
+    const ordered_prompts = [];
+    systemPrompts.forEach((content) => ordered_prompts.push({ role: 'system', content }));
+    ordered_prompts.push('user_input'); // 显式放 user_input 占位符，否则用户内容不进请求
 
     // 输出 token 上限：优先本次 opts.maxTokens，否则统一配置 profile.maxTokens，再兜底 512
     const maxTokens = opts.maxTokens || profile.maxTokens || 512;
@@ -147,7 +148,7 @@
 
     const config = {
       user_input,
-      injects,
+      ordered_prompts,
       should_stream: false,
       should_silence: opts.should_silence != null ? opts.should_silence : true,
       // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
@@ -187,5 +188,5 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerate, resolvePrefix, getPresetPromptItems, listPresetNames };
+  WM.LLMClient = { complete, testConnection, buildCustomApi, getRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
 })();

@@ -683,18 +683,18 @@ ${it.message}`;
   // src/config/llm-client.js
   (function() {
     const WM = window.WarmMemo || (window.WarmMemo = {});
-    function getGenerate() {
-      if (typeof window.generate === "function") return window.generate;
+    function getRaw() {
+      if (typeof window.generateRaw === "function") return window.generateRaw;
       try {
         const ST = window.SillyTavern;
         if (ST && typeof ST.getContext === "function") {
           const ctx = ST.getContext();
-          if (ctx && typeof ctx.generate === "function") return ctx.generate;
+          if (ctx && typeof ctx.generateRaw === "function") return ctx.generateRaw;
         }
-        if (ST && typeof ST.generate === "function") return ST.generate;
+        if (ST && typeof ST.generateRaw === "function") return ST.generateRaw;
       } catch (e) {
       }
-      if (typeof window.generateRaw === "function") return window.generateRaw;
+      if (typeof window.generate === "function") return window.generate;
       return null;
     }
     function buildCustomApi(p) {
@@ -767,20 +767,16 @@ ${it.message}`;
       }
       opts = opts || {};
       const profile = opts.profile || { source: "local" };
-      const gr = getGenerate();
+      const gr = getRaw();
       if (!gr) {
-        throw new Error("\u9152\u9986 generate \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
+        throw new Error("\u9152\u9986 generateRaw \u63A5\u53E3\u4E0D\u53EF\u7528\uFF08\u8BF7\u786E\u8BA4\u5728\u9152\u9986\u73AF\u5883\u4E2D\u8FD0\u884C\uFF0C\u4E14\u6269\u5C55\u5DF2\u6B63\u786E\u52A0\u8F7D\uFF09");
       }
       const userMsg = (messages || []).filter((m) => m.role === "user").pop();
       const user_input = userMsg && userMsg.content || (opts.fallbackUserInput || "");
       const systemPrompts = (messages || []).filter((m) => m.role !== "user" || m !== userMsg).map((m) => String(m.content || "")).filter(Boolean);
-      const injects = systemPrompts.map((content) => ({
-        position: "in_chat",
-        depth: 0,
-        role: "system",
-        content,
-        should_scan: false
-      }));
+      const ordered_prompts = [];
+      systemPrompts.forEach((content) => ordered_prompts.push({ role: "system", content }));
+      ordered_prompts.push("user_input");
       const maxTokens = opts.maxTokens || profile.maxTokens || 512;
       const temperature = opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3;
       const custom_api = Object.assign(
@@ -793,7 +789,7 @@ ${it.message}`;
       }
       const config = {
         user_input,
-        injects,
+        ordered_prompts,
         should_stream: false,
         should_silence: opts.should_silence != null ? opts.should_silence : true,
         // 隔离：默认不携带任何聊天历史（避免测试/摘要被当前对话污染）
@@ -830,7 +826,7 @@ ${it.message}`;
         return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { complete, testConnection, buildCustomApi, getGenerate, resolvePrefix, getPresetPromptItems, listPresetNames };
+    WM.LLMClient = { complete, testConnection, buildCustomApi, getRaw, resolvePrefix, getPresetPromptItems, listPresetNames };
   })();
 
   // src/config/vector-store.js
@@ -3302,7 +3298,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "cfg-baseurl-v1";
+  window.WarmMemo.version = "generateRaw-ownprompt";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
