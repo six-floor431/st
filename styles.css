@@ -71,7 +71,8 @@
   right: auto;
   bottom: auto;
   background: rgba(40, 38, 33, 0.5);   /* 墨色半透 */
-  backdrop-filter: blur(2px);
+  /* 刻意不要毛玻璃：backdrop-filter 会让浮在上面的主面板文字在移动端发糊 */
+  backdrop-filter: none;
   display: none;
   align-items: center;
   justify-content: center;
@@ -640,15 +641,13 @@
 
 /* ============================================================
  * 通用弹窗（添加/编辑物品、剧情、世界条目）
+ * 设计目标：清晰锐利、手机友好。彻底去除一切导致"糊"的因素：
+ *   - 不使用 backdrop-filter（毛玻璃会让面板文字在合成层发虚）
+ *   - 弹窗内统一用 UI sans 字体（不用衬线），开字体平滑
+ *   - 弹窗背景近白不透明，对比强、不靠半透宣纸
+ *   - 字号足够大（移动端 16px，防 iOS 聚焦缩放重排）
+ * 手机端塌成"一条线"的根因见下方注释（已用显式视口尺寸规避）。
  * ============================================================ */
-/* 手机端弹窗塌成"一条线"的根因与修法（实测于 SillyTavern 移动布局）：
- *   酒馆移动端给 <html> 加了 perspective:1000px，且 <html> 的高度为 0px。
- *   CSS 规范中 perspective/transform/filter 非 none 的祖先会成为 position:fixed 的
- *   「包含块」——于是 fixed 不再相对视口，而是相对这个高度为 0 的 <html> 定位，
- *   inset:0 / top:0;bottom:0 解析出来的高度就是 0，遮罩被压成约 28px 的细线，
- *   里面的 .wm-modal 只剩 ~2px，肉眼就是"顶部一条线，面板没出来"。
- *   注意：挂到 body 也一样坏（body 是 <html> 的后代，同样受包含块影响），
- *   所以换挂载点无效，必须显式给出视口尺寸，不能依赖 inset:0 的自动求解。 */
 .wm-modal-mask {
   position: fixed !important;
   top: 0 !important;
@@ -664,9 +663,8 @@
   max-height: none !important;
   min-height: 0 !important;
   transform: none !important;
-  background: rgba(20,20,18,.55);
-  /* 桌面端保留轻微毛玻璃；移动端在媒体查询里关闭，避免合成层模糊导致文字发糊 */
-  backdrop-filter: blur(2px);
+  /* 纯深色半透遮罩，刻意不要 backdrop-filter：毛玻璃会让弹窗文字在移动端发糊 */
+  background: rgba(15, 15, 13, 0.6);
   z-index: 100001 !important;
   display: flex !important;
   align-items: center;
@@ -677,60 +675,64 @@
   isolation: isolate;
 }
 .wm-modal {
-  width: min(430px, 100%);
+  width: min(460px, 100%);
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--wm-paper);
-  border: 1px solid var(--wm-line-strong);
-  border-radius: 14px 4px 14px 4px;
-  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  /* 近白不透明背景，对比强、不发灰（不用半透宣纸） */
+  background: #fbfaf7;
+  border: 1px solid #d8d2c4;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35);
   overflow: hidden;
   box-sizing: border-box;
+  /* 弹窗内一律 UI sans，锐利清晰 */
+  font-family: var(--wm-font-ui);
+  color: #1a1a17;
 }
 .wm-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 13px;
-  border-bottom: 1px solid var(--wm-line);
-  background: rgba(43,43,40,.04);
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4ded2;
+  background: #f3f0e8;
   flex: none;
 }
 .wm-modal-title {
   font-family: var(--wm-font-ui);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--wm-ink);
-  letter-spacing: 1px;
+  color: #1a1a17;
 }
-.wm-modal-title::before { content: "❀ "; color: var(--wm-seal); font-size: 12px; }
+.wm-modal-title::before { content: "❀ "; color: var(--wm-seal); font-size: 13px; }
 .wm-modal-body {
-  padding: 12px 13px;
+  padding: 14px 16px;
   overflow-y: auto;
   flex: 1 1 auto;
   -ms-overflow-style: none;
   scrollbar-width: none;
+  font-size: 14px;
 }
 .wm-modal-body::-webkit-scrollbar { display: none; }
 .wm-modal-foot {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 10px 13px;
-  border-top: 1px solid var(--wm-line);
-  background: rgba(43,43,40,.03);
+  padding: 12px 16px;
+  border-top: 1px solid #e4ded2;
+  background: #f3f0e8;
   flex: none;
   flex-wrap: wrap;
 }
-.wm-field { margin-bottom: 10px; min-width: 0; }
+.wm-field { margin-bottom: 12px; min-width: 0; }
 .wm-field > label {
   display: block;
   font-family: var(--wm-font-ui);
-  font-size: 12px;
-  color: var(--wm-ink-soft);
-  margin-bottom: 4px;
+  font-size: 13px;
+  color: #4a4a44;
+  margin-bottom: 5px;
   font-weight: 600;
 }
 .wm-field input[type="text"],
@@ -739,12 +741,13 @@
 .wm-field textarea {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid var(--wm-line-strong);
-  border-radius: 8px 2px 8px 2px;
-  background: rgba(255,255,255,.6);
+  padding: 9px 11px;
+  border: 1px solid #cfc9bb;
+  border-radius: 8px;
+  /* 纯白实底，对比清晰 */
+  background: #ffffff;
   color: #000 !important;       /* 已输入文字：纯黑（!important 压过酒馆 @layer 主题色） */
-  font-size: 13px !important;
+  font-size: 14px !important;
   font-family: var(--wm-font-ui) !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
@@ -757,13 +760,13 @@
   color: #9a9a90 !important;
   opacity: 1 !important;
 }
-.wm-field textarea { min-height: 78px; resize: vertical; line-height: 1.6; }
+.wm-field textarea { min-height: 84px; resize: vertical; line-height: 1.6; }
 .wm-field input:focus, .wm-field select:focus, .wm-field textarea:focus {
   outline: none;
   border-color: var(--wm-seal);
   box-shadow: 0 0 0 2px rgba(156,59,46,.16);
 }
-.wm-field-hint { font-size: 11px; color: var(--wm-ink-faint); margin-top: 3px; line-height: 1.5; }
+.wm-field-hint { font-size: 12px; color: #8a8a80; margin-top: 3px; line-height: 1.5; }
 .wm-empty {
   text-align: center;
   color: var(--wm-ink-faint);
@@ -821,13 +824,7 @@
   }
   .wm-title { font-size: 15px; }
 
-  /* 手机端去糊：关闭遮罩毛玻璃（合成层模糊会让面板文字发虚），并放大输入框字号。
-   * 输入框 >=16px 可避免 iOS 在聚焦时自动缩放页面造成的整体重排/模糊。 */
-  .wm-modal-mask,
-  .wm-overlay {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
+  /* 手机端：放大输入框字号，避免 iOS 在聚焦时自动缩放页面造成的整体重排/模糊。 */
   .wm-row input[type="text"],
   .wm-row input[type="number"],
   .wm-row select,
