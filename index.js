@@ -2794,7 +2794,8 @@ ${p.summary || ""}`.trim() });
           <button class="wm-btn primary" data-act="ok">${escapeHtml(opts.okText || "\u4FDD\u5B58")}</button>
         </div>
       </div>`;
-        document.body.appendChild(mask);
+        const mountRoot = document.documentElement || document.body;
+        mountRoot.appendChild(mask);
         const close = (val) => {
           if (mask.parentNode) mask.parentNode.removeChild(mask);
           resolve(val);
@@ -3008,11 +3009,6 @@ ${p.summary || ""}`.trim() });
       const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
       const secs = (WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : []).filter((w) => !(w.title && ENTITY_NOISE.test(w.title) && /[:：·]/.test(w.title)));
       let loreCount = 0;
-      try {
-        loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0;
-      } catch (e) {
-        loreCount = 0;
-      }
       const secHtml = secs.map((w) => `<div class="wm-world-sec" data-id="${w.id}">
       <div class="wm-world-sec-title">${escapeHtml(w.title || "\uFF08\u672A\u547D\u540D\u8BBE\u5B9A\uFF09")}</div>
       <div class="wm-world-sec-body">${escapeHtml(w.body || "")}</div>
@@ -3148,6 +3144,16 @@ ${p.summary || ""}`.trim() });
           if (st) st.textContent = "\u2717 " + (e.message || e);
         }
       };
+      if (WM.Worldbook && WM.Worldbook.listEntries) {
+        WM.Worldbook.listEntries().then((list) => {
+          const cnt = Array.isArray(list) ? list.length : 0;
+          const hint = body.querySelector(".wm-hint");
+          if (hint && cnt) {
+            hint.textContent = hint.textContent.replace(/（现有 \d+ 条）/, "") + `\uFF08\u73B0\u6709 ${cnt} \u6761\uFF09`;
+          }
+        }).catch(() => {
+        });
+      }
     }
     function renderPaneLlm(s) {
       const c = s.llmConfig || { source: "local", apiUrl: "", apiKey: "", model: "" };
@@ -3753,7 +3759,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "bugfix-relations-merge-rerank-takeover-hide-inject";
+  window.WarmMemo.version = "fix-mobile-edit-modal-not-show";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

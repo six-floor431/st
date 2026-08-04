@@ -601,16 +601,21 @@
  * 通用弹窗（添加/编辑物品、剧情、世界条目）
  * ============================================================ */
 .wm-modal-mask {
-  position: fixed;
-  inset: 0;
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
   background: rgba(20,20,18,.5);
   backdrop-filter: blur(2px);
-  z-index: 100001;
+  z-index: 100001 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
   box-sizing: border-box;
+  /* 防止祖先 contain/overflow 裁剪：独立层叠上下文，不继承祖先 transform */
+  isolation: isolate;
 }
 .wm-modal {
   width: min(430px, 100%);

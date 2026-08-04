@@ -502,7 +502,12 @@
           <button class="wm-btn primary" data-act="ok">${escapeHtml(opts.okText || '保存')}</button>
         </div>
       </div>`;
-      document.body.appendChild(mask);
+      // 关键：挂到 documentElement(<html>) 而非 body。
+      // 手机版/部分皮肤下 document.body 会被酒馆 UI 框架施加 transform/will-change，
+      // 导致 position:fixed 的弹窗被相对 body 定位并溢出视口、肉眼"看不见"。
+      // <html> 默认无 transform 祖先，挂这里可彻底规避该问题。
+      const mountRoot = document.documentElement || document.body;
+      mountRoot.appendChild(mask);
       const close = (val) => { if (mask.parentNode) mask.parentNode.removeChild(mask); resolve(val); };
       const collect = () => {
         const out = {};
@@ -708,8 +713,10 @@
     const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
     const secs = (WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [])
       .filter((w) => !(w.title && ENTITY_NOISE.test(w.title) && /[:：·]/.test(w.title)));
+    // 注意：loreCount 仅用于展示「现有 N 条」，绝不能让它的 await 阻塞下方按钮绑定。
+    // 若 Worldbook.listEntries 在手机端抛错/卡住，旧代码会把所有编辑按钮的绑定 delay 到 await 之后，
+    // 导致「编辑世界/添加设定」点击毫无反应（面板不出现）。改为先渲染+绑定，再异步回填数字。
     let loreCount = 0;
-    try { loreCount = WM.Worldbook.listEntries ? (await WM.Worldbook.listEntries()).length : 0; } catch (e) { loreCount = 0; }
 
     const secHtml = secs.map((w) => `<div class="wm-world-sec" data-id="${w.id}">
       <div class="wm-world-sec-title">${escapeHtml(w.title || '（未命名设定）')}</div>
@@ -846,6 +853,17 @@
         if (st) st.textContent = '✗ ' + (e.message || e);
       }
     };
+
+    // 异步回填「世界书现有 N 条」数字（不阻塞上面的按钮绑定，失败也不影响编辑功能）
+    if (WM.Worldbook && WM.Worldbook.listEntries) {
+      WM.Worldbook.listEntries().then((list) => {
+        const cnt = Array.isArray(list) ? list.length : 0;
+        const hint = body.querySelector('.wm-hint');
+        if (hint && cnt) {
+          hint.textContent = hint.textContent.replace(/（现有 \d+ 条）/, '') + `（现有 ${cnt} 条）`;
+        }
+      }).catch(() => {});
+    }
   }
 
   // 统一的 LLM 调用配置（所有功能共用这一个）
