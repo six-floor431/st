@@ -293,12 +293,12 @@
   function getItems() { return load().items; }
 
   // ── 剧情线（time=剧情内时间；列表按「最新在上」排序） ──
+  // 注：剧情线为纯事件列表，不再带「进行中/已完结/已废弃」状态标签（用户要求）。
   function normPlot(o) {
     return {
       title: String((o && o.title) || '').trim(),
       summary: String((o && o.summary) || '').trim(),
       time: String((o && o.time) || '').trim(),
-      status: (o && o.status) || 'active',
     };
   }
   // 兼容 addPlot({title,summary,time,status}) 或 addPlot(title, summary, status)
@@ -382,6 +382,10 @@
   async function setSummaryPointer(idx) { const s = load(); s.summaryPointer = idx; await save(s); }
   function getSummaryPointer() { return load().summaryPointer || 0; }
 
+  // ── 剧情线独立指针（剧情线自我推进用，与总结指针解耦） ──
+  async function setPlotPointer(idx) { const s = load(); s.plotPointer = idx; await save(s); }
+  function getPlotPointer() { return load().plotPointer || 0; }
+
   // ── 导出 / 导入（备份防丢） ──
   function exportJSON() {
     const s = load();
@@ -458,6 +462,7 @@
     setRelations, getRelations,
     dispatchLorebook,
     setSummaryPointer, getSummaryPointer,
+    setPlotPointer, getPlotPointer,
     exportJSON, importJSON, clearAll,
   };
 })();

@@ -195,10 +195,12 @@
         </details>
         <details class="wm-fold" open>
           <summary>自动抽取子任务</summary>
-          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation?'checked':''}/> 关系图</label>
-          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot?'checked':''}/> 剧情线</label>
-          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld?'checked':''}/> 世界观设定</label>
-          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems?'checked':''}/> 物品追踪</label>
+          <div class="wm-hint">记忆类（随总结一起跑）：世界观设定、物品追踪。<br/>剧情类（独立流程，与总结解耦）：剧情线 + 关系图 —— 触发时并联调用，并基于「已有剧情线」自我推进，总结不再顺带跑它们。</div>
+          <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled!==false?'checked':''}/> 启用剧情线独立推进（含关系图）</label>
+          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation!==false?'checked':''}/> 关系图（随剧情线一并跑）</label>
+          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot!==false?'checked':''}/> 剧情线</label>
+          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld!==false?'checked':''}/> 世界观设定</label>
+          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems!==false?'checked':''}/> 物品追踪</label>
         </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">保存设置</button>
@@ -256,10 +258,16 @@
       s.autoSummaryStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
       s.autoSummaryEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
       s.autoHideFloors = body.querySelector('#a-hide').checked;
+      s.autoPlotEnabled = body.querySelector('#a-plotflow').checked;
       s.autoRelation = body.querySelector('#a-rel').checked;
       s.autoPlot = body.querySelector('#a-plot').checked;
       s.autoWorld = body.querySelector('#a-world').checked;
       s.autoItems = body.querySelector('#a-item').checked;
+      s.autoPlotMode = mode.value;
+      s.autoPlotCount = parseInt(body.querySelector('#a-count').value, 10) || 20;
+      s.autoPlotFloor = parseInt(body.querySelector('#a-floor').value, 10) || 20;
+      s.autoPlotStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
+      s.autoPlotEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
       // 收集标签过滤规则（以 DOM 当前输入为准，确保勾选/文本改动都已同步）
       s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => {
         const close = row.querySelector('.t-close').value.trim();
@@ -278,17 +286,25 @@
     };
     body.querySelector('#a-run').onclick = async () => {
       const st = body.querySelector('#auto-status');
-      st.textContent = '总结中…';
+      st.textContent = '处理中…';
       try {
         // 强制重新读取已保存设置，避免用到面板打开时的旧配置（未保存的 BaseURL 不会漏）
         const fresh = WM.Settings.load();
-        // 「立即总结」= 强制总结全部楼层（无视自动模式与指针），确保一定发起 LLM 调用
+        // 「立即处理」= 强制全部楼层：先写记忆（总结），再独立推进剧情线（并联关系线）
         const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+        let msg = '';
         if (r && r.ok) {
-          st.textContent = `✓ 已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}），关系${r.results.relations} 剧情${r.results.plots} 世界${r.results.world ? '✓' : '×'} 物品${r.results.items}`;
+          msg += `✓ 记忆 ${r.count} 条（楼层 ${r.range[0]}-${r.range[1]}），世界${r.results.world ? '✓' : '×'} 物品${r.results.items}` + '\n';
         } else {
-          st.textContent = '✗ ' + (r && r.reason ? r.reason : '失败');
+          msg += '✗ 记忆：' + (r && r.reason ? r.reason : '失败') + '\n';
         }
+        const rp = await WM.Summary.triggerPlot(fresh, { forceAll: true });
+        if (rp && rp.ok) {
+          msg += `✓ 剧情线推进 ${rp.count} 条（关系${rp.results.relations} 剧情${rp.results.plots}）`;
+        } else {
+          msg += '✗ 剧情线：' + (rp && rp.reason ? rp.reason : '失败');
+        }
+        st.textContent = msg;
       } catch (e) {
         st.textContent = '✗ ' + (e.message || e);
       }
@@ -531,12 +547,6 @@
     });
   }
 
-  const PLOT_STATUS = [
-    { value: 'active', label: '进行中' },
-    { value: 'done', label: '已完结' },
-    { value: 'abandon', label: '已废弃' },
-  ];
-  function statusLabel(v) { const h = PLOT_STATUS.find((x) => x.value === v); return h ? h.label : '进行中'; }
   function fmtTs(ts) {
     if (!ts) return '';
     try {
@@ -556,7 +566,7 @@
       const recTime = fmtTs(p.ts);
       const mainTime = p.time || recTime.split(' ')[0] || '未标注';
       const subTime = p.time ? recTime : (recTime.split(' ')[1] || '');
-      return `<div class="wm-plot wm-plot-${p.status}" data-id="${p.id}">
+      return `<div class="wm-plot" data-id="${p.id}">
         <div class="wm-plot-time">
           <div class="wm-plot-time-main">${escapeHtml(mainTime)}</div>
           ${subTime ? `<div class="wm-plot-time-sub">${escapeHtml(subTime)}</div>` : ''}
@@ -564,7 +574,6 @@
         <div class="wm-plot-body">
           <div class="wm-plot-head">
             <span class="wm-plot-title">${escapeHtml(p.title || '（未命名）')}</span>
-            <span class="wm-badge">${escapeHtml(statusLabel(p.status))}</span>
           </div>
           <div class="wm-plot-sum">${escapeHtml(p.summary || '')}</div>
           <div class="wm-plot-acts">
@@ -589,7 +598,6 @@
       { key: 'time', label: '时间（剧情内时间，显示在最左侧）', value: (p && p.time) || '', placeholder: '如：第三日清晨 / 建元七年春' },
       { key: 'title', label: '标题', value: (p && p.title) || '', placeholder: '这段剧情叫什么' },
       { key: 'summary', label: '内容', type: 'textarea', value: (p && p.summary) || '', placeholder: '这段剧情发生了什么' },
-      { key: 'status', label: '状态', type: 'select', value: (p && p.status) || 'active', options: PLOT_STATUS },
     ]);
 
     const plotAdd = body.querySelector('[data-act="plot-add"]');
@@ -605,8 +613,8 @@
     if (plotRun) plotRun.onclick = async () => {
       const st = body.querySelector('.wm-status');
       if (st) st.textContent = '归纳中…';
-      const r = await WM.Summary.runSummary(WM.Settings.load());
-      if (st) st.textContent = r && r.ok ? '✓ 剧情线已更新' : '✗ 失败';
+      const r = await WM.Summary.triggerPlot(WM.Settings.load());
+      if (st) st.textContent = r && r.ok ? '✓ 剧情线已推进' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
       renderPlot(body);
     };
     body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -1427,10 +1435,11 @@
     }
   }
 
-  let _lastAutoAt = 0; // 去重：避免 MESSAGE_SENT + MESSAGE_RECEIVED 双触发重复总结
+  let _lastAutoAt = 0; // 去重：避免 MESSAGE_SENT + MESSAGE_RECEIVED 双触发重复
   async function autoSummaryHook() {
     const s = WM.Settings.load();
-    if (!s.autoSummaryEnabled) return;
+    if (!s.autoSummaryEnabled && s.autoPlotEnabled !== false) { /* 仍可跑剧情线 */ }
+    if (!s.autoSummaryEnabled && s.autoPlotEnabled === false) return;
     const now = Date.now();
     if (now - _lastAutoAt < 1200) return; // 1.2s 内只跑一次
     _lastAutoAt = now;
@@ -1438,26 +1447,37 @@
     // 因此这里不需要长延时等待流式，只留极小缓冲让 chat 元数据稳定。
     setTimeout(async () => {
       try {
-        // 先按常规触发（floor 模式需攒满一段）
-        let r = await WM.Summary.triggerSummary(s);
-        // 末尾收尾：floor 模式下聊到末尾但不足一段时，强制总结剩余楼层
-        if (r && !r.ok && s.autoSummaryMode === 'floor') {
-          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
-          const ptr = WM.MemoryStore.getSummaryPointer();
-          if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
-        }
-        if (r && r.ok) {
-          if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+        // 流程一：纯记忆总结（summary + 世界观 + 物品），与剧情线完全独立
+        if (s.autoSummaryEnabled) {
+          let r = await WM.Summary.triggerSummary(s);
+          if (r && !r.ok && s.autoSummaryMode === 'floor') {
+            const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+            const ptr = WM.MemoryStore.getSummaryPointer();
+            if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
+          }
+          if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
             await WM.FloorHider.hideUntil(r.range[1]);
           }
-          const extra = r.partial ? '（部分提炼失败，见错误报告）' : '';
-          toast(`🌿 温记：已提炼 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）${extra}`);
-        } else if (r && !r.ok) {
-          toast(`🌿 温记：总结未执行（${r.reason}）`);
+          if (r && r.ok) {
+            const extra = r.partial ? '（部分提炼失败，见错误报告）' : '';
+            toast(`🌿 温记：已写入 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）${extra}`);
+          }
         }
-        // r 为 falsy：未到触发区间（如 floor 模式下还没攒够一层），静默跳过
+        // 流程二：剧情线独立推进（同时并联关系线 LLM），独立于总结
+        if (s.autoPlotEnabled !== false) {
+          let rp = await WM.Summary.triggerPlot(s);
+          if (rp && !rp.ok && s.autoPlotMode === 'floor') {
+            const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+            const ptr = WM.MemoryStore.getPlotPointer();
+            if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
+          }
+          if (rp && rp.ok) {
+            const extra = rp.partial ? '（部分失败，见错误报告）' : '';
+            toast(`🌿 温记：剧情线已推进 ${rp.count} 条（楼层 ${rp.range[0]}-${rp.range[1]}）${extra}`);
+          }
+        }
       } catch (e) {
-        toast(`🌿 温记：总结失败 - ${e.message || e}`);
+        toast(`🌿 温记：自动处理失败 - ${e.message || e}`);
       }
     }, 400);
   }

@@ -44,6 +44,17 @@
       // 总结后隐藏已处理楼层
       autoSummaryParallel: true,
       // 总结后并行调用关系/剧情/世界观/物品（带失败重试）
+      // ── 剧情线独立流程配置 ──
+      // 剧情线独立于「总结」，像自动总结一样自我推进：有独立触发指针(plotPointer)与攒段逻辑，
+      // 触发时同时并联调用「关系线 LLM」，两者互不依赖总结结果。区间模式复用 autoSummary* 同名设置。
+      autoPlotEnabled: true,
+      // 是否开启剧情线独立自动推进（默认跟随自动总结总开关的逻辑独立运行）
+      autoPlotMode: "new",
+      // 复用 'new'/'range'/'count'/'floor' 四种模式（与 autoSummaryMode 解耦，可单独设置）
+      autoPlotCount: 20,
+      autoPlotStart: 0,
+      autoPlotEnd: -1,
+      autoPlotFloor: 20,
       // 各自动子任务开关
       autoRelation: true,
       autoPlot: true,
@@ -98,7 +109,7 @@
       prompts: {
         summary: '\u4F60\u662F\u4E00\u4F4D\u7F51\u6587/\u8F7B\u5C0F\u8BF4\u4F5C\u5BB6\u3002\u8BF7\u628A\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u53D1\u751F\u7684\u4E8B\u60C5\u5199\u6210\u4E00\u6BB5\u300C\u7EAF\u53D9\u4E8B\u98CE\u683C\u7684\u7AE0\u8282\u7247\u6BB5\u300D\u3002\n\n\u8F93\u51FA\u8981\u6C42\uFF1A\u50CF\u5199\u4E00\u7AE0\u7F51\u6587\u6216\u8F7B\u5C0F\u8BF4\u90A3\u6837\u2014\u2014\u6709\u573A\u666F\u3001\u6709\u52A8\u4F5C\u3001\u6709\u5BF9\u8BDD\u3001\u6709\u60C5\u7EEA\u6C1B\u56F4\u3002\u76F4\u63A5\u5199\u6545\u4E8B\u672C\u8EAB\uFF0C\u4E0D\u8981\u4EFB\u4F55\u5143\u63CF\u8FF0\u3001\u4E0D\u8981\u4EFB\u4F55\u603B\u7ED3\u6027\u63AA\u8F9E\u3002\n\n\u3010\u7EDD\u5BF9\u7981\u6B62\uFF08\u51FA\u73B0\u5373\u5224\u5B9A\u4E3A\u65E0\u6548\u8F93\u51FA\uFF09\u3011\n1. \u{1F6D1} \u4E25\u7981\u4F7F\u7528\u4EE5\u4E0B\u8BCD\u6C47\u53CA\u5176\u53D8\u4F53\uFF1A\u603B\u7ED3\u3001\u68B3\u7406\u3001\u6982\u62EC\u3001\u5F52\u7EB3\u3001\u56DE\u987E\u3001\u8BB0\u5F55\u3001\u65F6\u95F4\u7EBF\u3001\u65F6\u95F4\u987A\u5E8F\u3001\u6309\u65F6\u95F4\u3001\u72B6\u6001\u6807\u8BB0\u3001\u4F9B\u540E\u7EED\u53C2\u8003\u3001\u6838\u5FC3\u4E8B\u4EF6\u3001\u5173\u952E\u4FE1\u606F\u3001\u8981\u70B9\u3001\u6458\u8981\u3001\u6982\u8FF0\u3001\u6982\u8981\u3001\u7B80\u8FF0\u3001\u5907\u6CE8\u3001\u6CE8\u8BB0\u3001\u68B3\u7406\u5982\u4E0B\u3001\u6574\u7406\u5982\u4E0B\u3001\u6C47\u603B\u5982\u4E0B\u3001\u5206\u6790\u5982\u4E0B\u3001\u63CF\u8FF0\u5982\u4E0B\u3001\u8BF4\u660E\u5982\u4E0B\u3002\n2. \u{1F6D1} \u4E25\u7981\u5728\u6B63\u6587\u524D\u52A0\u4EFB\u4F55\u5F15\u5BFC\u8BED/\u58F0\u660E\u53E5\uFF08\u5982"\u4EE5\u4E0B\u662F\u2026""\u6839\u636E\u5BF9\u8BDD\u2026""\u7528\u6237\u8BA9\u6211\u2026"\uFF09\u3002\u76F4\u63A5\u4ECE\u6545\u4E8B\u5185\u5BB9\u5F00\u59CB\u5199\u3002\n3. \u{1F6D1} \u4E25\u7981\u7F16\u9020\u5BF9\u8BDD\u4E2D\u6CA1\u6709\u7684\u60C5\u8282\u3001\u4EBA\u7269\u3001\u5730\u70B9\u3001\u7269\u54C1\u6216\u540E\u7EED\u53D1\u5C55\u3002\n4. \u{1F6D1} \u4E25\u7981\u4E3B\u89C2\u81C6\u65AD\u4E0E\u5FC3\u7406\u5206\u6790\uFF08\u5982"A\u5BF9B\u6709\u5360\u6709\u6B32""\u4E24\u4EBA\u6C14\u6C1B\u66A7\u6627"\uFF09\uFF0C\u53EA\u5199\u5BA2\u89C2\u53D1\u751F\u7684\u884C\u4E3A\u548C\u5BF9\u8BDD\u3002\n5. \u{1F6D1} \u4E25\u7981\u8F93\u51FA\u5206\u6790\u8BC4\u8BBA\u5F53\u53D9\u4E8B\uFF08\u5982"\u8FD9\u8868\u660E\u2026""\u8FD9\u6697\u793A\u7740\u2026"\uFF09\u3002\n6. \u{1F6D1} \u4E25\u7981\u7528"\u7B2C\u4E00/\u7B2C\u4E8C/\u7B2C\u4E09/\u9996\u5148/\u5176\u6B21/\u6700\u540E"\u7B49\u5E8F\u53F7\u8BCD\u7F57\u5217\u4E8B\u4EF6\u2014\u2014\u8981\u8FDE\u8D2F\u7684\u53D9\u4E8B\u6D41\uFF0C\u4E0D\u662F\u5217\u8868\u3002\n\n\u3010\u6B63\u786E\u793A\u4F8B\uFF08\u8FD9\u5C31\u662F\u4F60\u8981\u7684\u8F93\u51FA\u98CE\u683C\uFF09\u3011\n\u9EC4\u660F\u7684\u56FE\u4E66\u9986\u91CC\uFF0C\u6797\u6E05\u7384\u7FFB\u5230\u501F\u4E66\u5361\u80CC\u9762\u90A3\u4E00\u680F\uFF0C\u6307\u5C16\u505C\u5728\u4E00\u4E2A\u540D\u5B57\u4E0A\u5F88\u4E45\u3002"\u539F\u6765\u4F60\u4E5F\u770B\u8FC7\u8FD9\u672C\u3002"\u8EAB\u540E\u4F20\u6765\u6E29\u5982\u7389\u7684\u58F0\u97F3\uFF0C\u5979\u624B\u91CC\u63D0\u7740\u4E24\u676F\u8FD8\u5192\u70ED\u6C14\u7684\u5976\u8336\u3002\n\n\u3010\u9519\u8BEF\u793A\u4F8B\uFF08\u4EE5\u4E0B\u5168\u90E8\u7981\u6B62\uFF0C\u4E25\u7981\u8F93\u51FA\uFF09\u3011\n\u2717 \u6839\u636E\u5BF9\u8BDD\u5185\u5BB9\uFF0C\u603B\u7ED3\u5982\u4E0B\uFF1A\u4E09\u4E2A\u5F92\u5F1F\u2026\u2026\uFF08\u4F7F\u7528\u4E86"\u603B\u7ED3""\u6839\u636E"\u7B49\u7981\u8BCD\uFF09\n\u2717 \u65F6\u95F4\u7EBF\u68B3\u7406\u5982\u4E0B\uFF1A\uFF08\u542B\u72B6\u6001\u6807\u8BB0\uFF0C\u4F9B\u540E\u7EED\u53C2\u8003\uFF09\uFF1A\uFF08\u8FD9\u662F\u6307\u4EE4\u56DE\u663E\uFF0C\u4E0D\u662F\u53D9\u4E8B\uFF09\n\u2717 \u6309\u65F6\u95F4\u987A\u5E8F\uFF0C\u6838\u5FC3\u4E8B\u4EF6\u5305\u62EC\uFF1A\u6797\u6E05\u7384\u4E0E\u6E29\u5982\u7389\u2026\u2026\uFF08\u7528\u4E86"\u65F6\u95F4\u987A\u5E8F""\u6838\u5FC3\u4E8B\u4EF6"\u7B49\u7981\u8BCD\uFF09\n\u2717 \u7B2C\u4E00\uFF0C\u6797\u6E05\u7384\u53BB\u4E86\u4ED9\u5C0A\u6BBF\uFF1B\u7B2C\u4E8C\uFF0C\u6E29\u5982\u7389\u8FFD\u4E86\u51FA\u53BB\u3002\uFF08\u5E8F\u53F7\u7F57\u5217\uFF0C\u4E0D\u662F\u53D9\u4E8B\uFF09\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         relations: "\u4F60\u662F\u5173\u7CFB\u56FE\u8C31\u6784\u5EFA\u5668\u3002\u4F60\u7684\u552F\u4E00\u4EFB\u52A1\uFF1A\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u300C\u4EBA\u7269\u4E4B\u95F4\u7684\u76F4\u63A5\u5173\u7CFB\u300D\u3002\n\n\u3010\u6700\u9AD8\u7EA7\u7981\u4EE4\uFF08\u8FDD\u53CD\u5219\u8F93\u51FA\u65E0\u6548\uFF09\u3011\n1. \u{1F6D1} \u6BCF\u884C\u53EA\u80FD\u662F\u4E00\u4E2A\u300C\u4E09\u5143\u7EC4\u300D\uFF0C\u683C\u5F0F\u4E25\u683C\u4E3A\uFF1A\u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\u8BCD\n2. \u{1F6D1} \u300C\u5173\u7CFB\u8BCD\u300D\u5FC5\u987B\u662F 2-6 \u4E2A\u5B57\u7684\u7B80\u77ED\u6807\u7B7E\uFF0C\u5982\uFF1A\u604B\u4EBA\u3001\u5E08\u5F92\u3001\u654C\u5BF9\u3001\u6697\u604B\u3001\u4E3B\u4EC6\u3001\u540C\u4F34\u3001\u7ADE\u4E89\u8005\n3. \u{1F6D1} \u7EDD\u5BF9\u7981\u6B62\u8F93\u51FA\u5206\u6790\u53E5\u3001\u63CF\u8FF0\u53E5\u3001\u957F\u53E5\u5B50\uFF0C\u7EDD\u5BF9\u7981\u6B62\u4EFB\u4F55\u300C\u5BF9...\u6709...\u611F\u300D\u300C\u5B58\u5728\u6F5C\u5728...\u300D\u300C\u67D0\u79CD...\u7EA0\u845B\u300D\u8FD9\u7C7B\u4E3B\u89C2\u63A8\u65AD\u3002\n4. \u{1F6D1} \u53EA\u63D0\u53D6**\u4E24\u4E2A\u5177\u4F53\u4EBA\u7269\u4E4B\u95F4\u3001\u4E14\u6709\u660E\u786E\u4E92\u52A8**\u7684\u5173\u7CFB\u3002\u4E0D\u63D0\u53D6\u300C\u5BF9\u7528\u6237\u7684\u611F\u53D7\u300D\u300C\u4E0E...\u5B58\u5728...\u300D\u8FD9\u79CD\u5355\u5411\u5206\u6790\uFF08\u8FD9\u7C7B\u4E0D\u662F\u5173\u7CFB\uFF0C\u5FC5\u987B\u4E22\u5F03\uFF09\u3002\n5. \u5982\u679C\u4E24\u4E2A\u4EBA\u4E4B\u95F4\u6CA1\u6709\u660E\u786E\u4E92\u52A8\u5173\u7CFB\uFF0C\u5C31\u4E0D\u8981\u5199\u3002\u5B81\u7F3A\u6BCB\u6EE5\u3002\n6. \u6700\u591A 8 \u6761\u3002\n\n\u3010\u6B63\u786E\u793A\u4F8B\u3011\n\u5C0F\u660E \u2192 \u5C0F\u7EA2\uFF1A\u604B\u4EBA\n\u5C0F\u7EA2 \u2192 \u5C0F\u521A\uFF1A\u654C\u5BF9\n\u3010\u9519\u8BEF\u793A\u4F8B\uFF08\u5168\u90E8\u7981\u6B62\uFF0C\u4E25\u7981\u8F93\u51FA\uFF09\u3011\n\u2717 \u5C0F\u660E\u5BF9\u7528\u6237\u6709\u4F9D\u8D56\u611F\uFF08\u8FD9\u662F\u5206\u6790\uFF0C\u4E0D\u662F\u5173\u7CFB\uFF09\n\u2717 \u674E\u534E\u4E0E\u5F20\u4F1F\u4E4B\u95F4\u5B58\u5728\u6F5C\u5728\u51B2\u7A81\uFF08\u63CF\u8FF0\u53E5\uFF09\n\u2717 \u5F20\u4F1F\u5BF9\u7528\u6237\u624D\u5177\u6709\u4F9D\u8D56\u611F\uFF08\u5355\u5411\u5206\u6790\uFF09\n\u2717 A\u5BF9B\u6709\u67D0\u79CD\u590D\u6742\u7684\u60C5\u611F\u7EA0\u845B\uFF08\u4E3B\u89C2\u63A8\u65AD\uFF09\n\n\u3010\u5386\u53F2\u603B\u7ED3\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        plot: '\u4F60\u662F\u4E00\u4F4D\u8F7B\u5C0F\u8BF4\u5267\u60C5\u7F16\u8F91\u3002\u8BF7\u57FA\u4E8E\u300C\u5173\u7CFB\u300D\u548C\u300C\u6700\u8FD1\u5BF9\u8BDD\u300D\uFF0C\u63D0\u53D6\u8FD9\u4E00\u6BB5\u53D1\u751F\u7684**\u5267\u60C5\u4E8B\u4EF6**\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u4E8B\u4EF6\u53D9\u8FF0\uFF5C\u72B6\u6001\n\n\u3010\u7EDD\u5BF9\u7981\u6B62\uFF08\u51FA\u73B0\u5373\u5224\u5B9A\u4E3A\u65E0\u6548\u8F93\u51FA\uFF09\u3011\n1. \u{1F6D1} \u4E25\u7981\u5728\u8F93\u51FA\u524D\u52A0\u4EFB\u4F55\u5F15\u5BFC\u8BED/\u58F0\u660E\u53E5/\u683C\u5F0F\u8BF4\u660E\uFF08\u5982"\u65F6\u95F4\u7EBF\u68B3\u7406\u5982\u4E0B""\u5267\u60C5\u4E8B\u4EF6\u5982\u4E0B""\u6309\u65F6\u95F4\u987A\u5E8F""\u542B\u72B6\u6001\u6807\u8BB0""\u4F9B\u540E\u7EED\u53C2\u8003""\u4EE5\u4E0B\u662F\u2026"\uFF09\u3002\u76F4\u63A5\u4ECE\u7B2C\u4E00\u6761\u4E8B\u4EF6\u5F00\u59CB\u5199\u3002\n2. \u{1F6D1} \u4E25\u7981\u4F7F\u7528\u4EE5\u4E0B\u8BCD\u6C47\u53CA\u5176\u53D8\u4F53\uFF1A\u65F6\u95F4\u7EBF\u3001\u68B3\u7406\u3001\u6574\u7406\u3001\u6C47\u603B\u3001\u6982\u62EC\u3001\u5F52\u7EB3\u3001\u56DE\u987E\u3001\u8BB0\u5F55\u3001\u6838\u5FC3\u4E8B\u4EF6\u3001\u5173\u952E\u4FE1\u606F\u3001\u8981\u70B9\u3001\u6458\u8981\u3001\u6982\u8FF0\u3001\u72B6\u6001\u6807\u8BB0\u3001\u4F9B\u540E\u7EED\u53C2\u8003\u3001\u5206\u6790\u5982\u4E0B\u3001\u63CF\u8FF0\u5982\u4E0B\u3001\u8BF4\u660E\u5982\u4E0B\u3002\n3. \u{1F6D1} \u4E25\u683C\u53EA\u8BB0\u5F55\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u771F\u5B9E\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\u3002\u4E25\u7981\u7F16\u9020\u672A\u53D1\u751F\u7684\u60C5\u8282\uFF0C\u4E25\u7981\u52A0\u5165\u65E0\u5173\u5185\u5BB9\uFF08\u4E16\u754C\u89C2\u8BF4\u660E\u3001\u4EBA\u7269\u80CC\u666F\u95F2\u7B14\uFF09\u3002\n4. \u{1F6D1} \u4E25\u7981\u8F93\u51FA\u5206\u6790\u8BC4\u8BBA\uFF08\u5982"\u8FD9\u8868\u660E\u2026""\u8FD9\u6697\u793A\u7740\u2026"\uFF09\u6216\u5FC3\u7406\u63A8\u6D4B\u2014\u2014\u53EA\u5199\u53D1\u751F\u4E86\u4EC0\u4E48\u5BA2\u89C2\u4E8B\u4EF6\u3002\n5. \u{1F6D1} \u6BCF\u884C\u7684\u300C\u4E8B\u4EF6\u53D9\u8FF0\u300D\u8981\u6709\u753B\u9762\u611F\uFF08\u4EBA\u7269\u52A8\u4F5C+\u573A\u666F\uFF09\uFF0C\u4E0D\u8981\u5199\u5E72\u5DF4\u5DF4\u7684"\u53CC\u65B9\u8FDB\u884C\u4E86\u8BA8\u8BBA"\u3002\n\n\u5199\u4F5C\u8981\u6C42\uFF08\u50CF\u8F7B\u5C0F\u8BF4\u7AE0\u8282\u5927\u7EB2\uFF09\uFF1A\n- \u6807\u9898\uFF1A\u7ED9\u8FD9\u6BB5\u5267\u60C5\u8D77\u4E00\u4E2A\u6709\u753B\u9762\u611F\u7684\u77ED\u6807\u9898\uFF08\u5982\u300C\u96E8\u591C\u7684\u544A\u767D\u300D\u300C\u5251\u950B\u76F8\u5BF9\u7684\u77AC\u95F4\u300D\uFF09\uFF0C\u4E0D\u8D85\u8FC7 12 \u5B57\n- \u4E8B\u4EF6\u53D9\u8FF0\uFF1A\u7528 1-2 \u53E5\u8BDD\u63CF\u8FF0\u53D1\u751F\u4E86\u4EC0\u4E48\uFF08\u6709\u4EBA\u7269\u52A8\u4F5C\u3001\u573A\u666F\u53D8\u5316\u3001\u5173\u952E\u8F6C\u6298\uFF09\uFF0C\u8981\u6709\u753B\u9762\u611F\n- \u65F6\u95F4\uFF1A\u5267\u60C5\u5185\u7684\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E09\u65E5\u6E05\u6668\u300D\uFF09\u3002\u672A\u63D0\u53CA\u5219\u5199\u300C\u672A\u6807\u6CE8\u300D\n- \u72B6\u6001\uFF1A\u53EA\u80FD\u586B \u8FDB\u884C\u4E2D / \u5DF2\u5B8C\u7ED3 / \u5DF2\u5E9F\u5F03 \u4E09\u8005\u4E4B\u4E00\n\n\u3010\u6B63\u786E\u793A\u4F8B\u3011\n\u7B2C\u4E09\u65E5\u6E05\u6668\uFF5C\u96E8\u591C\u7684\u544A\u767D\uFF5C\u5C0F\u660E\u5728\u5C4B\u6A90\u4E0B\u628A\u661F\u7A7A\u753B\u518C\u9012\u7ED9\u5C0F\u7EA2\uFF0C\u8BF4\u300C\u8FD9\u672C\u8BE5\u548C\u4F60\u4E00\u8D77\u770B\u300D\uFF5C\u5DF2\u5B8C\u7ED3\n\u3010\u9519\u8BEF\u793A\u4F8B\uFF08\u5168\u90E8\u7981\u6B62\uFF0C\u4E25\u7981\u8F93\u51FA\uFF09\u3011\n\u2717 \u65F6\u95F4\u7EBF\u68B3\u7406\u5982\u4E0B\uFF08\u542B\u72B6\u6001\u6807\u8BB0\uFF0C\u4F9B\u540E\u7EED\u53C2\u8003\uFF09\uFF1A\uFF08\u8FD9\u662F\u6307\u4EE4\u56DE\u663E\uFF0C\u4E0D\u662F\u4E8B\u4EF6\u5217\u8868\uFF09\n\u2717 \u672A\u6807\u6CE8\uFF5C\u6C1B\u56F4\u7D27\u5F20\uFF5C\u4E24\u4EBA\u4E4B\u95F4\u7684\u6C14\u6C1B\u53D8\u5F97\u5FAE\u5999\u800C\u5145\u6EE1\u5F20\u529B\uFF08\u8FD9\u662F\u5206\u6790\uFF0C\u4E0D\u662F\u4E8B\u4EF6\uFF09\uFF5C\u8FDB\u884C\u4E2D\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\u3001\u7F16\u53F7\u3001\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        plot: '\u4F60\u662F\u4E00\u4F4D\u8F7B\u5C0F\u8BF4\u5267\u60C5\u7F16\u8F91\u3002\u8BF7\u57FA\u4E8E\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\u548C\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u7EE7\u7EED\u63A8\u8FDB\u8FD9\u4E2A\u6545\u4E8B\u7684**\u5267\u60C5\u4E8B\u4EF6**\u3002\n\n\u4F60\u662F\u300C\u81EA\u6211\u63A8\u8FDB\u300D\u7684\uFF1A\u4E0A\u4E00\u6BB5\u5267\u60C5\u5DF2\u7ECF\u53D1\u751F\u4E86\u4EC0\u4E48\u4F60\u4F1A\u4ECE\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\u8BFB\u5230\uFF0C\u4F60\u8981\u505A\u7684\u662F\u987A\u7740\u5B83\uFF0C\u628A\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u91CC\u65B0\u53D1\u751F\u7684\u4E8B\u5199\u6210\u65B0\u7684\u5267\u60C5\u4E8B\u4EF6\uFF1B\u5982\u679C\u67D0\u6761\u65E7\u7EBF\u5728\u6700\u8FD1\u5BF9\u8BDD\u91CC\u6709\u4E86\u5EF6\u7EED\u6216\u6536\u5C3E\uFF0C\u5C31\u8865\u4E00\u6761\u65B0\u4E8B\u4EF6\u5EF6\u7EED\u5B83\uFF08\u4E0D\u8981\u6539\u5199\u65E7\u7EBF\uFF0C\u53EA\u65B0\u589E\uFF09\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u4E8B\u4EF6\u53D9\u8FF0\n\n\u3010\u7EDD\u5BF9\u7981\u6B62\uFF08\u51FA\u73B0\u5373\u5224\u5B9A\u4E3A\u65E0\u6548\u8F93\u51FA\uFF09\u3011\n1. \u{1F6D1} \u4E25\u7981\u5728\u8F93\u51FA\u524D\u52A0\u4EFB\u4F55\u5F15\u5BFC\u8BED/\u58F0\u660E\u53E5/\u683C\u5F0F\u8BF4\u660E\uFF08\u5982"\u65F6\u95F4\u7EBF\u68B3\u7406\u5982\u4E0B""\u5267\u60C5\u4E8B\u4EF6\u5982\u4E0B""\u6309\u65F6\u95F4\u987A\u5E8F""\u542B\u72B6\u6001\u6807\u8BB0""\u4F9B\u540E\u7EED\u53C2\u8003""\u4EE5\u4E0B\u662F\u2026"\uFF09\u3002\u76F4\u63A5\u4ECE\u7B2C\u4E00\u6761\u4E8B\u4EF6\u5F00\u59CB\u5199\u3002\n2. \u{1F6D1} \u4E25\u7981\u4F7F\u7528\u4EE5\u4E0B\u8BCD\u6C47\u53CA\u5176\u53D8\u4F53\uFF1A\u65F6\u95F4\u7EBF\u3001\u68B3\u7406\u3001\u6574\u7406\u3001\u6C47\u603B\u3001\u6982\u62EC\u3001\u5F52\u7EB3\u3001\u56DE\u987E\u3001\u8BB0\u5F55\u3001\u6838\u5FC3\u4E8B\u4EF6\u3001\u5173\u952E\u4FE1\u606F\u3001\u8981\u70B9\u3001\u6458\u8981\u3001\u6982\u8FF0\u3001\u72B6\u6001\u6807\u8BB0\u3001\u8FDB\u884C\u4E2D\u3001\u5DF2\u5B8C\u7ED3\u3001\u5DF2\u5E9F\u5F03\u3001\u4F9B\u540E\u7EED\u53C2\u8003\u3001\u5206\u6790\u5982\u4E0B\u3001\u63CF\u8FF0\u5982\u4E0B\u3001\u8BF4\u660E\u5982\u4E0B\u3002\n3. \u{1F6D1} \u4E25\u683C\u53EA\u8BB0\u5F55\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u771F\u5B9E\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\u3002\u4E25\u7981\u7F16\u9020\u672A\u53D1\u751F\u7684\u60C5\u8282\uFF0C\u4E25\u7981\u52A0\u5165\u65E0\u5173\u5185\u5BB9\uFF08\u4E16\u754C\u89C2\u8BF4\u660E\u3001\u4EBA\u7269\u80CC\u666F\u95F2\u7B14\uFF09\u3002\n4. \u{1F6D1} \u4E25\u7981\u8F93\u51FA\u5206\u6790\u8BC4\u8BBA\uFF08\u5982"\u8FD9\u8868\u660E\u2026""\u8FD9\u6697\u793A\u7740\u2026"\uFF09\u6216\u5FC3\u7406\u63A8\u6D4B\u2014\u2014\u53EA\u5199\u53D1\u751F\u4E86\u4EC0\u4E48\u5BA2\u89C2\u4E8B\u4EF6\u3002\n5. \u{1F6D1} \u6BCF\u884C\u7684\u300C\u4E8B\u4EF6\u53D9\u8FF0\u300D\u8981\u6709\u753B\u9762\u611F\uFF08\u4EBA\u7269\u52A8\u4F5C+\u573A\u666F\uFF09\uFF0C\u4E0D\u8981\u5199\u5E72\u5DF4\u5DF4\u7684"\u53CC\u65B9\u8FDB\u884C\u4E86\u8BA8\u8BBA"\u3002\n6. \u{1F6D1} \u4E25\u7981\u8F93\u51FA\u4EFB\u4F55\u300C\u72B6\u6001/\u6807\u7B7E\u300D\u5B57\u6837\uFF08\u4E0D\u5199 \u8FDB\u884C\u4E2D/\u5DF2\u5B8C\u7ED3/\u5DF2\u5E9F\u5F03 \u4E4B\u7C7B\uFF09\u3002\n\n\u5199\u4F5C\u8981\u6C42\uFF08\u50CF\u8F7B\u5C0F\u8BF4\u7AE0\u8282\u5927\u7EB2\uFF09\uFF1A\n- \u6807\u9898\uFF1A\u7ED9\u8FD9\u6BB5\u5267\u60C5\u8D77\u4E00\u4E2A\u6709\u753B\u9762\u611F\u7684\u77ED\u6807\u9898\uFF08\u5982\u300C\u96E8\u591C\u7684\u544A\u767D\u300D\u300C\u5251\u950B\u76F8\u5BF9\u7684\u77AC\u95F4\u300D\uFF09\uFF0C\u4E0D\u8D85\u8FC7 12 \u5B57\n- \u4E8B\u4EF6\u53D9\u8FF0\uFF1A\u7528 1-2 \u53E5\u8BDD\u63CF\u8FF0\u53D1\u751F\u4E86\u4EC0\u4E48\uFF08\u6709\u4EBA\u7269\u52A8\u4F5C\u3001\u573A\u666F\u53D8\u5316\u3001\u5173\u952E\u8F6C\u6298\uFF09\uFF0C\u8981\u6709\u753B\u9762\u611F\n- \u65F6\u95F4\uFF1A\u5267\u60C5\u5185\u7684\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E09\u65E5\u6E05\u6668\u300D\uFF09\u3002\u672A\u63D0\u53CA\u5219\u5199\u300C\u672A\u6807\u6CE8\u300D\n\n\u3010\u6B63\u786E\u793A\u4F8B\u3011\n\u7B2C\u4E09\u65E5\u6E05\u6668\uFF5C\u96E8\u591C\u7684\u544A\u767D\uFF5C\u5C0F\u660E\u5728\u5C4B\u6A90\u4E0B\u628A\u661F\u7A7A\u753B\u518C\u9012\u7ED9\u5C0F\u7EA2\uFF0C\u8BF4\u300C\u8FD9\u672C\u8BE5\u548C\u4F60\u4E00\u8D77\u770B\u300D\n\u3010\u9519\u8BEF\u793A\u4F8B\uFF08\u5168\u90E8\u7981\u6B62\uFF0C\u4E25\u7981\u8F93\u51FA\uFF09\u3011\n\u2717 \u65F6\u95F4\u7EBF\u68B3\u7406\u5982\u4E0B\uFF08\u542B\u72B6\u6001\u6807\u8BB0\uFF0C\u4F9B\u540E\u7EED\u53C2\u8003\uFF09\uFF1A\uFF08\u8FD9\u662F\u6307\u4EE4\u56DE\u663E\uFF0C\u4E0D\u662F\u4E8B\u4EF6\u5217\u8868\uFF09\n\u2717 \u672A\u6807\u6CE8\uFF5C\u6C1B\u56F4\u7D27\u5F20\uFF5C\u4E24\u4EBA\u4E4B\u95F4\u7684\u6C14\u6C1B\u53D8\u5F97\u5FAE\u5999\u800C\u5145\u6EE1\u5F20\u529B\uFF08\u8FD9\u662F\u5206\u6790\uFF0C\u4E0D\u662F\u4E8B\u4EF6\uFF09\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\u3001\u7F16\u53F7\u3001\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u5173\u7CFB\u3011\n{{relations}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         worldview: '\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u6545\u4E8B\u6240\u5904\u4E16\u754C\u672C\u8EAB\u7684\u300C\u5E95\u5C42\u89C4\u5219\u8BBE\u5B9A\u300D\u3002\n\n\u3010\u6700\u9AD8\u7EA7\u7981\u4EE4\uFF08\u8FDD\u53CD\u5219\u8F93\u51FA\u65E0\u6548\uFF09\u3011\n1. \u{1F6D1} \u300C\u4E16\u754C\u8BBE\u5B9A\u300D\u53EA\u5199\u4E16\u754C\u672C\u8EAB\u7684\u901A\u7528\u89C4\u5219\u3001\u6CD5\u5219\u3001\u5386\u53F2\u80CC\u666F\u3001\u529B\u91CF\u4F53\u7CFB\uFF0C**\u7EDD\u4E0D\u5199**\u5355\u4E2A\u5177\u4F53\u7269\u54C1\u3001\u5355\u4E2A\u5177\u4F53\u89D2\u8272\u59D3\u540D\u3001\u5355\u4E2A\u5177\u4F53\u5730\u70B9\u540D\u79F0\u3001\u5355\u6B21\u5177\u4F53\u4E8B\u4EF6\u3002\n2. \u{1F6D1} \u53EA\u63D0\u70BC\u80FD\u4ECE\u5267\u60C5\u4E2D\u5F52\u7EB3\u51FA\u7684\u3001\u53EF\u590D\u7528\u7684\u4E16\u754C\u8FD0\u884C\u89C4\u5F8B\u3002\u4E25\u7981\u628A\u67D0\u4E00\u6BB5\u5267\u60C5\u3001\u67D0\u4E00\u4E2A\u4EBA\u3001\u67D0\u4E00\u4E2A\u5730\u70B9\u5F53\u6210\u300C\u8BBE\u5B9A\u300D\u5199\u8FDB\u6765\u3002\n3. \u{1F6D1} \u4E25\u7981\u7F16\u9020\u4E0E\u5267\u60C5\u6BEB\u65E0\u5173\u8054\u7684\u5B8F\u5927\u8BBE\u5B9A\uFF1B\u8BBE\u5B9A\u5FC5\u987B\u80FD\u4ECE\u3010\u5267\u60C5\u7EBF\u3011\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u627E\u5230\u4F9D\u636E\u6216\u5408\u7406\u5EF6\u4F38\u3002\n\n\u4E25\u683C\u6309\u4EE5\u4E0B\u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u6DFB\u52A0\u4EFB\u4F55\u591A\u4F59\u8BF4\u660E\uFF1A\n\n\u4E16\u754C\u540D\uFF1A\uFF08\u8FD9\u4E2A\u4E16\u754C/\u5927\u9646/\u57CE\u5E02\u53EB\u4EC0\u4E48\uFF0C\u6CA1\u6709\u5C31\u8D77\u4E00\u4E2A\u8D34\u5207\u7684\uFF09\n\u4E16\u754C\u7C7B\u578B\uFF1A\uFF08\u7528\u4E00\u4E2A\u8BCD\u6982\u62EC\uFF0C\u5982\uFF1A\u4FEE\u4ED9\u4E16\u754C\u3001\u8D5B\u535A\u670B\u514B\u3001\u84B8\u6C7D\u670B\u514B\u3001\u73B0\u4EE3\u90FD\u5E02\u3001\u5251\u4E0E\u9B54\u6CD5\uFF09\n\u7B80\u8FF0\uFF1A\uFF08\u4E00\u5230\u4E24\u53E5\u8BDD\u8BF4\u660E\u8FD9\u662F\u4E2A\u4EC0\u4E48\u6837\u7684\u4E16\u754C\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E00\n\uFF08\u56F4\u7ED5"\u4E16\u754C\u7C7B\u578B"\u5C55\u5F00\u7684\u5177\u4F53\u89C4\u5219\u4E0E\u6CD5\u5219\u3002\u4F8B\u5982\u4FEE\u4ED9\u4E16\u754C\u5C31\u5199\u4FEE\u70BC\u4F53\u7CFB\u7684\u5883\u754C\u5212\u5206\u3001\u7075\u6C14\u8FD0\u884C\u6CD5\u5219\uFF1B\u8D5B\u535A\u670B\u514B\u5C31\u5199\u4E49\u4F53\u6539\u9020\u89C4\u5219\u3001\u4F01\u4E1A\u4E0E\u8D22\u9600\u7684\u8FD0\u884C\u6CD5\u5219\uFF09\n\n## \u8BBE\u5B9A\u6807\u9898\u4E8C\n\uFF08\u5185\u5BB9\uFF09\n\n\u8981\u6C42\uFF1A\n1. \u300C\u4E16\u754C\u7C7B\u578B\u300D\u51B3\u5B9A\u4E86\u4E0B\u9762\u5199\u4EC0\u4E48\u3002\u4FEE\u4ED9\u4E16\u754C\u5C31\u5FC5\u987B\u5199\u4FEE\u70BC\u4F53\u7CFB\u3001\u7075\u6C14\u3001\u6CD5\u5219\u7B49\uFF0C\u4E0D\u8981\u5199\u65E0\u5173\u5185\u5BB9\u3002\n2. \u6BCF\u6761\u8BBE\u5B9A\u8981\u5177\u4F53\u3001\u53EF\u88AB\u540E\u7EED\u5267\u60C5\u5F15\u7528\uFF0C\u4E0D\u8981\u7A7A\u6CDB\u3002\n3. \u8F93\u51FA 3-6 \u6761\u8BBE\u5B9A\u6761\u76EE\u3002\n\n\u3010\u6B63\u786E\u793A\u4F8B\u3011\n## \u7075\u6C14\u8FD0\u884C\u6CD5\u5219\n\u7075\u6C14\u81EA\u5B50\u591C\u8D77\u6700\u4E3A\u5145\u76C8\uFF0C\u4FEE\u8005\u9700\u5728\u6B64\u65F6\u5410\u7EB3\u65B9\u80FD\u8FDB\u9636\u3002\n\u3010\u9519\u8BEF\u793A\u4F8B\uFF08\u4E25\u7981\uFF09\u3011\n## \u5C0F\u660E\u7684\u8EAB\u4E16\n\u5C0F\u660E\u662F\u5B64\u513F\uFF0C\u5E7C\u5E74\u88AB\u9001\u81F3\u5B97\u95E8\u3002\uFF08\u8FD9\u662F\u89D2\u8272\uFF0C\u4E0D\u662F\u4E16\u754C\u8BBE\u5B9A\uFF09\n## \u843D\u971E\u9547\n\u843D\u971E\u9547\u4F4D\u4E8E\u5927\u9646\u4E1C\u9672\u3002\uFF08\u8FD9\u662F\u5730\u70B9\uFF0C\u4E0D\u662F\u4E16\u754C\u8BBE\u5B9A\uFF09\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u7269\u54C1\u5FC5\u987B\u4E0E\u300C\u89D2\u8272\u300D\u548C\u300C\u5267\u60C5\u300D\u4EA7\u751F\u5173\u8054\uFF0C\u5B64\u7ACB\u7684\u666E\u901A\u9053\u5177\u3001\u6D88\u8017\u54C1\u3001\u73AF\u5883\u6742\u7269\u4E0D\u8981\u8BB0\u5F55\u3002\n\n\u8BF7\u57FA\u4E8E\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u62BD\u53D6\u672C\u6BB5\u51FA\u73B0\u7684\u5177\u6709\u5267\u60C5\u610F\u4E49\u7684\u7269\u54C1/\u9053\u5177/\u4FE1\u7269/\u88C5\u5907\u3002\n\n\u3010\u6700\u9AD8\u7EA7\u7981\u4EE4\uFF08\u8FDD\u53CD\u5219\u8F93\u51FA\u65E0\u6548\uFF09\u3011\n1. \u{1F6D1} \u53EA\u8BB0\u5F55\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u771F\u5B9E\u51FA\u73B0\u3001\u4E14\u6EE1\u8DB3\u6761\u4EF6\u7684\u7269\u54C1\u3002\u4E25\u7981\u7F16\u9020\u5BF9\u8BDD\u91CC\u6CA1\u6709\u7684\u7269\u54C1\u3002\n2. \u{1F6D1} \u53EA\u8BB0\u5F55\u4E0E\u89D2\u8272\u6216\u5267\u60C5\u4EA7\u751F\u5173\u8054\u7684\u7269\u54C1\uFF0C\u4E0D\u8BB0\u5F55\u65E0\u5173\u7684\u65E5\u5E38\u6742\u7269\u3002\n3. \u{1F6D1} \u6301\u6709\u8005\u5FC5\u987B\u662F\u5BF9\u8BDD/\u5267\u60C5\u4E2D\u51FA\u73B0\u8FC7\u7684\u89D2\u8272\u540D\uFF0C\u4E0D\u53EF\u51ED\u7A7A\u634F\u9020\uFF1B\u4E0D\u660E\u65F6\u5199\u300C\u672A\u77E5\u300D\u3002\n\n\u6BCF\u884C\u4E00\u6761\uFF0C\u4E25\u683C\u7528\u7AD6\u7EBF\u5206\u9694\uFF0C\u683C\u5F0F\uFF1A\n\u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\n\n\u8BF4\u660E\uFF1A\n- \u7269\u54C1\u540D\uFF1A\u7269\u54C1\u7684\u540D\u79F0\u3002\n- \u4F5C\u7528\uFF1A\u8FD9\u4EF6\u7269\u54C1\u6709\u4EC0\u4E48\u7528\u9014\u3001\u6548\u679C\u6216\u8C61\u5F81\u610F\u4E49\uFF08\u5FC5\u586B\uFF0C\u4E0D\u53EF\u5199\u300C\u65E0\u300D\uFF09\u3002\n- \u6301\u6709\u8005\uFF1A\u73B0\u5728\u5728\u54EA\u4E2A\u89D2\u8272\u624B\u4E0A\u3002\u5FC5\u987B\u662F\u3010\u5267\u60C5\u7EBF\u3011\u6216\u5BF9\u8BDD\u4E2D\u51FA\u73B0\u8FC7\u7684\u89D2\u8272\u540D\uFF1B\u786E\u5B9E\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n- \u5173\u8054\u5267\u60C5\uFF1A\u8FD9\u4EF6\u7269\u54C1\u7275\u6D89\u5230\u54EA\u6761\u5267\u60C5\u7EBF\uFF0C\u8BF7\u4ECE\u4E0B\u9762\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u7684\u6807\u9898\u4E2D\u6311\u9009\uFF0C\u53EF\u591A\u4E2A\u7528\u987F\u53F7\u5206\u9694\uFF1B\u90FD\u4E0D\u6CBE\u8FB9\u5199\u300C\u65E0\u300D\u3002\n- \u6765\u5386\uFF1A\u4ECE\u54EA\u91CC\u83B7\u5F97\u7684\uFF0C\u4E0D\u660E\u5199\u300C\u672A\u77E5\u300D\u3002\n\n\u5224\u65AD\u6807\u51C6\uFF1A\u53EA\u8BB0\u5F55\u6EE1\u8DB3\u4EE5\u4E0B\u4EFB\u4E00\u6761\u4EF6\u7684\u7269\u54C1\u2014\u2014\n(a) \u88AB\u67D0\u4E2A\u89D2\u8272\u660E\u786E\u6301\u6709\u6216\u4E89\u593A\uFF1B\n(b) \u63A8\u52A8\u4E86\u67D0\u6761\u5267\u60C5\u7EBF\u7684\u53D1\u5C55\uFF1B\n(c) \u662F\u89D2\u8272\u5173\u7CFB\u6216\u8EAB\u4EFD\u7684\u4FE1\u7269\u3002\n\n\u4E0D\u8981\u8F93\u51FA\u8868\u5934\uFF0C\u4E0D\u8981\u7F16\u53F7\uFF0C\u4E0D\u8981\u989D\u5916\u8BF4\u660E\u3002\u6700\u591A 8 \u6761\u3002\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
       }
@@ -585,8 +596,7 @@ ${it.message}`;
       return {
         title: String(o && o.title || "").trim(),
         summary: String(o && o.summary || "").trim(),
-        time: String(o && o.time || "").trim(),
-        status: o && o.status || "active"
+        time: String(o && o.time || "").trim()
       };
     }
     async function addPlot(a, summary, status) {
@@ -679,6 +689,14 @@ ${it.message}`;
     function getSummaryPointer() {
       return load().summaryPointer || 0;
     }
+    async function setPlotPointer(idx) {
+      const s = load();
+      s.plotPointer = idx;
+      await save(s);
+    }
+    function getPlotPointer() {
+      return load().plotPointer || 0;
+    }
     function exportJSON() {
       const s = load();
       return JSON.stringify({ type: "warmmemo_v2", exportedAt: Date.now(), data: s }, null, 2);
@@ -764,6 +782,8 @@ ${it.message}`;
       dispatchLorebook,
       setSummaryPointer,
       getSummaryPointer,
+      setPlotPointer,
+      getPlotPointer,
       exportJSON,
       importJSON,
       clearAll
@@ -1826,8 +1846,97 @@ ${recent}
       throw lastErr || new Error("LLM \u8C03\u7528\u5931\u8D25");
     }
     let _summarizing = false;
+    let _plotting = false;
     function isSummarizing() {
       return _summarizing;
+    }
+    function isPlotting() {
+      return _plotting;
+    }
+    function computeRange(settings, opts, modeKey, getPtr, forceAllKey) {
+      opts = opts || {};
+      const auto = settings[modeKey] || "new";
+      const msgs = getRecentMessages(1e3);
+      const total = msgs.length;
+      if (!total) return { skip: true, range: [0, 0], total, reason: "\u5F53\u524D\u5BF9\u8BDD\u6CA1\u6709\u53EF\u603B\u7ED3\u7684\u697C\u5C42\uFF08\u8BF7\u5148\u6709\u5BF9\u8BDD\u5185\u5BB9\uFF09" };
+      let range;
+      if (opts.forceAll) {
+        range = [1, total];
+      } else if (auto === "new") {
+        const ptr = getPtr();
+        if (ptr >= total) return { skip: true, range: [ptr + 1, total], total, reason: "\u6CA1\u6709\u65B0\u589E\u697C\u5C42\u9700\u8981\u5904\u7406\uFF08\u5DF2\u5904\u7406\u5230\u6700\u65B0\uFF09" };
+        range = [ptr + 1, total];
+      } else if (auto === "count") {
+        const win = Math.max(5, settings[forceAllKey ? forceAllKey.replace("Mode", "Count") : modeKey.replace("Mode", "Count")] || 20);
+        const from = Math.max(0, total - win);
+        range = [from + 1, total];
+      } else if (auto === "range") {
+        const startKey = modeKey.replace("Mode", "Start"), endKey = modeKey.replace("Mode", "End");
+        const start = Math.max(1, settings[startKey] || 1);
+        let end = settings[endKey];
+        if (end == null || end < 0) end = total;
+        end = Math.min(end, total);
+        if (start > end) return { skip: true, range: [start, end], total, reason: "\u533A\u95F4\u8D77\u59CB\u5927\u4E8E\u7ED3\u675F" };
+        range = [start, end];
+      } else if (auto === "floor") {
+        const floor = Math.max(1, settings[modeKey.replace("Mode", "Floor")] || 20);
+        const ptr = getPtr();
+        const segEnd = Math.floor(ptr / floor) * floor + floor;
+        if (opts.forceEnd) {
+          if (ptr >= total) return { skip: true, range: [ptr + 1, total], total, reason: "\u5DF2\u5168\u90E8\u5904\u7406\u5B8C\uFF0C\u65E0\u65B0\u589E\u697C\u5C42" };
+          range = total < segEnd ? [ptr + 1, total] : [ptr + 1, Math.min(total, segEnd)];
+        } else {
+          if (total < segEnd) return { skip: true, range: [ptr + 1, Math.min(total, segEnd)], total, reason: "\u5C1A\u672A\u6512\u6EE1\u4E00\u6BB5\uFF0C\u6682\u4E0D\u5904\u7406" };
+          range = [ptr + 1, Math.min(total, segEnd)];
+        }
+      } else {
+        return { skip: true, range: [0, 0], total, reason: "\u672A\u77E5\u7684\u5904\u7406\u6A21\u5F0F\uFF1A" + auto };
+      }
+      const recent = msgs.slice(range[0] - 1, range[1]);
+      if (!recent.length) return { skip: true, range, total, reason: "\u8BA1\u7B97\u51FA\u7684\u5904\u7406\u533A\u95F4\u4E3A\u7A7A" };
+      return { range, recent, total };
+    }
+    function parseRelations(out) {
+      let parsed = [];
+      try {
+        const arr = JSON.parse(out);
+        if (Array.isArray(arr)) parsed = arr;
+      } catch (e) {
+        const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
+        parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+          const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+          if (!m) return null;
+          const from = m[1].trim(), to = m[2].trim(), label = (m[3] || "").trim();
+          if (!from || !to || !label) return null;
+          if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
+          if (label.length > 10) return null;
+          if (from.length > 8 || to.length > 8) return null;
+          return { from, to, label };
+        }).filter(Boolean);
+      }
+      return parsed;
+    }
+    function parsePlots(out) {
+      const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
+      const result = [];
+      for (const ln of lines) {
+        const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
+        if (!parts.length) continue;
+        let time = "", title = "", summary = "";
+        if (parts.length >= 3) {
+          time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
+          title = parts[1] || "";
+          summary = parts[2] || "";
+        } else if (parts.length === 2) {
+          title = parts[0];
+          summary = parts[1];
+        } else {
+          title = parts[0];
+        }
+        if (!title) continue;
+        result.push({ time, title, summary });
+      }
+      return result;
     }
     async function triggerSummary(settings, opts) {
       opts = opts || {};
@@ -1839,57 +1948,21 @@ ${recent}
         } catch (e) {
         }
       }
-      const auto = settings.autoSummaryMode || "new";
       if (!settings.autoSummaryEnabled) return { ok: false, reason: "\u81EA\u52A8\u603B\u7ED3\u672A\u5F00\u542F" };
       if (_summarizing) return { ok: false, reason: "\u4E0A\u4E00\u6BB5\u603B\u7ED3\u4ECD\u5728\u8FD0\u884C\uFF0C\u8BF7\u7A0D\u5019" };
       _summarizing = true;
-      let range, total;
+      let range, total, recent;
       try {
-        const msgs = getRecentMessages(1e3);
-        total = msgs.length;
-        if (!total) return { ok: false, range: [0, 0], reason: "\u5F53\u524D\u5BF9\u8BDD\u6CA1\u6709\u53EF\u603B\u7ED3\u7684\u697C\u5C42\uFF08\u8BF7\u5148\u6709\u5BF9\u8BDD\u5185\u5BB9\uFF09" };
-        if (opts.forceAll) {
-          range = [1, total];
-        } else if (auto === "new") {
-          const ptr = WM.MemoryStore.getSummaryPointer();
-          if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: "\u6CA1\u6709\u65B0\u589E\u697C\u5C42\u9700\u8981\u603B\u7ED3\uFF08\u5DF2\u603B\u7ED3\u5230\u6700\u65B0\uFF09" };
-          range = [ptr + 1, total];
-        } else if (auto === "count") {
-          const win = Math.max(5, settings.autoSummaryCount || 20);
-          const from = Math.max(0, total - win);
-          range = [from + 1, total];
-        } else if (auto === "range") {
-          const start = Math.max(1, settings.autoSummaryStart || 1);
-          let end = settings.autoSummaryEnd;
-          if (end == null || end < 0) end = total;
-          end = Math.min(end, total);
-          if (start > end) return { ok: false, range: [start, end], reason: "\u533A\u95F4\u8D77\u59CB\u5927\u4E8E\u7ED3\u675F" };
-          range = [start, end];
-        } else if (auto === "floor") {
-          const floor = Math.max(1, settings.autoSummaryFloor || 20);
-          const ptr = WM.MemoryStore.getSummaryPointer();
-          const segEnd = Math.floor(ptr / floor) * floor + floor;
-          if (opts.forceEnd) {
-            if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: "\u5DF2\u5168\u90E8\u603B\u7ED3\u5B8C\uFF0C\u65E0\u65B0\u589E\u697C\u5C42" };
-            if (total < segEnd) range = [ptr + 1, total];
-            else range = [ptr + 1, Math.min(total, segEnd)];
-          } else {
-            if (total < segEnd) return { ok: false, range: [ptr + 1, Math.min(total, segEnd)], reason: "\u5C1A\u672A\u6512\u6EE1\u4E00\u6BB5\uFF0C\u6682\u4E0D\u603B\u7ED3" };
-            range = [ptr + 1, Math.min(total, segEnd)];
-          }
-        } else {
-          return { ok: false, range: [0, 0], reason: "\u672A\u77E5\u7684\u81EA\u52A8\u603B\u7ED3\u6A21\u5F0F\uFF1A" + auto };
-        }
-        const recent = msgs.slice(range[0] - 1, range[1]);
-        if (!recent.length) return { ok: false, range, reason: "\u8BA1\u7B97\u51FA\u7684\u603B\u7ED3\u533A\u95F4\u4E3A\u7A7A" };
+        const cr = computeRange(settings, opts, "autoSummaryMode", () => WM.MemoryStore.getSummaryPointer());
+        if (cr.skip) return { ok: false, range: cr.range, reason: cr.reason };
+        range = cr.range;
+        recent = cr.recent;
+        total = cr.total;
         const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
-        const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n");
-        const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title}\uFF1A${p.summary}`).join("\n");
         const summaryTpl = settings.prompts && settings.prompts.summary;
         const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-        let summaryText = "";
         try {
-          summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
+          const summaryText = await callLLM(sys, "\u8BF7\u8F93\u51FA\u8FD9\u6BB5\u5BF9\u8BDD\u7684\u603B\u7ED3\uFF1A", settings, { temperature: 0.3, phase: "summary" });
           await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
           await WM.MemoryStore.setSummaryPointer(range[1]);
         } catch (e) {
@@ -1899,78 +1972,6 @@ ${recent}
         }
         const tasks = [];
         const labels = [];
-        if (settings.autoRelation !== false) {
-          tasks.push((async () => {
-            const tpl = settings.prompts && settings.prompts.relations;
-            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
-            let parsed = [];
-            try {
-              const arr = JSON.parse(out);
-              if (Array.isArray(arr)) parsed = arr;
-            } catch (e) {
-              const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
-              parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-                const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-                if (!m) return null;
-                const from = m[1].trim(), to = m[2].trim(), label = (m[3] || "").trim();
-                if (!from || !to || !label) return null;
-                if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
-                if (label.length > 10) return null;
-                if (from.length > 8 || to.length > 8) return null;
-                return { from, to, label };
-              }).filter(Boolean);
-            }
-            const prev = WM.MemoryStore.getRelations() || [];
-            const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
-            await WM.MemoryStore.setRelations(merged);
-            return { kind: "relations", ok: true };
-          })());
-          labels.push("relations");
-        }
-        if (settings.autoPlot !== false) {
-          tasks.push((async () => {
-            const tpl = settings.prompts && settings.prompts.plot;
-            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
-            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u5267\u60C5\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u5185\u5BB9\uFF5C\u72B6\u6001\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
-            function normStatus(raw) {
-              if (!raw) return "active";
-              const t = String(raw).replace(/[【】\[\]（）()]/g, "").trim();
-              if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕|落幕了|大结局|终章|结局|圆满|成功|解决|完成)$/.test(t)) return "done";
-              if (/(完结|完成|结束|告一段落|落幕|解决|达成|实现)/.test(t)) return "done";
-              if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止|夭折|不了了之)$/.test(t)) return "abandon";
-              if (/(废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止)/.test(t)) return "abandon";
-              return "active";
-            }
-            const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
-            for (const ln of lines) {
-              const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
-              if (!parts.length) continue;
-              let time = "", title = "", summary = "", status = "active";
-              if (parts.length >= 4) {
-                time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
-                title = parts[1] || "";
-                summary = parts[2] || "";
-                status = normStatus(parts[3]);
-              } else if (parts.length === 3) {
-                title = parts[0];
-                summary = parts[1];
-                status = normStatus(parts[2]);
-              } else if (parts.length === 2) {
-                title = parts[0];
-                summary = parts[1];
-              } else {
-                title = parts[0];
-              }
-              if (!title) continue;
-              const exist = (WM.MemoryStore.getPlots() || []).find((p) => p.title === title);
-              if (exist) await WM.MemoryStore.updatePlot(exist.id, { time, title, summary, status });
-              else await WM.MemoryStore.addPlot({ time, title, summary, status });
-            }
-            return { kind: "plot", ok: true };
-          })());
-          labels.push("plot");
-        }
         if (settings.autoWorld !== false) {
           tasks.push((async () => {
             const world = await WM.Worldbook.inferWorldview(settings, { recent });
@@ -2000,10 +2001,7 @@ ${recent}
             const tpl = settings.prompts && settings.prompts.itemExtract;
             if (!tpl) return { kind: "items", ok: true, skipped: true };
             const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
-            const s = fillTemplate(tpl, {
-              recent: buildDialogue(recent, settings),
-              plot: knownPlots
-            });
+            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
             const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
             const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
             const allPlots = WM.MemoryStore.getPlots() || [];
@@ -2039,9 +2037,8 @@ ${recent}
         const successes = [];
         results.forEach((r, i) => {
           if (r.status === "rejected") {
-            const scope = labels[i];
-            failures.push({ scope, err: r.reason });
-            if (WM.ErrLog) WM.ErrLog.add(scope, r.reason, { range }).catch(() => {
+            failures.push({ scope: labels[i], err: r.reason });
+            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
             });
           } else if (r.value && !r.value.skipped) {
             successes.push(r.value.kind);
@@ -2050,14 +2047,96 @@ ${recent}
         if (failures.length === results.length && failures.length > 0) {
           const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
           if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u6240\u6709\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, reason });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
+          WM.UI && WM.UI.toast && WM.UI.toast("\u8BB0\u5FC6\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
         } else if (failures.length > 0) {
           const okList = successes.join("\u3001") || "\u65E0";
           const failList = failures.map((f) => f.scope).join("\u3001");
-          const detail = "\u6210\u529F\uFF1A" + okList + "\uFF1B\u5931\u8D25\uFF1A" + failList;
-          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u90E8\u5206\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, ok: successes, fail: failures.map((f) => f.scope), detail }).catch(() => {
+          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u90E8\u5206\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
           });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u63D0\u70BC\u5931\u8D25 \u2192 " + detail, "warn");
+          WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u8BB0\u5FC6\u63D0\u70BC\u5931\u8D25 \u2192 \u6210\u529F\uFF1A" + okList + "\uFF1B\u5931\u8D25\uFF1A" + failList, "warn");
+        }
+        if (WM.UI && WM.UI.refresh) WM.UI.refresh();
+        return { ok: true, range, count: recent.length, partial: failures.length > 0, successes, failures: failures.map((f) => f.scope) };
+      } finally {
+        _summarizing = false;
+      }
+    }
+    async function triggerPlot(settings, opts) {
+      opts = opts || {};
+      settings = settings || {};
+      if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
+        try {
+          const fresh = WM.Settings && WM.Settings.load && WM.Settings.load();
+          if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh;
+        } catch (e) {
+        }
+      }
+      if (settings.autoPlotEnabled === false) return { ok: false, reason: "\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u672A\u5F00\u542F" };
+      if (_plotting) return { ok: false, reason: "\u4E0A\u4E00\u6BB5\u5267\u60C5\u7EBF\u4ECD\u5728\u63A8\u8FDB\uFF0C\u8BF7\u7A0D\u5019" };
+      _plotting = true;
+      let range, total, recent;
+      try {
+        const cr = computeRange(settings, opts, "autoPlotMode", () => WM.MemoryStore.getPlotPointer());
+        if (cr.skip) return { ok: false, range: cr.range, reason: cr.reason };
+        range = cr.range;
+        recent = cr.recent;
+        total = cr.total;
+        const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
+        const plotsSorted = WM.MemoryStore.getPlotsSorted ? WM.MemoryStore.getPlotsSorted() : WM.MemoryStore.getPlots() || [];
+        const historyPlot = plotsSorted.map((p) => `\xB7 ${p.time ? "[" + p.time + "] " : ""}${p.title}\uFF1A${p.summary}`).join("\n") || "\uFF08\u6682\u65E0\uFF0C\u8BF7\u4ECE\u6700\u8FD1\u5BF9\u8BDD\u8D77\u7B14\uFF09";
+        const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n") || "\uFF08\u6682\u65E0\u5DF2\u77E5\u5173\u7CFB\uFF09";
+        const tasks = [];
+        const labels = [];
+        if (settings.autoRelation !== false) {
+          tasks.push((async () => {
+            const tpl = settings.prompts && settings.prompts.relations;
+            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
+            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
+            const parsed = parseRelations(out);
+            const prev = WM.MemoryStore.getRelations() || [];
+            const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
+            await WM.MemoryStore.setRelations(merged);
+            return { kind: "relations", ok: true };
+          })());
+          labels.push("relations");
+        }
+        if (settings.autoPlot !== false) {
+          tasks.push((async () => {
+            const tpl = settings.prompts && settings.prompts.plot;
+            const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
+            const out = await callLLM(s, "\u8BF7\u57FA\u4E8E\u5DF2\u6709\u5267\u60C5\u7EBF\u7EE7\u7EED\u63A8\u8FDB\uFF0C\u8F93\u51FA\u672C\u6BB5\u65B0\u589E\u7684\u5267\u60C5\u4E8B\u4EF6\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u4E8B\u4EF6\u53D9\u8FF0\uFF09\uFF1A", settings, { temperature: 0.4, phase: "plot" });
+            const parsed = parsePlots(out);
+            const existing = WM.MemoryStore.getPlots() || [];
+            for (const ev of parsed) {
+              const exist = existing.find((p) => p.title === ev.title);
+              if (exist) await WM.MemoryStore.updatePlot(exist.id, ev);
+              else await WM.MemoryStore.addPlot(ev);
+            }
+            await WM.MemoryStore.setPlotPointer(range[1]);
+            return { kind: "plot", ok: true };
+          })());
+          labels.push("plot");
+        }
+        const results = await Promise.allSettled(tasks);
+        const failures = [];
+        const successes = [];
+        results.forEach((r, i) => {
+          if (r.status === "rejected") {
+            failures.push({ scope: labels[i], err: r.reason });
+            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
+            });
+          } else if (r.value) {
+            successes.push(r.value.kind);
+          }
+        });
+        if (failures.length === results.length && failures.length > 0) {
+          const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
+          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u7EBF\u5E76\u884C\u4EFB\u52A1\u5168\u90E8\u5931\u8D25"), { range, reason });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u7EBF\u63A8\u8FDB\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
+        } else if (failures.length > 0) {
+          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25"), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
+          });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25 \u2192 " + failures.map((f) => f.scope).join("\u3001"), "warn");
         }
         if (WM.UI && WM.UI.refresh) WM.UI.refresh();
         return {
@@ -2069,16 +2148,14 @@ ${recent}
           failures: failures.map((f) => f.scope),
           results: {
             relations: (WM.MemoryStore.getRelations() || []).length,
-            plots: (WM.MemoryStore.getPlots() || []).length,
-            world: !!(WM.MemoryStore.getWorld() || "").trim(),
-            items: (WM.MemoryStore.getItems ? WM.MemoryStore.getItems() : []).length
+            plots: (WM.MemoryStore.getPlots() || []).length
           }
         };
       } finally {
-        _summarizing = false;
+        _plotting = false;
       }
     }
-    WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages, isSummarizing };
+    WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, getRecentMessages, toMessages, isSummarizing, isPlotting };
   })();
 
   // src/config/relations.js
@@ -2144,8 +2221,7 @@ ${recent}
       });
       (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach((p) => {
         if (!p.title && !p.summary) return;
-        const stat = p.status === "done" ? "\u5DF2\u5B8C\u7ED3" : p.status === "abandon" ? "\u5DF2\u5E9F\u5F03" : "\u8FDB\u884C\u4E2D";
-        cands.push({ id: p.id, type: "\u5267\u60C5", text: `${p.time ? "[" + p.time + "] " : ""}${p.title || ""}\uFF08${stat}\uFF09
+        cands.push({ id: p.id, type: "\u5267\u60C5", text: `${p.time ? "[" + p.time + "] " : ""}${p.title || ""}
 ${p.summary || ""}`.trim() });
       });
       (s.items || []).forEach((it) => {
@@ -2486,10 +2562,12 @@ ${p.summary || ""}`.trim() });
         </details>
         <details class="wm-fold" open>
           <summary>\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</summary>
-          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation ? "checked" : ""}/> \u5173\u7CFB\u56FE</label>
-          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
-          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
-          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems ? "checked" : ""}/> \u7269\u54C1\u8FFD\u8E2A</label>
+          <div class="wm-hint">\u8BB0\u5FC6\u7C7B\uFF08\u968F\u603B\u7ED3\u4E00\u8D77\u8DD1\uFF09\uFF1A\u4E16\u754C\u89C2\u8BBE\u5B9A\u3001\u7269\u54C1\u8FFD\u8E2A\u3002<br/>\u5267\u60C5\u7C7B\uFF08\u72EC\u7ACB\u6D41\u7A0B\uFF0C\u4E0E\u603B\u7ED3\u89E3\u8026\uFF09\uFF1A\u5267\u60C5\u7EBF + \u5173\u7CFB\u56FE \u2014\u2014 \u89E6\u53D1\u65F6\u5E76\u8054\u8C03\u7528\uFF0C\u5E76\u57FA\u4E8E\u300C\u5DF2\u6709\u5267\u60C5\u7EBF\u300D\u81EA\u6211\u63A8\u8FDB\uFF0C\u603B\u7ED3\u4E0D\u518D\u987A\u5E26\u8DD1\u5B83\u4EEC\u3002</div>
+          <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled !== false ? "checked" : ""}/> \u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\uFF08\u542B\u5173\u7CFB\u56FE\uFF09</label>
+          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation !== false ? "checked" : ""}/> \u5173\u7CFB\u56FE\uFF08\u968F\u5267\u60C5\u7EBF\u4E00\u5E76\u8DD1\uFF09</label>
+          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot !== false ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
+          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld !== false ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
+          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems !== false ? "checked" : ""}/> \u7269\u54C1\u8FFD\u8E2A</label>
         </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">\u4FDD\u5B58\u8BBE\u7F6E</button>
@@ -2543,10 +2621,16 @@ ${p.summary || ""}`.trim() });
         s.autoSummaryStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
         s.autoSummaryEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
         s.autoHideFloors = body.querySelector("#a-hide").checked;
+        s.autoPlotEnabled = body.querySelector("#a-plotflow").checked;
         s.autoRelation = body.querySelector("#a-rel").checked;
         s.autoPlot = body.querySelector("#a-plot").checked;
         s.autoWorld = body.querySelector("#a-world").checked;
         s.autoItems = body.querySelector("#a-item").checked;
+        s.autoPlotMode = mode.value;
+        s.autoPlotCount = parseInt(body.querySelector("#a-count").value, 10) || 20;
+        s.autoPlotFloor = parseInt(body.querySelector("#a-floor").value, 10) || 20;
+        s.autoPlotStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
+        s.autoPlotEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
         s.tagStripRules = Array.from(body.querySelectorAll("#tag-rules .wm-tag-rule")).map((row) => {
           const close = row.querySelector(".t-close").value.trim();
           return {
@@ -2564,15 +2648,24 @@ ${p.summary || ""}`.trim() });
       };
       body.querySelector("#a-run").onclick = async () => {
         const st = body.querySelector("#auto-status");
-        st.textContent = "\u603B\u7ED3\u4E2D\u2026";
+        st.textContent = "\u5904\u7406\u4E2D\u2026";
         try {
           const fresh = WM.Settings.load();
           const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+          let msg = "";
           if (r && r.ok) {
-            st.textContent = `\u2713 \u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u5173\u7CFB${r.results.relations} \u5267\u60C5${r.results.plots} \u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}`;
+            msg += `\u2713 \u8BB0\u5FC6 ${r.count} \u6761\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}
+`;
           } else {
-            st.textContent = "\u2717 " + (r && r.reason ? r.reason : "\u5931\u8D25");
+            msg += "\u2717 \u8BB0\u5FC6\uFF1A" + (r && r.reason ? r.reason : "\u5931\u8D25") + "\n";
           }
+          const rp = await WM.Summary.triggerPlot(fresh, { forceAll: true });
+          if (rp && rp.ok) {
+            msg += `\u2713 \u5267\u60C5\u7EBF\u63A8\u8FDB ${rp.count} \u6761\uFF08\u5173\u7CFB${rp.results.relations} \u5267\u60C5${rp.results.plots}\uFF09`;
+          } else {
+            msg += "\u2717 \u5267\u60C5\u7EBF\uFF1A" + (rp && rp.reason ? rp.reason : "\u5931\u8D25");
+          }
+          st.textContent = msg;
         } catch (e) {
           st.textContent = "\u2717 " + (e.message || e);
         }
@@ -2835,15 +2928,6 @@ ${p.summary || ""}`.trim() });
         }, 30);
       });
     }
-    const PLOT_STATUS = [
-      { value: "active", label: "\u8FDB\u884C\u4E2D" },
-      { value: "done", label: "\u5DF2\u5B8C\u7ED3" },
-      { value: "abandon", label: "\u5DF2\u5E9F\u5F03" }
-    ];
-    function statusLabel(v) {
-      const h = PLOT_STATUS.find((x) => x.value === v);
-      return h ? h.label : "\u8FDB\u884C\u4E2D";
-    }
     function fmtTs(ts) {
       if (!ts) return "";
       try {
@@ -2860,7 +2944,7 @@ ${p.summary || ""}`.trim() });
         const recTime = fmtTs(p.ts);
         const mainTime = p.time || recTime.split(" ")[0] || "\u672A\u6807\u6CE8";
         const subTime = p.time ? recTime : recTime.split(" ")[1] || "";
-        return `<div class="wm-plot wm-plot-${p.status}" data-id="${p.id}">
+        return `<div class="wm-plot" data-id="${p.id}">
         <div class="wm-plot-time">
           <div class="wm-plot-time-main">${escapeHtml(mainTime)}</div>
           ${subTime ? `<div class="wm-plot-time-sub">${escapeHtml(subTime)}</div>` : ""}
@@ -2868,7 +2952,6 @@ ${p.summary || ""}`.trim() });
         <div class="wm-plot-body">
           <div class="wm-plot-head">
             <span class="wm-plot-title">${escapeHtml(p.title || "\uFF08\u672A\u547D\u540D\uFF09")}</span>
-            <span class="wm-badge">${escapeHtml(statusLabel(p.status))}</span>
           </div>
           <div class="wm-plot-sum">${escapeHtml(p.summary || "")}</div>
           <div class="wm-plot-acts">
@@ -2890,8 +2973,7 @@ ${p.summary || ""}`.trim() });
       const plotFields = (p) => [
         { key: "time", label: "\u65F6\u95F4\uFF08\u5267\u60C5\u5185\u65F6\u95F4\uFF0C\u663E\u793A\u5728\u6700\u5DE6\u4FA7\uFF09", value: p && p.time || "", placeholder: "\u5982\uFF1A\u7B2C\u4E09\u65E5\u6E05\u6668 / \u5EFA\u5143\u4E03\u5E74\u6625" },
         { key: "title", label: "\u6807\u9898", value: p && p.title || "", placeholder: "\u8FD9\u6BB5\u5267\u60C5\u53EB\u4EC0\u4E48" },
-        { key: "summary", label: "\u5185\u5BB9", type: "textarea", value: p && p.summary || "", placeholder: "\u8FD9\u6BB5\u5267\u60C5\u53D1\u751F\u4E86\u4EC0\u4E48" },
-        { key: "status", label: "\u72B6\u6001", type: "select", value: p && p.status || "active", options: PLOT_STATUS }
+        { key: "summary", label: "\u5185\u5BB9", type: "textarea", value: p && p.summary || "", placeholder: "\u8FD9\u6BB5\u5267\u60C5\u53D1\u751F\u4E86\u4EC0\u4E48" }
       ];
       const plotAdd = body.querySelector('[data-act="plot-add"]');
       if (plotAdd) plotAdd.onclick = async () => {
@@ -2909,8 +2991,8 @@ ${p.summary || ""}`.trim() });
       if (plotRun) plotRun.onclick = async () => {
         const st = body.querySelector(".wm-status");
         if (st) st.textContent = "\u5F52\u7EB3\u4E2D\u2026";
-        const r = await WM.Summary.runSummary(WM.Settings.load());
-        if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u66F4\u65B0" : "\u2717 \u5931\u8D25";
+        const r = await WM.Summary.triggerPlot(WM.Settings.load());
+        if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
         renderPlot(body);
       };
       body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -3718,29 +3800,43 @@ ${p.summary || ""}`.trim() });
     let _lastAutoAt = 0;
     async function autoSummaryHook() {
       const s = WM.Settings.load();
-      if (!s.autoSummaryEnabled) return;
+      if (!s.autoSummaryEnabled && s.autoPlotEnabled !== false) {
+      }
+      if (!s.autoSummaryEnabled && s.autoPlotEnabled === false) return;
       const now = Date.now();
       if (now - _lastAutoAt < 1200) return;
       _lastAutoAt = now;
       setTimeout(async () => {
         try {
-          let r = await WM.Summary.triggerSummary(s);
-          if (r && !r.ok && s.autoSummaryMode === "floor") {
-            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
-            const ptr = WM.MemoryStore.getSummaryPointer();
-            if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
-          }
-          if (r && r.ok) {
-            if (s.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+          if (s.autoSummaryEnabled) {
+            let r = await WM.Summary.triggerSummary(s);
+            if (r && !r.ok && s.autoSummaryMode === "floor") {
+              const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+              const ptr = WM.MemoryStore.getSummaryPointer();
+              if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
+            }
+            if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
               await WM.FloorHider.hideUntil(r.range[1]);
             }
-            const extra = r.partial ? "\uFF08\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
-            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u63D0\u70BC ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09${extra}`);
-          } else if (r && !r.ok) {
-            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u603B\u7ED3\u672A\u6267\u884C\uFF08${r.reason}\uFF09`);
+            if (r && r.ok) {
+              const extra = r.partial ? "\uFF08\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
+              toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u5199\u5165 ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09${extra}`);
+            }
+          }
+          if (s.autoPlotEnabled !== false) {
+            let rp = await WM.Summary.triggerPlot(s);
+            if (rp && !rp.ok && s.autoPlotMode === "floor") {
+              const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+              const ptr = WM.MemoryStore.getPlotPointer();
+              if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
+            }
+            if (rp && rp.ok) {
+              const extra = rp.partial ? "\uFF08\u90E8\u5206\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
+              toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB ${rp.count} \u6761\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09${extra}`);
+            }
           }
         } catch (e) {
-          toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u603B\u7ED3\u5931\u8D25 - ${e.message || e}`);
+          toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u81EA\u52A8\u5904\u7406\u5931\u8D25 - ${e.message || e}`);
         }
       }, 400);
     }
@@ -3765,7 +3861,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "prompt-no-summary-words-pure-novel";
+  window.WarmMemo.version = "plot-independent-self-driven";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

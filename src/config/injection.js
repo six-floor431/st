@@ -29,13 +29,12 @@
     const cands = [];
     s.summaries.forEach((sm) => cands.push({ id: sm.id, type: sm.kind === 'plot' ? '剧情摘要' : '总结', text: sm.title + '\n' + sm.text }));
 
-    // 剧情线：最新在上，带剧情内时间
+    // 剧情线：最新在上，带剧情内时间（纯事件，无状态标签）
     const plotTitle = {};
     (s.plots || []).forEach((p) => { plotTitle[p.id] = p.title || p.time || p.id; });
     (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach((p) => {
       if (!p.title && !p.summary) return;
-      const stat = p.status === 'done' ? '已完结' : (p.status === 'abandon' ? '已废弃' : '进行中');
-      cands.push({ id: p.id, type: '剧情', text: `${p.time ? '[' + p.time + '] ' : ''}${p.title || ''}（${stat}）\n${p.summary || ''}`.trim() });
+      cands.push({ id: p.id, type: '剧情', text: `${p.time ? '[' + p.time + '] ' : ''}${p.title || ''}\n${p.summary || ''}`.trim() });
     });
 
     // 物品：名称 / 作用 / 持有者 / 关联剧情
