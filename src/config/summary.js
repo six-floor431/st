@@ -15,7 +15,14 @@
 
   // 禁止词汇表（覆盖 summary/plot/worldview 等所有提示词中明确禁止的元描述词汇）：
   //   含这些词的行大概率是 LLM 回显指令或自我介绍，应删除。
-  var BANNED_WORDS_RE = /总结|梳理|概括|归纳|回顾|记录|时间线|时间顺序|按时间|状态标记|供后续参考|核心事件|关键信息|要点|摘要|概述|概要|简述|备注|注记|梳理如下|整理如下|汇总如下|分析如下|描述如下|说明如下|根据对话|用户让我|以下为|以上为|绝对禁止|最高级禁令|写作要求|判断标准|禁止事项/;
+  var BANNED_WORDS_RE = /总结|梳理|概括|归纳|回顾|记录|时间线|时间顺序|按时间|状态标记|供后续参考|核心事件|关键信息|要点|摘要|概述|概要|简述|备注|注记|梳理如下|整理如下|汇总如下|分析如下|描述如下|说明如下|根据对话|用户让我|以下为|以上为|绝对禁止|最高级禁令|写作要求|判断标准|禁止事项|写作原则|文风要求|输出格式|系统要求|提示词/;
+
+  // 元说明/规则回显句式（LLM 把"我打算怎么写"当正文输出）：整行删除。
+  //   例："因此我们应该把最近对话提炼成一段叙事。" / "注意：系统要求只写已发生的事实。" / "我需要避免使用禁词。"
+  var META_LINE_RE = /^(因此|所以|那么|接下来|首先|注意|提醒|请注意|综上|总之)?[，,、：:\s]*((我|我们|你)(们)?(需要|应该|要|将|会|得|可以|打算|必须|不能|不应|应当|试图|尝试)|注意[:：]|根据(系统|上述|以上|提示|要求|指令)|按照(系统|要求|指令|提示)|系统要求|题目要求|用户要求|遵循(以上|上述|该)?(规则|要求)|不能(出现|使用|写)|避免(使用|出现|写))/;
+
+  // 规则性措辞（提示词红线里的祈使句）：出现在正文里 = 规则回显
+  var RULE_VERB_RE = /严禁|禁止|不得|不许|必须|应当|只写|只记录|只提取|不写|不要写|不能写|违反|即无效|判定无效/;
 
   // 净化 LLM 原始输出：清理模型可能「回显」的提示词残留标记与寒暄前缀，
   // 防止「把提示词里的示例/标签也写进结果」这种形式的跑题。只删明确属于噪声的行/前缀，不伤正文。
@@ -37,6 +44,14 @@
       if (/(如下|以下|为下)[:：]?\s*$/.test(s) && BANNED_WORDS_RE.test(s)) return '';
       // 以"第X"/"首先"/"其次"开头且含禁止词 → 序号罗列式指令回显
       if (/^(第[一二三四五六七八九十]|首先|其次|再次|最后|另外)[、，:：]/.test(s) && BANNED_WORDS_RE.test(s)) return '';
+      // 元说明/规则回显整行（"因此我们应该…""注意：系统要求…""我需要避免…"）
+      if (META_LINE_RE.test(s)) return '';
+      // 编号 + 规则措辞 的条目回显（"1. 只写已发生的事实""3、严禁使用以下词汇"）
+      if (/^\d+\s*[.、)）：:]\s*/.test(s) && (RULE_VERB_RE.test(s) || BANNED_WORDS_RE.test(s))) return '';
+      // 红线符号(🛑✗✓※等，含代理对，故用 u 标志)开头 + 规则措辞 的行
+      if (/^[\u{1F6D1}\u{2717}\u{2713}\u{203B}\u{2731}*\-–—•·]\s*/u.test(s) && RULE_VERB_RE.test(s)) return '';
+      // 行内以红线符号起头（无论后面接什么），若整行含规则措辞也删
+      if (/^(🛑|✗|✓|※|●|▲)/u.test(s) && RULE_VERB_RE.test(s)) return '';
       return ln;
     }).join('\n');
     // 去掉开头的寒暄/声明前缀（一行内）
@@ -573,5 +588,6 @@
   }
 
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
-    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations };
+    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations,
+    sanitizeLLMText };
 })();
