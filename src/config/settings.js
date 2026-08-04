@@ -136,7 +136,8 @@
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return Object.assign({}, DEFAULTS);
-      const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      const s = Object.assign({}, DEFAULTS, parsed);
       // 迁移：旧的 5 份独立 llmProfiles 或旧的 summary* 默认配置 → 单一 llmConfig
       if (!s.llmConfig) {
         s.llmConfig = { source: 'local', apiUrl: '', apiKey: '', model: '' };
@@ -154,10 +155,11 @@
           };
         }
       }
-      // 提示词版本迁移：若用户已保存的 promptsVersion 低于当前版本（说明扩展更新、提示词有改动），
-      // 则用 DEFAULTS 的新提示词覆盖旧提示词，避免「源码改了但用户之前保存的旧提示词仍在生效」导致看起来没更新。
-      // 用户若曾手动编辑过提示词，本次覆盖会回退到新版默认值（可接受：新版约束更强、且仍可在 UI 再编辑）。
-      if ((s.promptsVersion || 0) < DEFAULTS.promptsVersion) {
+      // 提示词版本迁移：用「用户实际保存」的 promptsVersion 判断（不能用被 DEFAULTS 覆盖后的 s.promptsVersion，
+      // 否则 Object.assign 已把 DEFAULTS 的版本带进来，导致 3<3 永远 false、旧提示词永远不被覆盖）。
+      // 若用户保存的版本低于当前版本，用 DEFAULTS 新提示词覆盖旧提示词，避免「源码改了但用户旧提示词仍在生效」。
+      const savedPromptVer = parsed.promptsVersion || 0;
+      if (savedPromptVer < DEFAULTS.promptsVersion) {
         s.prompts = Object.assign({}, DEFAULTS.prompts);
         s.promptsVersion = DEFAULTS.promptsVersion;
       }

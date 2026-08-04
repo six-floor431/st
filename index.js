@@ -151,7 +151,8 @@
       try {
         const raw = localStorage.getItem(LS_KEY);
         if (!raw) return Object.assign({}, DEFAULTS);
-        const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        const s = Object.assign({}, DEFAULTS, parsed);
         if (!s.llmConfig) {
           s.llmConfig = { source: "local", apiUrl: "", apiKey: "", model: "" };
           const profiles = s.llmProfiles;
@@ -166,7 +167,8 @@
             };
           }
         }
-        if ((s.promptsVersion || 0) < DEFAULTS.promptsVersion) {
+        const savedPromptVer = parsed.promptsVersion || 0;
+        if (savedPromptVer < DEFAULTS.promptsVersion) {
           s.prompts = Object.assign({}, DEFAULTS.prompts);
           s.promptsVersion = DEFAULTS.promptsVersion;
         }
