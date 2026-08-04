@@ -25,6 +25,11 @@
 .wm-panel, .wm-ta, .wm-row textarea { font-family: var(--wm-font-serif); text-rendering: optimizeLegibility; }
 .wm-tabs button, .wm-subtabs button, .wm-btn, .wm-ctrl, .wm-row label, .wm-row input, .wm-row select, .wm-badge, .wm-hint { font-family: var(--wm-font-ui); }
 
+/* 注意：酒馆(SillyTavern) 全局样式包裹在 @layer base/components/theme 里，
+ * 层内规则优先级高于本扩展「未分层」的普通样式。因此本扩展所有对输入框
+ * 颜色/字号的覆盖都必须带 !important，否则会被酒馆主题色（如 rgb(220,220,210)）
+ * 覆盖，导致"输入框文字发灰、看不清"。 */
+
 #warmmemo-btn {
   display: inline-flex;
   align-items: center;
@@ -289,7 +294,8 @@
 .wm-divider { height: 1px; background: var(--wm-line); margin: 12px 0; }
 .wm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; min-width: 0; }
 .wm-row label { display: flex; align-items: center; gap: 6px; }
-.wm-row input[type="text"], .wm-row input[type="number"], .wm-row select, .wm-row textarea {
+.wm-row input[type="text"], .wm-row input[type="number"], .wm-row input[type="password"],
+.wm-row select, .wm-row textarea {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
@@ -297,17 +303,31 @@
   border: 1px solid var(--wm-line-strong);
   border-radius: 8px 2px 8px 2px;
   background: rgba(255,255,255,.6);
-  color: #000;                 /* 已输入文字：纯黑，醒目 */
-  font-size: 14px;
-  font-family: var(--wm-font-ui);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color: #000 !important;       /* 已输入文字：纯黑（!important 压过酒馆 @layer 主题色） */
+  font-size: 14px !important;
+  font-family: var(--wm-font-ui) !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
   transition: border-color .15s, box-shadow .15s;
 }
 /* 占位提示：浅灰，明显区别于黑色已输入文字 */
 .wm-row input::placeholder, .wm-row textarea::placeholder, .wm-row select::placeholder {
-  color: #9a9a90;
-  opacity: 1;
+  color: #9a9a90 !important;
+  opacity: 1 !important;
+}
+
+/* 兜底：扩展容器内所有输入框（含自定义 class 的 t-open/t-close 等）一律黑字 + 浅灰占位。
+ * 必须 !important，否则会被酒馆 @layer 主题色覆盖。 */
+.wm-panel input, .wm-modal input, .wm-overlay input,
+.wm-panel textarea, .wm-modal textarea, .wm-overlay textarea,
+.wm-panel select, .wm-modal select, .wm-overlay select {
+  color: #000 !important;
+}
+.wm-panel input::placeholder, .wm-modal input::placeholder, .wm-overlay input::placeholder,
+.wm-panel textarea::placeholder, .wm-modal textarea::placeholder, .wm-overlay textarea::placeholder,
+.wm-panel select::placeholder, .wm-modal select::placeholder, .wm-overlay select::placeholder {
+  color: #9a9a90 !important;
+  opacity: 1 !important;
 }
 .wm-row input:focus, .wm-row select:focus, .wm-row textarea:focus {
   outline: none;
@@ -714,6 +734,7 @@
   font-weight: 600;
 }
 .wm-field input[type="text"],
+.wm-field input[type="password"],
 .wm-field select,
 .wm-field textarea {
   width: 100%;
@@ -722,19 +743,19 @@
   border: 1px solid var(--wm-line-strong);
   border-radius: 8px 2px 8px 2px;
   background: rgba(255,255,255,.6);
-  color: #000;                 /* 已输入文字：纯黑 */
-  font-size: 13px;
-  font-family: var(--wm-font-ui);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color: #000 !important;       /* 已输入文字：纯黑（!important 压过酒馆 @layer 主题色） */
+  font-size: 13px !important;
+  font-family: var(--wm-font-ui) !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
   min-width: 0;
 }
 /* 占位提示：浅灰，明显区别于黑色已输入文字 */
 .wm-field input::placeholder,
 .wm-field select::placeholder,
 .wm-field textarea::placeholder {
-  color: #9a9a90;
-  opacity: 1;
+  color: #9a9a90 !important;
+  opacity: 1 !important;
 }
 .wm-field textarea { min-height: 78px; resize: vertical; line-height: 1.6; }
 .wm-field input:focus, .wm-field select:focus, .wm-field textarea:focus {
@@ -768,15 +789,15 @@
   background:
     repeating-linear-gradient(0deg, transparent 0 27px, var(--wm-line) 27px 28px),
     rgba(255,255,255,.55);
-  color: #000;             /* 已输入文字：纯黑 */
-  font-size: 14px;
+  color: #000 !important;             /* 已输入文字：纯黑（!important 压过酒馆 @layer 主题色） */
+  font-size: 14px !important;
   line-height: 28px;       /* 与稿纸横格对齐 */
-  font-family: inherit;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: inherit !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
   box-sizing: border-box;
 }
-.wm-ta::placeholder { color: #9a9a90; opacity: 1; }
+.wm-ta::placeholder { color: #9a9a90 !important; opacity: 1 !important; }
 
 /* ============================================================
  * 响应式（水墨风统一，仅尺寸变化；均隐藏滚动条）
@@ -917,3 +938,36 @@
 .wm-btn-danger { background: var(--wm-seal); color: #fff; border-color: var(--wm-seal); font-weight: 600; }
 .wm-btn-danger:hover { background: var(--wm-seal-soft); }
 .wm-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ============================================================
+ * 输入框颜色统一覆盖（关键！）
+ * 酒馆(SillyTavern) 把全局主题色包在 @layer base/components/theme 里，
+ * 层内规则优先级高于本扩展「未分层」的普通样式。直接写 .wm-row input{color:#000}
+ * 会被酒馆主题色（如 rgb(220,220,210) 浅灰）覆盖，导致 API 配置等输入框文字发灰看不清。
+ * 解决办法：把覆盖放进与酒馆同序、且声明在后的 @layer utilities（带 !important），
+ * 即可压过酒馆主题色。所有输入框一律：已输入=纯黑，占位=浅灰。
+ * ============================================================ */
+@layer utilities {
+  .wm-panel input, .wm-modal input, .wm-overlay input,
+  .wm-panel textarea, .wm-modal textarea, .wm-overlay textarea,
+  .wm-panel select, .wm-modal select, .wm-overlay select {
+    color: #000 !important;
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+  }
+  .wm-panel input::placeholder, .wm-modal input::placeholder, .wm-overlay input::placeholder,
+  .wm-panel textarea::placeholder, .wm-modal textarea::placeholder, .wm-overlay textarea::placeholder,
+  .wm-panel select::placeholder, .wm-modal select::placeholder, .wm-overlay select::placeholder {
+    color: #9a9a90 !important;
+    opacity: 1 !important;
+  }
+  /* 移动端放大输入框字号，避免 iOS 聚焦时自动缩放导致整体重排变糊 */
+  @media (max-width: 768px) {
+    .wm-panel input:not([type="checkbox"]):not([type="radio"]),
+    .wm-modal input:not([type="checkbox"]):not([type="radio"]),
+    .wm-panel textarea, .wm-modal textarea,
+    .wm-panel select, .wm-modal select {
+      font-size: 16px !important;
+    }
+  }
+}
