@@ -195,12 +195,19 @@
         </details>
         <details class="wm-fold" open>
           <summary>自动抽取子任务</summary>
-          <div class="wm-hint">记忆类（随总结一起跑）：世界观设定、物品追踪。<br/>剧情类（独立流程，与总结解耦）：剧情线 + 关系图 —— 触发时并联调用，并基于「已有剧情线」自我推进，总结不再顺带跑它们。</div>
+          <div class="wm-hint">记忆类（随总结一起跑）：世界观设定。<br/>物品追踪：<b>同时跟随「总结」和「剧情线」两个流程</b>各跑一次，确保不漏。<br/>剧情类（独立流程，与总结解耦）：剧情线 + 关系图 —— 触发时并联调用，并基于「已有剧情线」自我推进，总结不再顺带跑它们。</div>
           <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled!==false?'checked':''}/> 启用剧情线独立推进（含关系图）</label>
           <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation!==false?'checked':''}/> 关系图（随剧情线一并跑）</label>
           <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot!==false?'checked':''}/> 剧情线</label>
           <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld!==false?'checked':''}/> 世界观设定</label>
-          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems!==false?'checked':''}/> 物品追踪</label>
+          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems!==false?'checked':''}/> 物品追踪（跟总结+剧情线）</label>
+        </details>
+        <details class="wm-fold">
+          <summary>自动大总结（小总结攒够自动整合）</summary>
+          <div class="wm-hint">每累计 N 次「小总结」后，自动把近期小总结整合为一份长期记忆（大总结）。大总结与小总结用同一份提示词。攒够即触发，无需手动。</div>
+          <label class="wm-row"><input type="checkbox" id="a-big" ${s.bigSummaryEnabled!==false?'checked':''}/> 开启自动大总结</label>
+          <label class="wm-row">每 <input type="number" id="a-big-every" value="${Number(s.bigSummaryEvery)||5}" min="2" max="100" style="width:64px"/> 次小总结，自动整合一次大总结</label>
+          <label class="wm-row">一次大总结最多回顾 <input type="number" id="a-big-max" value="${Number(s.bigSummaryMaxSegments)||0}" min="0" max="200" style="width:64px"/> 段小总结（0=不限）</label>
         </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">保存设置</button>
@@ -268,6 +275,17 @@
       s.autoPlotFloor = parseInt(body.querySelector('#a-floor').value, 10) || 20;
       s.autoPlotStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
       s.autoPlotEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
+      // 自动大总结配置
+      s.bigSummaryEnabled = body.querySelector('#a-big').checked;
+      s.bigSummaryEvery = Math.max(2, parseInt(body.querySelector('#a-big-every').value, 10) || 5);
+      s.bigSummaryMaxSegments = parseInt(body.querySelector('#a-big-max').value, 10) || 0;
+      // 各任务独立输出 Token（二级控制）
+      s.taskTokens = s.taskTokens || {};
+      s.taskTokens.summary = parseInt(body.querySelector('#tk-summary').value, 10) || 0;
+      s.taskTokens.relations = parseInt(body.querySelector('#tk-relations').value, 10) || 0;
+      s.taskTokens.plot = parseInt(body.querySelector('#tk-plot').value, 10) || 0;
+      s.taskTokens.world = parseInt(body.querySelector('#tk-world').value, 10) || 0;
+      s.taskTokens.items = parseInt(body.querySelector('#tk-items').value, 10) || 0;
       // 收集标签过滤规则（以 DOM 当前输入为准，确保勾选/文本改动都已同步）
       s.tagStripRules = Array.from(body.querySelectorAll('#tag-rules .wm-tag-rule')).map((row) => {
         const close = row.querySelector('.t-close').value.trim();
@@ -878,6 +896,7 @@
   function renderPaneLlm(s) {
     const c = s.llmConfig || { source: 'local', apiUrl: '', apiKey: '', model: '' };
     const pp = s.presetPrefix || { mode: 'none', importText: '', presetName: '' };
+    const tt = s.taskTokens || {};
     const prompts = s.prompts || {};
     // 读取酒馆已保存预设名（修复：getPresetNames 是酒馆注入的顶层全局函数）
     let presetNames = [];
@@ -885,7 +904,7 @@
     // 提示词编辑区块（可编辑：总结 / 关系 / 剧情 / 世界观）
     // 注意：def 必须与 settings.js DEFAULTS.prompts 保持完全一致，否则用户未保存时看到的是旧版
     const promptEditors = [
-      { key: 'summary', title: '总结提示词', holder: '支持 {{recent}}', def: '你是一位网文/轻小说作家。请把【最近对话】中发生的事情写成一段「纯叙事风格的章节片段」。\n\n输出要求：像写一章网文或轻小说那样——有场景、有动作、有对话、有情绪氛围。直接写故事本身，不要任何元描述、不要任何总结性措辞。\n\n【绝对禁止（出现即判定为无效输出）】\n1. 🛑 严禁使用以下词汇及其变体：总结、梳理、概括、归纳、回顾、记录、时间线、时间顺序、按时间、状态标记、供后续参考、核心事件、关键信息、要点、摘要、概述、概要、简述、备注、注记、梳理如下、整理如下、汇总如下、分析如下、描述如下、说明如下。\n2. 🛑 严禁在正文前加任何引导语/声明句（如"以下是…""根据对话…""用户让我…"）。直接从故事内容开始写。\n3. 🛑 严禁编造对话中没有的情节、人物、地点、物品或后续发展。\n4. 🛑 严禁主观臆断与心理分析（如"A对B有占有欲""两人气氛暧昧"），只写客观发生的行为和对话。\n5. 🛑 严禁输出分析评论当叙事（如"这表明…""这暗示着…"）。\n6. 🛑 严禁用"第一/第二/第三/首先/其次/最后"等序号词罗列事件——要连贯的叙事流，不是列表。\n\n【正确示例（这就是你要的输出风格）】\n黄昏的图书馆里，林清玄翻到借书卡背面那一栏，指尖停在一个名字上很久。"原来你也看过这本。"身后传来温如玉的声音，她手里提着两杯还冒热气的奶茶。\n\n【错误示例（以下全部禁止，严禁输出）】\n✗ 根据对话内容，总结如下：三个徒弟……（使用了"总结""根据"等禁词）\n✗ 时间线梳理如下：（含状态标记，供后续参考）：（这是指令回显，不是叙事）\n✗ 按时间顺序，核心事件包括：林清玄与温如玉……（用了"时间顺序""核心事件"等禁词）\n✗ 第一，林清玄去了仙尊殿；第二，温如玉追了出去。（序号罗列，不是叙事）\n\n【最近对话】\n{{recent}}' },
+      { key: 'summary', title: '总结提示词', holder: '支持 {{recent}}', def: '你是一位剧情档案整理员。请把【最近对话】中真实发生的事写成一段「可直接续写的叙事记忆」。\n\n写作原则（违反任意一条即判定无效）：\n1. 🛑 只写已经发生的事实：人物、时间、地点、动作、关键对话内容、结果。不写猜测、评价、气氛渲染、心理分析。\n2. 🛑 只记录与【已登场角色】直接相关、且对剧情推进有实际作用的内容；与角色无关的闲聊、环境描写、路人甲乙的无关举动一律丢弃，不要写进记忆。\n3. 🛑 严禁使用以下词汇及其变体：总结、梳理、概括、归纳、回顾、记录、时间线、时间顺序、按时间、状态标记、供后续参考、核心事件、关键信息、要点、摘要、概述、概要、简述、备注、注记、梳理如下、整理如下、汇总如下、分析如下、描述如下、说明如下。\n4. 🛑 严禁主观臆断与心理分析（如"A对B有占有欲""两人气氛暧昧""存在某种张力"），只写客观发生的行为和对话。\n5. 🛑 严禁输出分析评论当叙事（如"这表明…""这暗示着…"），严禁用"第一/第二/第三/首先/其次/最后"序号词罗列——要连贯的叙事流。\n6. 🛑 严禁在正文前加任何引导语/声明句（如"以下是…""根据对话…""用户让我…"），直接从故事内容起笔。\n7. 🛑 严禁编造对话中没有的情节、人物、地点、物品或后续发展。\n\n【正确示例（这是要的输出风格）】\n黄昏的图书馆里，林清玄翻到借书卡背面那一栏，指尖停在一个名字上很久。"原来你也看过这本。"身后传来温如玉的声音，她手里提着两杯还冒热气的奶茶。\n【错误示例（全部禁止，严禁输出）】\n✗ 根据对话内容，总结如下：……（用了"总结""根据"等禁词）\n✗ 时间线梳理如下：（含状态标记，供后续参考）：（指令回显，不是叙事）\n✗ 两人之间的气氛变得微妙而充满张力，似乎暗生情愫（心理分析+环境渲染，与角色实际行为无关）\n✗ 路边的梧桐树影随风摇曳，城市在暮色中安静下来（与角色无关的闲笔环境描写）\n\n【最近对话】\n{{recent}}' },
       { key: 'relations', title: '关系提示词', holder: '支持 {{historySummary}} {{recent}}', def: '你是关系图谱构建器。你的唯一任务：从对话中提取「人物之间的直接关系」。\n\n【最高级禁令（违反则输出无效）】\n1. 🛑 每行只能是一个「三元组」，格式严格为：人物A → 人物B：关系词\n2. 🛑 「关系词」必须是 2-6 个字的简短标签，如：恋人、师徒、敌对、暗恋、主仆、同伴、竞争者\n3. 🛑 绝对禁止输出分析句、描述句、长句子，绝对禁止任何「对...有...感」「存在潜在...」「某种...纠葛」这类主观推断。\n4. 🛑 只提取**两个具体人物之间、且有明确互动**的关系。不提取「对用户的感受」「与...存在...」这种单向分析（这类不是关系，必须丢弃）。\n5. 如果两个人之间没有明确互动关系，就不要写。宁缺毋滥。\n6. 最多 8 条。\n\n【正确示例】\n小明 → 小红：恋人\n小红 → 小刚：敌对\n【错误示例（全部禁止，严禁输出）】\n✗ 小明对用户有依赖感（这是分析，不是关系）\n✗ 李华与张伟之间存在潜在冲突（描述句）\n✗ 张伟对用户才具有依赖感（单向分析）\n✗ A对B有某种复杂的情感纠葛（主观推断）\n\n【历史总结】\n{{historySummary}}\n\n【最近对话】\n{{recent}}' },
       { key: 'plot', title: '剧情提示词', holder: '支持 {{relations}} {{recent}}', def: '你是一位轻小说剧情编辑。请基于「关系」和「最近对话」，提取这一段发生的**剧情事件**。\n\n每行一条，严格用竖线分隔，格式：\n时间｜标题｜事件叙述｜状态\n\n【绝对禁止（出现即判定为无效输出）】\n1. 🛑 严禁在输出前加任何引导语/声明句/格式说明（如"时间线梳理如下""剧情事件如下""按时间顺序""含状态标记""供后续参考""以下是…"）。直接从第一条事件开始写。\n2. 🛑 严禁使用以下词汇及其变体：时间线、梳理、整理、汇总、概括、归纳、回顾、记录、核心事件、关键信息、要点、摘要、概述、状态标记、供后续参考、分析如下、描述如下、说明如下。\n3. 🛑 严格只记录【最近对话】中真实发生的剧情事件。严禁编造未发生的情节，严禁加入无关内容（世界观说明、人物背景闲笔）。\n4. 🛑 严禁输出分析评论（如"这表明…""这暗示着…"）或心理推测——只写发生了什么客观事件。\n5. 🛑 每行的「事件叙述」要有画面感（人物动作+场景），不要写干巴巴的"双方进行了讨论"。\n\n写作要求（像轻小说章节大纲）：\n- 标题：给这段剧情起一个有画面感的短标题（如「雨夜的告白」「剑锋相对的瞬间」），不超过 12 字\n- 事件叙述：用 1-2 句话描述发生了什么（有人物动作、场景变化、关键转折），要有画面感\n- 时间：剧情内的时间点（如「第三日清晨」）。未提及则写「未标注」\n- 状态：只能填 进行中 / 已完结 / 已废弃 三者之一\n\n【正确示例】\n第三日清晨｜雨夜的告白｜小明在屋檐下把星空画册递给小红，说「这本该和你一起看」｜已完结\n【错误示例（全部禁止，严禁输出）】\n✗ 时间线梳理如下（含状态标记，供后续参考）：（这是指令回显，不是事件列表）\n✗ 未标注｜氛围紧张｜两人之间的气氛变得微妙而充满张力（这是分析，不是事件）｜进行中\n\n不要输出表头、编号、额外说明。最多 8 条。\n\n【关系】\n{{relations}}\n\n【最近对话】\n{{recent}}' },
       { key: 'worldview', title: '世界观提示词', holder: '支持 {{plot}} {{recent}}', def: '你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个故事所处世界本身的「底层规则设定」。\n\n【最高级禁令（违反则输出无效）】\n1. 🛑 「世界设定」只写世界本身的通用规则、法则、历史背景、力量体系，**绝不写**单个具体物品、单个具体角色姓名、单个具体地点名称、单次具体事件。\n2. 🛑 只提炼能从剧情中归纳出的、可复用的世界运行规律。严禁把某一段剧情、某一个人、某一个地点当成「设定」写进来。\n3. 🛑 严禁编造与剧情毫无关联的宏大设定；设定必须能从【剧情线】【最近对话】中找到依据或合理延伸。\n\n严格按以下格式输出，不要添加任何多余说明：\n\n世界名：（这个世界/大陆/城市叫什么，没有就起一个贴切的）\n世界类型：（用一个词概括，如：修仙世界、赛博朋克、蒸汽朋克、现代都市、剑与魔法）\n简述：（一到两句话说明这是个什么样的世界）\n\n## 设定标题一\n（围绕"世界类型"展开的具体规则与法则。例如修仙世界就写修炼体系的境界划分、灵气运行法则；赛博朋克就写义体改造规则、企业与财阀的运行法则）\n\n## 设定标题二\n（内容）\n\n要求：\n1. 「世界类型」决定了下面写什么。修仙世界就必须写修炼体系、灵气、法则等，不要写无关内容。\n2. 每条设定要具体、可被后续剧情引用，不要空泛。\n3. 输出 3-6 条设定条目。\n\n【正确示例】\n## 灵气运行法则\n灵气自子夜起最为充盈，修者需在此时吐纳方能进阶。\n【错误示例（严禁）】\n## 小明的身世\n小明是孤儿，幼年被送至宗门。（这是角色，不是世界设定）\n## 落霞镇\n落霞镇位于大陆东陲。（这是地点，不是世界设定）\n\n【剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}' },
@@ -911,7 +930,16 @@
           <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
           <label class="wm-row"><input type="checkbox" id="llm-deep" ${c.deepThinking ? 'checked' : ''}/> 深度思考（推理模型）</label>
           <div class="wm-hint" style="margin:-2px 0 4px">开启后按模型自动适配深度思考参数：OpenAI o 系列用 reasoning_effort；DeepSeek reasoner 走原生思考链；豆包/Qwen 思考模型用 thinking 块。普通模型（如 gpt-4o）开启无效，可放心留开。</div>
-          <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能（总结/关系/剧情/世界观）共用，模型会在该范围内完整输出</span></label>
+          <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能共用默认上限，下面可对每个任务单独覆盖</span></label>
+          <details class="wm-fold">
+            <summary>各任务独立输出 Token 上限（二级控制）</summary>
+            <div class="wm-hint">留空或填 0 = 用上面的共用上限。可分别限制：总结 / 关系 / 剧情 / 世界观 / 物品 各自最长输出，避免长任务挤占、短任务不够。</div>
+            <label class="wm-row">总结 Token<input id="tk-summary" type="number" min="0" max="4000" step="50" value="${Number(tt.summary)||0}"/></label>
+            <label class="wm-row">关系 Token<input id="tk-relations" type="number" min="0" max="4000" step="50" value="${Number(tt.relations)||0}"/></label>
+            <label class="wm-row">剧情 Token<input id="tk-plot" type="number" min="0" max="4000" step="50" value="${Number(tt.plot)||0}"/></label>
+            <label class="wm-row">世界观 Token<input id="tk-world" type="number" min="0" max="4000" step="50" value="${Number(tt.world)||0}"/></label>
+            <label class="wm-row">物品 Token<input id="tk-items" type="number" min="0" max="4000" step="50" value="${Number(tt.items)||0}"/></label>
+          </details>
         </div>
         <div class="wm-divider"></div>
         <div class="wm-h" style="margin-top:0">预设前置（拼在我们提示词之前）</div>

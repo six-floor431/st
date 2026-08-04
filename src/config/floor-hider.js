@@ -11,10 +11,10 @@
     const chat = ctx.chat;
     if (summaryPointer > chat.length) return 'stale_pointer';
 
-    const delay = (settings && settings.summaryDelay) || 2;
-    const dialogueCount = chat.filter((m) => m && !m.is_system).length;
-    if (dialogueCount < summaryPointer + delay) return 'summary_delay';
-
+    // 注意：此处不再做「delay 延迟」判断。原逻辑要求 dialogueCount < summaryPointer + delay 才隐藏，
+    // 但小总结刚跑完时 dialogueCount 恰好等于 summaryPointer，导致永远不满足、楼层永不隐藏。
+    // 正确行为：只要 summaryPointer 已推进到某楼层，就把该楼层及之前的非 system 对话消息隐藏。
+    let hidden = 0;
     for (let i = 0; i < summaryPointer; i++) {
       const m = chat[i];
       // 只隐藏「对话消息」（user/assistant），绝不隐藏酒馆自身的 system 消息，避免破坏角色卡/系统提示。
@@ -23,11 +23,12 @@
         m.is_original_system = false; // 标记：原本不是 system，反隐藏时可安全恢复
         m.is_system = true;
         m.is_wm_hidden = true;
+        hidden++;
       }
     }
-    if (ctx.saveChat && typeof ctx.saveChat === 'function') ctx.saveChat();
+    if (hidden > 0 && ctx.saveChat && typeof ctx.saveChat === 'function') ctx.saveChat();
     if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
-    return 'hidden';
+    return hidden > 0 ? 'hidden' : 'already';
   }
 
   // 隐藏直到指定楼层（含）：总结后调用，hideUntil(lastIndex)

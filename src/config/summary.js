@@ -81,9 +81,29 @@
     }).join('\n');
   }
 
+  // 各阶段对应的「任务 token」配置键（用于二级输出上限控制）
+  function taskMaxKey(phase) {
+    if (phase === 'summary') return 'summary';
+    if (phase === 'relations') return 'relations';
+    if (phase === 'plot') return 'plot';
+    if (phase === 'worldview') return 'world';
+    if (phase === 'items') return 'items';
+    return null;
+  }
+  // 取某任务的实际 maxTokens：优先 taskTokens[键]（>0 才生效），否则回落 llmConfig.maxTokens
+  function resolveTaskMax(settings, phase) {
+    const key = taskMaxKey(phase);
+    const tt = settings && settings.taskTokens;
+    if (key && tt && tt[key] > 0) return tt[key];
+    const cfg = settings && settings.llmConfig;
+    return (cfg && cfg.maxTokens) || 700;
+  }
+
   // 带重试的 LLM 调用：失败重试 3 次，指数退避（1s→2s→4s）
   async function callLLM(systemText, userText, settings, opts) {
     opts = opts || {};
+    // 二级 token 控制：若未显式传 maxTokens，则按 phase 取该任务的独立上限
+    if (opts.maxTokens == null && opts.phase) opts.maxTokens = resolveTaskMax(settings, opts.phase);
     const maxRetry = opts.maxRetry != null ? opts.maxRetry : 3;
     let lastErr = null;
     for (let attempt = 1; attempt <= maxRetry; attempt++) {
@@ -323,6 +343,20 @@
         WM.UI && WM.UI.toast && WM.UI.toast('部分记忆提炼失败 → 成功：' + okList + '；失败：' + failList, 'warn');
       }
 
+      // 自动大总结：每累计 bigSummaryEvery 次小总结，整合近期小总结为一份长期记忆
+      if (settings.bigSummaryEnabled !== false) {
+        const allSmall = (WM.MemoryStore.getSummaries ? WM.MemoryStore.getSummaries() : []).filter((s) => s.kind !== 'big');
+        const every = Math.max(2, settings.bigSummaryEvery || 5);
+        if (allSmall.length > 0 && allSmall.length % every === 0) {
+          try {
+            const big = await triggerBigSummary(settings);
+            if (big && big.ok) {
+              WM.UI && WM.UI.toast && WM.UI.toast('🌿 温记：已自动生成大总结（整合 ' + big.count + ' 段小总结）');
+            }
+          } catch (e) { /* 大总结失败不阻断小总结结果 */ }
+        }
+      }
+
       if (WM.UI && WM.UI.refresh) WM.UI.refresh();
       return { ok: true, range, count: recent.length, partial: failures.length > 0, successes, failures: failures.map((f) => f.scope) };
     } finally {
@@ -392,6 +426,46 @@
         labels.push('plot');
       }
 
+      // —— 物品 LLM（跟随剧情线一并跑：用本段 recent 区间，关联已有剧情线） ——
+      if (settings.autoItems !== false) {
+        tasks.push((async () => {
+          const tpl = settings.prompts && settings.prompts.itemExtract;
+          if (!tpl) return { kind: 'items', ok: true, skipped: true };
+          const knownPlots = (WM.MemoryStore.getPlots() || [])
+            .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
+          const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
+          const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
+          const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+            .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+          const allPlots = WM.MemoryStore.getPlots() || [];
+          const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
+          for (const ln of lines) {
+            const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
+            const name = parts[0];
+            if (!name) continue;
+            const relIds = [];
+            if (!blank(parts[3])) {
+              for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+                const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+                if (hit) relIds.push(hit.id);
+              }
+            }
+            const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
+            const data = {
+              name,
+              desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
+              owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
+              origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
+              relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
+            };
+            if (exist) await WM.MemoryStore.updateItem(exist.id, data);
+            else await WM.MemoryStore.addItem(data);
+          }
+          return { kind: 'items', ok: true };
+        })());
+        labels.push('items');
+      }
+
       const results = await Promise.allSettled(tasks);
       const failures = [];
       const successes = [];
@@ -426,5 +500,37 @@
     }
   }
 
-  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, getRecentMessages, toMessages, isSummarizing, isPlotting };
+  // ── 自动大总结：把最近的若干「小总结」整合为一份长期记忆 ──
+  // 大总结与小总结用同一份提示词（summary），只是把「历史小总结」作为 {{historySummary}} 喂入，
+  // 让模型把多段碎片合并成连贯的长期记忆。结果以 kind='big' 存入 summaries。
+  async function triggerBigSummary(settings) {
+    settings = settings || {};
+    if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
+      try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
+    }
+    if (settings.bigSummaryEnabled === false) return { ok: false, reason: '大总结未开启' };
+    const all = WM.MemoryStore.getSummaries ? WM.MemoryStore.getSummaries() : [];
+    const every = Math.max(2, settings.bigSummaryEvery || 5);
+    const maxSeg = settings.bigSummaryMaxSegments || 0;
+    // 取最近 every 条小总结（kind 非 big 的）做整合
+    const smalls = all.filter((s) => s.kind !== 'big');
+    const recentSmalls = maxSeg > 0 ? smalls.slice(-maxSeg) : smalls.slice(-every);
+    if (recentSmalls.length < 2) return { ok: false, reason: '小总结数量不足，暂不大总结' };
+    const joined = recentSmalls.map((s, i) => `（小总结 ${i + 1}）${s.title}\n${s.text}`).join('\n\n');
+    const summaryTpl = settings.prompts && settings.prompts.summary;
+    const sys = fillTemplate(summaryTpl, {
+      recent: '【以下是此前多段小总结，请将它们整合为一份连贯、不重复的长期记忆】\n' + joined,
+      historySummary: '',
+    });
+    try {
+      const text = await callLLM(sys, '请将以上多段小总结整合为一份连贯的长期记忆：', settings, { temperature: 0.3, phase: 'summary' });
+      await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
+      return { ok: true, count: recentSmalls.length };
+    } catch (e) {
+      if (WM.ErrLog) await WM.ErrLog.add('big-summary', e, {});
+      return { ok: false, reason: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting };
 })();
