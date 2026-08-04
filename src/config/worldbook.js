@@ -282,7 +282,8 @@ ${known || prev || '（无）'}
 ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction + '\n' : ''}请按规定格式输出世界设定：`;
     if (!WM.Summary || !WM.Summary.callLLM) return prev;
     const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
-    return out && out.trim() ? out.trim() : prev;
+    const extracted = WM.Summary.taggedWorld ? WM.Summary.taggedWorld(out) : out;
+    return extracted && extracted.trim() ? extracted.trim() : prev;
   }
 
   const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个故事所处世界本身的「底层规则设定」。

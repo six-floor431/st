@@ -49,6 +49,29 @@
     return lines.join('\n');
   }
 
+  // 按「符号包裹」标记精确提取某任务输出（与提示词里的 <<<XXX_START>>> / <<<XXX_END>>> 对应）。
+  // 提取不到则回退到全文（兼容旧模型不输出标记的情况）。
+  function extractTagged(raw, startTag, endTag) {
+    if (!raw) return '';
+    const s = String(raw);
+    const re = new RegExp('<<<' + startTag + '_START>>>([\\s\\S]*?)<<<' + startTag + '_END>>>', 'i');
+    const m = s.match(re);
+    if (m && m[1] && m[1].trim()) return sanitizeLLMText(m[1]);
+    // 兼容：只出现 START 没 END，或反过来，截取 START 之后 / END 之前
+    const si = s.indexOf('<<<' + startTag + '_START>>>');
+    const ei = s.indexOf('<<<' + startTag + '_END>>>');
+    if (si >= 0 && ei > si) return sanitizeLLMText(s.slice(si + ('<<<' + startTag + '_START>>>').length, ei));
+    if (si >= 0) return sanitizeLLMText(s.slice(si + ('<<<' + startTag + '_START>>>').length));
+    if (ei >= 0) return sanitizeLLMText(s.slice(0, ei));
+    return sanitizeLLMText(s); // 无标记：回退全文
+  }
+  // 便捷封装：每个阶段对应一个标签名
+  function taggedSummary(out) { return extractTagged(out, 'SUMMARY', 'SUMMARY'); }
+  function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
+  function taggedPlot(out) { return extractTagged(out, 'PLOT', 'PLOT'); }
+  function taggedWorld(out) { return extractTagged(out, 'WORLD', 'WORLD'); }
+  function taggedItems(out) { return extractTagged(out, 'ITEMS', 'ITEMS'); }
+
   // 取得最近 N 条原始对话（用于总结）
   function getRecentMessages(n) {
     try {
@@ -244,7 +267,8 @@
       const summaryTpl = settings.prompts && settings.prompts.summary;
       const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       try {
-        const summaryText = await callLLM(sys, '请输出这段对话的总结：', settings, { temperature: 0.3, phase: 'summary' });
+        const rawSummary = await callLLM(sys, '请输出这段对话的总结：', settings, { temperature: 0.3, phase: 'summary' });
+        const summaryText = taggedSummary(rawSummary);
         await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
         await WM.MemoryStore.setSummaryPointer(range[1]);
       } catch (e) {
@@ -270,7 +294,8 @@
           // 跳过自动世界观，但仍占位不阻塞其它任务
         } else {
         tasks.push((async () => {
-          const world = await WM.Worldbook.inferWorldview(settings, { recent });
+          const worldRaw = await WM.Worldbook.inferWorldview(settings, { recent });
+          const world = taggedWorld(worldRaw);
           if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
           const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
           if (parsed) {
@@ -302,7 +327,8 @@
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
           const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
-          const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+          const itemRaw = taggedItems(out);
+          const lines = itemRaw.split('\n').map((l) => l.trim()).filter(Boolean)
             .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
           const allPlots = WM.MemoryStore.getPlots() || [];
           const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
@@ -410,7 +436,7 @@
           const tpl = settings.prompts && settings.prompts.relations;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
           const out = await callLLM(s, '请输出角色之间的关系（每行 人物A → 人物B：关系）：', settings, { temperature: 0.3, phase: 'relations' });
-          const parsed = parseRelations(out);
+          const parsed = parseRelations(taggedRelations(out));
           const prev = WM.MemoryStore.getRelations() || [];
           const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
           await WM.MemoryStore.setRelations(merged);
@@ -425,7 +451,7 @@
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
           const out = await callLLM(s, '请基于已有剧情线继续推进，输出本段新增的剧情事件（每行 时间｜标题｜事件叙述）：', settings, { temperature: 0.4, phase: 'plot' });
-          const parsed = parsePlots(out);
+          const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
           for (const ev of parsed) {
             const exist = existing.find((p) => p.title === ev.title);
@@ -447,7 +473,8 @@
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
           const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
-          const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+          const itemRaw = taggedItems(out);
+          const lines = itemRaw.split('\n').map((l) => l.trim()).filter(Boolean)
             .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
           const allPlots = WM.MemoryStore.getPlots() || [];
           const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
@@ -535,7 +562,8 @@
       historySummary: '',
     });
     try {
-      const text = await callLLM(sys, '请将以上多段小总结整合为一份连贯的长期记忆：', settings, { temperature: 0.3, phase: 'summary' });
+      const rawBig = await callLLM(sys, '请将以上多段小总结整合为一份连贯的长期记忆：', settings, { temperature: 0.3, phase: 'summary' });
+      const text = taggedSummary(rawBig);
       await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
       return { ok: true, count: recentSmalls.length };
     } catch (e) {
@@ -544,5 +572,6 @@
     }
   }
 
-  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting };
+  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
+    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations };
 })();
