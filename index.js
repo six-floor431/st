@@ -3122,7 +3122,64 @@ ${p.summary || ""}`.trim() });
       </div>`;
         const mountRoot = document.documentElement || document.body;
         mountRoot.appendChild(mask);
+        const healModal = () => {
+          try {
+            const box = mask.querySelector(".wm-modal");
+            if (!box) return;
+            const vh = Math.max(
+              window.innerHeight || 0,
+              document.documentElement && document.documentElement.clientHeight || 0
+            ) || 600;
+            const vw = Math.max(
+              window.innerWidth || 0,
+              document.documentElement && document.documentElement.clientWidth || 0
+            ) || 360;
+            const mr = mask.getBoundingClientRect();
+            if (mr.height < 80 || mr.width < 80) {
+              mask.style.setProperty("position", "fixed", "important");
+              mask.style.setProperty("left", "0px", "important");
+              mask.style.setProperty("top", "0px", "important");
+              mask.style.setProperty("width", vw + "px", "important");
+              mask.style.setProperty("height", vh + "px", "important");
+              mask.style.setProperty("display", "flex", "important");
+            }
+            const br = box.getBoundingClientRect();
+            if (br.height < 60) {
+              const isMobile = vw <= 768;
+              box.style.setProperty("min-height", "160px", "important");
+              box.style.setProperty("height", "auto", "important");
+              box.style.setProperty("max-height", Math.round(vh * 0.88) + "px", "important");
+              box.style.setProperty("display", "flex", "important");
+              box.style.setProperty("flex-direction", "column", "important");
+              box.style.setProperty("overflow", "hidden", "important");
+              if (isMobile) {
+                box.style.setProperty("width", "100%", "important");
+                box.style.setProperty("max-width", "100%", "important");
+              }
+              const bodyEl = box.querySelector(".wm-modal-body");
+              if (bodyEl) {
+                bodyEl.style.setProperty("flex", "1 1 auto", "important");
+                bodyEl.style.setProperty("min-height", "80px", "important");
+                bodyEl.style.setProperty("overflow-y", "auto", "important");
+              }
+              const headEl = box.querySelector(".wm-modal-head");
+              if (headEl) headEl.style.setProperty("min-height", "44px", "important");
+              const footEl = box.querySelector(".wm-modal-foot");
+              if (footEl) footEl.style.setProperty("min-height", "48px", "important");
+            }
+          } catch (e) {
+          }
+        };
+        healModal();
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(healModal);
+        setTimeout(healModal, 60);
+        setTimeout(healModal, 300);
+        const onResize = () => healModal();
+        window.addEventListener("resize", onResize);
+        window.addEventListener("orientationchange", onResize);
         const close = (val) => {
+          window.removeEventListener("resize", onResize);
+          window.removeEventListener("orientationchange", onResize);
           if (mask.parentNode) mask.parentNode.removeChild(mask);
           resolve(val);
         };
@@ -4112,7 +4169,19 @@ ${p.summary || ""}`.trim() });
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
+    WM.Launcher = {
+      init,
+      renderTab,
+      renderCfg,
+      renderWorld,
+      renderAuto,
+      renderMem,
+      renderRel,
+      renderItem,
+      renderPlot,
+      // 导出弹窗以便自动化回归测试（手机端弹窗塌陷问题）
+      openModal
+    };
   })();
 
   // src/index.js

@@ -44,25 +44,39 @@
 }
 #warmmemo-btn:hover { background: linear-gradient(180deg, #fffdf8, var(--wm-paper)); }
 
+/* 悬浮按钮同样受"<html> perspective 成为 fixed 包含块 + 高度为 0"影响：
+ * 用 bottom 定位会被顶到屏幕上方。改成 top + calc(视口高度) 锚定底部，绕开该问题。 */
 .wm-float {
   position: fixed;
   left: 14px;
-  bottom: 14px;
+  top: calc(100vh - 14px - env(safe-area-inset-bottom));
+  top: calc(100dvh - 14px - env(safe-area-inset-bottom));
+  transform: translateY(-100%);
   z-index: 9999;
 }
 
 /* ---------- 遮罩层 ---------- */
+/* 同 .wm-modal-mask 的注释：酒馆移动端 <html> 有 perspective:1000px 且高度为 0，
+ * 它会成为 fixed 元素的包含块，导致 inset:0 / height:100% 解析成 0（实测遮罩只剩 24px）。
+ * 因此这里必须用视口单位显式指定尺寸，不能用 inset:0 或百分比高度。 */
 .wm-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
   background: rgba(40, 38, 33, 0.5);   /* 墨色半透 */
   backdrop-filter: blur(2px);
   display: none;
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  width: 100dvw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
   padding: 12px;
   box-sizing: border-box;
   /* 隐藏系统滚动条，但保留触摸/滚轮划动 */
@@ -600,16 +614,33 @@
 /* ============================================================
  * 通用弹窗（添加/编辑物品、剧情、世界条目）
  * ============================================================ */
+/* 手机端弹窗塌成"一条线"的根因与修法（实测于 SillyTavern 移动布局）：
+ *   酒馆移动端给 <html> 加了 perspective:1000px，且 <html> 的高度为 0px。
+ *   CSS 规范中 perspective/transform/filter 非 none 的祖先会成为 position:fixed 的
+ *   「包含块」——于是 fixed 不再相对视口，而是相对这个高度为 0 的 <html> 定位，
+ *   inset:0 / top:0;bottom:0 解析出来的高度就是 0，遮罩被压成约 28px 的细线，
+ *   里面的 .wm-modal 只剩 ~2px，肉眼就是"顶部一条线，面板没出来"。
+ *   注意：挂到 body 也一样坏（body 是 <html> 的后代，同样受包含块影响），
+ *   所以换挂载点无效，必须显式给出视口尺寸，不能依赖 inset:0 的自动求解。 */
 .wm-modal-mask {
   position: fixed !important;
-  inset: 0 !important;
   top: 0 !important;
   left: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  /* 显式视口尺寸：绕开"包含块高度为 0"导致的塌陷（dvh 兼容移动端动态地址栏） */
+  width: 100vw !important;
+  height: 100vh !important;
+  width: 100dvw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-height: 0 !important;
   transform: none !important;
   background: rgba(20,20,18,.5);
   backdrop-filter: blur(2px);
   z-index: 100001 !important;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
