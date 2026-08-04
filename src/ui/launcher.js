@@ -1151,6 +1151,7 @@
         s.embeddingBaseUrl = q('#c-emb-url').value;
         s.embeddingApiKey = q('#c-emb-key') ? q('#c-emb-key').value : s.embeddingApiKey;
         s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
+        s.embeddingUseLLM = q('#c-emb-usellm') ? q('#c-emb-usellm').checked : (s.embeddingUseLLM !== false);
         s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
       }
     }
@@ -1290,14 +1291,17 @@
   function renderPaneVector(s) {
     return `<div class="wm-card">
       <div class="wm-h">Embedding（向量）配置</div>
-      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索</label>
-      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="http://127.0.0.1:8080/vec/v1/embeddings 或 https://api.siliconflow.cn/v1"/></label>
-      <div class="wm-hint">直接填任意服务的 Base URL，自动适配：<br/>· 本地反代/同源代理：<code>http://127.0.0.1:8080/vec</code>（自动补 /v1/embeddings）<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
-      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（本地反代留空）"/></label>
+      <div class="wm-hint">默认情况下你<b>什么都不用配</b>：勾下面的「接管向量检索」后，温记会直接用你<b>已经填好的 LLM 地址</b>做向量召回（DeepSeek/火山/OpenAI/Ollama 都支持 /embeddings 接口），零配置真接管。只有想换独立 embedding 服务时才填下面地址。</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索（接管时必须）</label>
+      <label class="wm-row"><input type="checkbox" id="c-emb-usellm" ${s.embeddingUseLLM!==false?'checked':''}/> 复用 LLM 地址做 Embedding（默认开，免配置）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">开启时，下方留空会自动用「LLM 配置」里的 Base URL。若下方已填独立地址则以此为准。</div>
+      <label class="wm-row">独立 Base URL（可选）<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="留空=自动用 LLM 地址；如 https://api.siliconflow.cn/v1"/></label>
+      <div class="wm-hint">想用独立 embedding 服务才填：<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· 本地 Ollama：<code>http://127.0.0.1:11434/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（复用 LLM 时留空）"/></label>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用温记自己的 embedding 召回，替代酒馆原生召回）</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">开启后：温记内容<b>不再</b>拆写酒馆世界书，而由温记用你配置的 Embedding 做余弦召回 topK 注入，真正做到「用自家向量接管」。关闭则交回酒馆世界书原生激活。</div>
+      <div class="wm-hint" style="margin:-2px 0 4px">勾选即<b>立刻真接管</b>：温记内容不再拆写酒馆世界书，改由温记用向量召回 topK 注入（默认复用 LLM 地址，零配置）。不勾则交回酒馆世界书原生激活。</div>
     </div>`;
   }
 

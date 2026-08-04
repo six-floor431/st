@@ -7,8 +7,15 @@
     const DEFAULTS = {
       showMemoryButton: true,
       autoUpdate: true,
-      vectorEnabled: false,
-      // 向量(Embedding)配置：直接填 Base URL 自适应任意 OpenAI 兼容/本地反代服务（不再选厂家）
+      // 向量(Embedding)总开关：默认跟随「接管向量检索」自动启用（见 takeoverEmbedding）。
+      // 单独关闭此项则即便开了接管也不做向量召回（回退最近N条）。普通用户无需关心此开关。
+      vectorEnabled: true,
+      // 复用 LLM 地址做 Embedding（默认开启）：绝大多数 OpenAI 兼容服务（DeepSeek/火山/OpenAI/Ollama）
+      // 都提供 /v1/embeddings 接口，因此只要用户配了 LLM（本来就必须配），接管即可零配置真生效，
+      // 用户不必再去东跑西跑配第二个 Embedding 地址。
+      embeddingUseLLM: true,
+      // 向量(Embedding)配置（可选高级项）：留空则自动复用 LLM 的 Base URL 做 embedding；
+      // 想用独立的 embedding 服务（如 SiliconFlow bge-m3、本地 Ollama nomic）再填这里覆盖。
       embeddingBaseUrl: "",
       // 任意 Base URL：如 http://127.0.0.1:8080/vec/v1/embeddings、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
       embeddingApiKey: "",
@@ -1022,8 +1029,9 @@ ${it.message}`;
     }
     async function embed(text, settings) {
       settings = settings || WM.Settings.load();
-      if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
-      if (!settings.embeddingBaseUrl) return null;
+      if (settings.vectorEnabled === false || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+      const llmOk = settings.embeddingUseLLM !== false && settings.llmConfig && settings.llmConfig.apiUrl;
+      if (!settings.embeddingBaseUrl && !llmOk) return null;
       try {
         return await WM.EmbeddingClient.embed(text, settings);
       } catch (e) {
@@ -1153,19 +1161,24 @@ ${it.message}`;
       return /[?&]method=GET/i.test(urlOrPath || "") || /[?&]get=1\b/i.test(urlOrPath || "");
     }
     function resolveEmbedUrl(s) {
-      const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "";
+      let base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "";
+      let apiKey = s.embeddingApiKey || s.apiKey || "";
+      if (!base && s.embeddingUseLLM !== false && s.llmConfig && s.llmConfig.apiUrl) {
+        base = normalizeBaseUrl(s.llmConfig.apiUrl) || "";
+        if (!apiKey && s.llmConfig.apiKey) apiKey = s.llmConfig.apiKey;
+      }
       if (!base) return { url: "", provider: "compatible", model: s.embeddingModel || "" };
       if (/generativelanguage\.googleapis\.com/i.test(base)) {
         return { url: base, provider: "gemini", model: s.embeddingModel || s.model || "text-embedding-004" };
       }
-      return { url: buildEmbedUrl(base), provider: "compatible", model: s.embeddingModel || s.model || "BAAI/bge-m3" };
+      return { url: buildEmbedUrl(base), provider: "compatible", model: s.embeddingModel || s.model || "BAAI/bge-m3", apiKey };
     }
     async function embed(texts, settings) {
       const s = settings || {};
       const info = resolveEmbedUrl(s);
       const base = info.url;
       const model = info.model;
-      const key = s.embeddingApiKey || s.apiKey || "";
+      const key = info.apiKey || s.embeddingApiKey || s.apiKey || "";
       const provider = info.provider;
       const input = Array.isArray(texts) ? texts : [texts];
       WM._lastEmbedResolve = { source: s.embeddingSource, url: base, model, provider };
@@ -3361,6 +3374,7 @@ ${p.summary || ""}`.trim() });
           s.embeddingBaseUrl = q("#c-emb-url").value;
           s.embeddingApiKey = q("#c-emb-key") ? q("#c-emb-key").value : s.embeddingApiKey;
           s.embeddingModel = q("#c-emb-model") ? q("#c-emb-model").value : s.embeddingModel;
+          s.embeddingUseLLM = q("#c-emb-usellm") ? q("#c-emb-usellm").checked : s.embeddingUseLLM !== false;
           s.takeoverEmbedding = q("#c-take-emb") ? q("#c-take-emb").checked : s.takeoverEmbedding;
         }
       }
@@ -3502,14 +3516,17 @@ ${p.summary || ""}`.trim() });
     function renderPaneVector(s) {
       return `<div class="wm-card">
       <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
-      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22</label>
-      <label class="wm-row">Base URL<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="http://127.0.0.1:8080/vec/v1/embeddings \u6216 https://api.siliconflow.cn/v1"/></label>
-      <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u670D\u52A1\u7684 Base URL\uFF0C\u81EA\u52A8\u9002\u914D\uFF1A<br/>\xB7 \u672C\u5730\u53CD\u4EE3/\u540C\u6E90\u4EE3\u7406\uFF1A<code>http://127.0.0.1:8080/vec</code>\uFF08\u81EA\u52A8\u8865 /v1/embeddings\uFF09<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1</code><br/>\xB7 Gemini\uFF1A<code>https://generativelanguage.googleapis.com/v1beta</code></div>
-      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u672C\u5730\u53CD\u4EE3\u7559\u7A7A\uFF09"/></label>
+      <div class="wm-hint">\u9ED8\u8BA4\u60C5\u51B5\u4E0B\u4F60<b>\u4EC0\u4E48\u90FD\u4E0D\u7528\u914D</b>\uFF1A\u52FE\u4E0B\u9762\u7684\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u540E\uFF0C\u6E29\u8BB0\u4F1A\u76F4\u63A5\u7528\u4F60<b>\u5DF2\u7ECF\u586B\u597D\u7684 LLM \u5730\u5740</b>\u505A\u5411\u91CF\u53EC\u56DE\uFF08DeepSeek/\u706B\u5C71/OpenAI/Ollama \u90FD\u652F\u6301 /embeddings \u63A5\u53E3\uFF09\uFF0C\u96F6\u914D\u7F6E\u771F\u63A5\u7BA1\u3002\u53EA\u6709\u60F3\u6362\u72EC\u7ACB embedding \u670D\u52A1\u65F6\u624D\u586B\u4E0B\u9762\u5730\u5740\u3002</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22\uFF08\u63A5\u7BA1\u65F6\u5FC5\u987B\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-emb-usellm" ${s.embeddingUseLLM !== false ? "checked" : ""}/> \u590D\u7528 LLM \u5730\u5740\u505A Embedding\uFF08\u9ED8\u8BA4\u5F00\uFF0C\u514D\u914D\u7F6E\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u65F6\uFF0C\u4E0B\u65B9\u7559\u7A7A\u4F1A\u81EA\u52A8\u7528\u300CLLM \u914D\u7F6E\u300D\u91CC\u7684 Base URL\u3002\u82E5\u4E0B\u65B9\u5DF2\u586B\u72EC\u7ACB\u5730\u5740\u5219\u4EE5\u6B64\u4E3A\u51C6\u3002</div>
+      <label class="wm-row">\u72EC\u7ACB Base URL\uFF08\u53EF\u9009\uFF09<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="\u7559\u7A7A=\u81EA\u52A8\u7528 LLM \u5730\u5740\uFF1B\u5982 https://api.siliconflow.cn/v1"/></label>
+      <div class="wm-hint">\u60F3\u7528\u72EC\u7ACB embedding \u670D\u52A1\u624D\u586B\uFF1A<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1</code><br/>\xB7 \u672C\u5730 Ollama\uFF1A<code>http://127.0.0.1:11434/v1</code><br/>\xB7 Gemini\uFF1A<code>https://generativelanguage.googleapis.com/v1beta</code></div>
+      <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u590D\u7528 LLM \u65F6\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 embedding \u53EC\u56DE\uFF0C\u66FF\u4EE3\u9152\u9986\u539F\u751F\u53EC\u56DE\uFF09</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u540E\uFF1A\u6E29\u8BB0\u5185\u5BB9<b>\u4E0D\u518D</b>\u62C6\u5199\u9152\u9986\u4E16\u754C\u4E66\uFF0C\u800C\u7531\u6E29\u8BB0\u7528\u4F60\u914D\u7F6E\u7684 Embedding \u505A\u4F59\u5F26\u53EC\u56DE topK \u6CE8\u5165\uFF0C\u771F\u6B63\u505A\u5230\u300C\u7528\u81EA\u5BB6\u5411\u91CF\u63A5\u7BA1\u300D\u3002\u5173\u95ED\u5219\u4EA4\u56DE\u9152\u9986\u4E16\u754C\u4E66\u539F\u751F\u6FC0\u6D3B\u3002</div>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u52FE\u9009\u5373<b>\u7ACB\u523B\u771F\u63A5\u7BA1</b>\uFF1A\u6E29\u8BB0\u5185\u5BB9\u4E0D\u518D\u62C6\u5199\u9152\u9986\u4E16\u754C\u4E66\uFF0C\u6539\u7531\u6E29\u8BB0\u7528\u5411\u91CF\u53EC\u56DE topK \u6CE8\u5165\uFF08\u9ED8\u8BA4\u590D\u7528 LLM \u5730\u5740\uFF0C\u96F6\u914D\u7F6E\uFF09\u3002\u4E0D\u52FE\u5219\u4EA4\u56DE\u9152\u9986\u4E16\u754C\u4E66\u539F\u751F\u6FC0\u6D3B\u3002</div>
     </div>`;
     }
     function renderPaneRerank(s) {
@@ -3658,7 +3675,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "deep-thinking-and-real-takeover";
+  window.WarmMemo.version = "zero-config-takeover-reuse-llm";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

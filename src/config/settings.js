@@ -7,8 +7,15 @@
   const DEFAULTS = {
     showMemoryButton: true,
     autoUpdate: true,
-    vectorEnabled: false,
-    // 向量(Embedding)配置：直接填 Base URL 自适应任意 OpenAI 兼容/本地反代服务（不再选厂家）
+    // 向量(Embedding)总开关：默认跟随「接管向量检索」自动启用（见 takeoverEmbedding）。
+    // 单独关闭此项则即便开了接管也不做向量召回（回退最近N条）。普通用户无需关心此开关。
+    vectorEnabled: true,
+    // 复用 LLM 地址做 Embedding（默认开启）：绝大多数 OpenAI 兼容服务（DeepSeek/火山/OpenAI/Ollama）
+    // 都提供 /v1/embeddings 接口，因此只要用户配了 LLM（本来就必须配），接管即可零配置真生效，
+    // 用户不必再去东跑西跑配第二个 Embedding 地址。
+    embeddingUseLLM: true,
+    // 向量(Embedding)配置（可选高级项）：留空则自动复用 LLM 的 Base URL 做 embedding；
+    // 想用独立的 embedding 服务（如 SiliconFlow bge-m3、本地 Ollama nomic）再填这里覆盖。
     embeddingBaseUrl: '',           // 任意 Base URL：如 http://127.0.0.1:8080/vec/v1/embeddings、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
     embeddingApiKey: '',
     embeddingModel: 'text-embedding-3-small',

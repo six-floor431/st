@@ -55,12 +55,15 @@
     return true;
   }
 
-  // 计算文本向量（若 embedding 已配置），否则返回 null。支持单条字符串或字符串数组（批量）。
+  // 计算文本向量（若 embedding 可用），否则返回 null。支持单条字符串或字符串数组（批量）。
+  // 可用条件：开启了向量（vectorEnabled）且 EmbeddingClient 存在；
+  // 地址优先级：独立 embeddingBaseUrl > 复用 LLM 地址（embeddingUseLLM 默认开）。
+  // 只要二者之一有地址即可，无需用户额外东跑西跑配第二个服务。
   async function embed(text, settings) {
     settings = settings || WM.Settings.load();
-    if (!settings.vectorEnabled || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
-    // 向量可用条件：填了 Base URL 即可（本地反代/云端/Ollama 都走 BaseURL 直填）
-    if (!settings.embeddingBaseUrl) return null;
+    if (settings.vectorEnabled === false || !WM.EmbeddingClient || !WM.EmbeddingClient.embed) return null;
+    const llmOk = settings.embeddingUseLLM !== false && settings.llmConfig && settings.llmConfig.apiUrl;
+    if (!settings.embeddingBaseUrl && !llmOk) return null;
     try { return await WM.EmbeddingClient.embed(text, settings); } catch (e) { return null; }
   }
 

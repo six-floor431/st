@@ -54,15 +54,23 @@
   }
 
   // 直接按 Base URL 解析 embedding 实际请求地址（自适应任意 OpenAI 兼容 / 本地反代 / Gemini）
+  // 关键：当未单独填 Embedding 地址时，自动复用用户已配的 LLM Base URL（embeddingUseLLM 默认开），
+  // 实现「只要配了 LLM，向量接管就能零配置真生效」，用户不必再东跑西跑配第二个地址。
   function resolveEmbedUrl(s) {
-    const base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || '';
+    let base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || '';
+    let apiKey = s.embeddingApiKey || s.apiKey || '';
+    // 复用 LLM 地址（默认开启）
+    if (!base && s.embeddingUseLLM !== false && s.llmConfig && s.llmConfig.apiUrl) {
+      base = normalizeBaseUrl(s.llmConfig.apiUrl) || '';
+      if (!apiKey && s.llmConfig.apiKey) apiKey = s.llmConfig.apiKey;
+    }
     if (!base) return { url: '', provider: 'compatible', model: s.embeddingModel || '' };
     // Gemini 特殊 host 直接走 gemini 协议
     if (/generativelanguage\.googleapis\.com/i.test(base)) {
       return { url: base, provider: 'gemini', model: s.embeddingModel || s.model || 'text-embedding-004' };
     }
     // 其余一律按 OpenAI 兼容：buildEmbedUrl 智能补全 /embeddings 后缀（用户可能填 /v1 或已完整地址）
-    return { url: buildEmbedUrl(base), provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3' };
+    return { url: buildEmbedUrl(base), provider: 'compatible', model: s.embeddingModel || s.model || 'BAAI/bge-m3', apiKey: apiKey };
   }
 
   async function embed(texts, settings) {
@@ -70,7 +78,7 @@
     const info = resolveEmbedUrl(s);
     const base = info.url;
     const model = info.model;
-    const key = s.embeddingApiKey || s.apiKey || '';
+    const key = info.apiKey || s.embeddingApiKey || s.apiKey || '';
     const provider = info.provider;
     const input = Array.isArray(texts) ? texts : [texts];
     WM._lastEmbedResolve = { source: s.embeddingSource, url: base, model, provider };
