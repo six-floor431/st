@@ -297,10 +297,17 @@
   border: 1px solid var(--wm-line-strong);
   border-radius: 8px 2px 8px 2px;
   background: rgba(255,255,255,.6);
-  color: var(--wm-ink);
+  color: #000;                 /* 已输入文字：纯黑，醒目 */
   font-size: 14px;
   font-family: var(--wm-font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: border-color .15s, box-shadow .15s;
+}
+/* 占位提示：浅灰，明显区别于黑色已输入文字 */
+.wm-row input::placeholder, .wm-row textarea::placeholder, .wm-row select::placeholder {
+  color: #9a9a90;
+  opacity: 1;
 }
 .wm-row input:focus, .wm-row select:focus, .wm-row textarea:focus {
   outline: none;
@@ -637,7 +644,8 @@
   max-height: none !important;
   min-height: 0 !important;
   transform: none !important;
-  background: rgba(20,20,18,.5);
+  background: rgba(20,20,18,.55);
+  /* 桌面端保留轻微毛玻璃；移动端在媒体查询里关闭，避免合成层模糊导致文字发糊 */
   backdrop-filter: blur(2px);
   z-index: 100001 !important;
   display: flex !important;
@@ -714,10 +722,19 @@
   border: 1px solid var(--wm-line-strong);
   border-radius: 8px 2px 8px 2px;
   background: rgba(255,255,255,.6);
-  color: var(--wm-ink);
+  color: #000;                 /* 已输入文字：纯黑 */
   font-size: 13px;
   font-family: var(--wm-font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-width: 0;
+}
+/* 占位提示：浅灰，明显区别于黑色已输入文字 */
+.wm-field input::placeholder,
+.wm-field select::placeholder,
+.wm-field textarea::placeholder {
+  color: #9a9a90;
+  opacity: 1;
 }
 .wm-field textarea { min-height: 78px; resize: vertical; line-height: 1.6; }
 .wm-field input:focus, .wm-field select:focus, .wm-field textarea:focus {
@@ -751,12 +768,15 @@
   background:
     repeating-linear-gradient(0deg, transparent 0 27px, var(--wm-line) 27px 28px),
     rgba(255,255,255,.55);
-  color: var(--wm-ink);
+  color: #000;             /* 已输入文字：纯黑 */
   font-size: 14px;
   line-height: 28px;       /* 与稿纸横格对齐 */
   font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   box-sizing: border-box;
 }
+.wm-ta::placeholder { color: #9a9a90; opacity: 1; }
 
 /* ============================================================
  * 响应式（水墨风统一，仅尺寸变化；均隐藏滚动条）
@@ -779,6 +799,24 @@
     margin-top: env(safe-area-inset-top);
   }
   .wm-title { font-size: 15px; }
+
+  /* 手机端去糊：关闭遮罩毛玻璃（合成层模糊会让面板文字发虚），并放大输入框字号。
+   * 输入框 >=16px 可避免 iOS 在聚焦时自动缩放页面造成的整体重排/模糊。 */
+  .wm-modal-mask,
+  .wm-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .wm-row input[type="text"],
+  .wm-row input[type="number"],
+  .wm-row select,
+  .wm-row textarea,
+  .wm-field input[type="text"],
+  .wm-field select,
+  .wm-field textarea,
+  .wm-ta {
+    font-size: 16px !important;
+  }
 }
 @media (max-width: 480px) {
   .wm-overlay { padding-left: 8px; padding-right: 8px; }
