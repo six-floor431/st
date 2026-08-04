@@ -122,6 +122,8 @@
       // 扩展自带提示词（均可编辑）。保留 {{变量}} 占位符，运行时被真实数据替换：
       //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系   {{plot}} 剧情线
       // 注：世界观走独立推断函数（inferWorldview），不通过模板占位符注入。
+      promptsVersion: 3,
+      // 提示词结构/内容版本。每次大改提示词 +1；低于此版本时自动覆盖用户已保存的旧提示词（保留其它设置）。
       prompts: {
         // ═══════════════════════════════════════════
         // 统一输出格式约定（所有提示词必须遵守）：
@@ -163,6 +165,10 @@
               model: s.summaryModel || ""
             };
           }
+        }
+        if ((s.promptsVersion || 0) < DEFAULTS.promptsVersion) {
+          s.prompts = Object.assign({}, DEFAULTS.prompts);
+          s.promptsVersion = DEFAULTS.promptsVersion;
         }
         return s;
       } catch (e) {
@@ -4084,7 +4090,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "worldview-once-and-status-strip";
+  window.WarmMemo.version = "symbol-tag-parse-and-ui-sync";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
