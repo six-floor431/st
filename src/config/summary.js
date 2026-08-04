@@ -172,10 +172,20 @@
           const arr = JSON.parse(out);
           if (Array.isArray(arr)) parsed = arr;
         } catch (e) {
+          // 严格解析：只接受 "A → B：词" 格式；过滤分析句/长句
+          const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
           parsed = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
             const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-            return m ? { from: m[1].trim(), to: m[2].trim(), label: m[3].trim() } : { from: l, to: '', label: '' };
-          });
+            if (!m) return null;
+            const from = m[1].trim(), to = m[2].trim(), label = (m[3] || '').trim();
+            // 过滤：from/to 含分析词、label 超过 10 字（说明是句子不是关系词）、from 或 to 为空
+            if (!from || !to || !label) return null;
+            if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
+            if (label.length > 10) return null;
+            // from/to 本身不能是长句（超过 8 字说明不是人名）
+            if (from.length > 8 || to.length > 8) return null;
+            return { from, to, label };
+          }).filter(Boolean);
         }
         await WM.MemoryStore.setRelations(parsed);
         return { kind: 'relations', ok: true };
@@ -193,12 +203,13 @@
         function normStatus(raw) {
           if (!raw) return 'active';
           const t = String(raw).replace(/[【】\[\]（）()]/g, '').trim();
-          if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕)$/.test(t)) return 'done';
-          if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置)$/.test(t)) return 'abandon';
-          if (/^(进行中|进行|未完|未完结|持续|发展中|连载|连载中)$/.test(t)) return 'active';
-          // 含关键词兜底
-          if (/(完结|完成|结束|告一段落)/.test(t)) return 'done';
-          if (/(废弃|放弃|停止|作废|取消)/.test(t)) return 'abandon';
+          // done：明确完结词（精确匹配 + 包含匹配）
+          if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕|落幕了|大结局|终章|结局|圆满|成功|解决|完成)$/.test(t)) return 'done';
+          if (/(完结|完成|结束|告一段落|落幕|解决|达成|实现)/.test(t)) return 'done';
+          // abandon：明确废弃/放弃词
+          if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止|夭折|不了了之)$/.test(t)) return 'abandon';
+          if (/(废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止)/.test(t)) return 'abandon';
+          // active：进行中/持续（含默认）
           return 'active';
         }
         const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
