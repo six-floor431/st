@@ -22,7 +22,7 @@
   --wm-font-ui: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 /* 面板与正文用衬线（水墨感）；控件/标签用 UI sans（可读性） */
-.wm-panel, .wm-ta, .wm-row textarea { font-family: var(--wm-font-serif); text-rendering: optimizeLegibility; }
+.wm-ta, .wm-row textarea { font-family: var(--wm-font-ui); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 .wm-tabs button, .wm-subtabs button, .wm-btn, .wm-ctrl, .wm-row label, .wm-row input, .wm-row select, .wm-badge, .wm-hint { font-family: var(--wm-font-ui); }
 
 /* 注意：酒馆(SillyTavern) 全局样式包裹在 @layer base/components/theme 里，
@@ -100,16 +100,17 @@
   height: min(82vh, calc(100% - 24px));
   max-width: 100%;
   max-height: 100%;
-  background:
-    repeating-linear-gradient(0deg, rgba(0,0,0,0.012) 0 2px, transparent 2px 4px),
-    linear-gradient(180deg, #fbf9f3, var(--wm-paper));
+  /* 近白实底 + sans，去除横纹理/半透/衬线，避免手机端发糊 */
+  background: #fbfaf7;
   color: var(--wm-ink);
   border: 1px solid var(--wm-line-strong);
-  border-radius: 16px 6px 16px 6px;     /* 卷轴边角 */
+  border-radius: 14px;
   box-shadow: 0 16px 60px rgba(20, 18, 14, 0.35);
   overflow: hidden;
   font-size: 14px;
-  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", serif; /* 衬线水墨感 */
+  font-family: var(--wm-font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .wm-panel.wm-maximized {
