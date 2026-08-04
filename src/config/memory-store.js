@@ -57,10 +57,14 @@
         it,
         { relatedPlots: Array.isArray(it && it.relatedPlots) ? it.relatedPlots : [] }
       ));
-      s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => Object.assign(
-        { id: 'pl_' + Math.random().toString(36).slice(2), title: '', summary: '', time: '', status: 'active', ts: Date.now() },
-        p
-      ));
+      s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => {
+        const clean = Object.assign({}, p);
+        delete clean.status; // 剧情线已取消状态标签，迁移时剔除历史 status 字段
+        return Object.assign(
+          { id: 'pl_' + Math.random().toString(36).slice(2), title: '', summary: '', time: '', ts: Date.now() },
+          clean
+        );
+      });
       return s;
     } catch (e) {
       return emptyStore();

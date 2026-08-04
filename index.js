@@ -403,10 +403,14 @@ ${it.message}`;
           it,
           { relatedPlots: Array.isArray(it && it.relatedPlots) ? it.relatedPlots : [] }
         ));
-        s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => Object.assign(
-          { id: "pl_" + Math.random().toString(36).slice(2), title: "", summary: "", time: "", status: "active", ts: Date.now() },
-          p
-        ));
+        s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => {
+          const clean = Object.assign({}, p);
+          delete clean.status;
+          return Object.assign(
+            { id: "pl_" + Math.random().toString(36).slice(2), title: "", summary: "", time: "", ts: Date.now() },
+            clean
+          );
+        });
         return s;
       } catch (e) {
         return emptyStore();
@@ -2009,28 +2013,37 @@ ${recent}
         const tasks = [];
         const labels = [];
         if (settings.autoWorld !== false) {
-          tasks.push((async () => {
-            const world = await WM.Worldbook.inferWorldview(settings, { recent });
-            if (!world || !world.trim()) return { kind: "worldview", ok: true, skipped: true };
-            const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
-            if (parsed) {
-              const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
-              await WM.MemoryStore.setWorldMeta({
-                name: parsed.name || cur.name || "",
-                kind: parsed.kind || cur.kind || "",
-                desc: parsed.desc || cur.desc || ""
-              });
-              for (const sec of parsed.sections) {
-                const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
-                if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
-                else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+          const hasWorld = (() => {
+            const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+            const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
+            const wold = WM.MemoryStore.getWorld ? WM.MemoryStore.getWorld() : "";
+            return !!(meta && (meta.name || meta.kind || meta.desc)) || secs && secs.length || wold && String(wold).trim();
+          })();
+          if (hasWorld) {
+          } else {
+            tasks.push((async () => {
+              const world = await WM.Worldbook.inferWorldview(settings, { recent });
+              if (!world || !world.trim()) return { kind: "worldview", ok: true, skipped: true };
+              const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+              if (parsed) {
+                const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+                await WM.MemoryStore.setWorldMeta({
+                  name: parsed.name || cur.name || "",
+                  kind: parsed.kind || cur.kind || "",
+                  desc: parsed.desc || cur.desc || ""
+                });
+                for (const sec of parsed.sections) {
+                  const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+                  if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+                  else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+                }
+              } else {
+                await WM.MemoryStore.setWorld(world);
               }
-            } else {
-              await WM.MemoryStore.setWorld(world);
-            }
-            return { kind: "worldview", ok: true };
-          })());
-          labels.push("worldview");
+              return { kind: "worldview", ok: true };
+            })());
+            labels.push("worldview");
+          }
         }
         if (settings.autoItems !== false) {
           tasks.push((async () => {
@@ -3252,6 +3265,7 @@ ${p.summary || ""}`.trim() });
         <button data-act="sec-add" class="wm-btn">\uFF0B \u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE</button>
         <button data-act="world-gen" class="wm-btn">AI \u8865\u5168\u8BBE\u5B9A</button>
       </div>
+      <div class="wm-hint" style="margin-top:6px">\u63D0\u793A\uFF1A\u4E16\u754C\u89C2<b>\u81EA\u52A8\u53EA\u751F\u6210\u4E00\u6B21</b>\uFF08\u9996\u6B21\u603B\u7ED3\u65F6\uFF09\u3002\u4E4B\u540E\u60F3\u91CD\u65B0/\u8865\u5145\u63A8\u65AD\uFF0C\u8BF7\u70B9\u300CAI \u8865\u5168\u8BBE\u5B9A\u300D\u624B\u52A8\u8C03\u7528\uFF08\u4F1A\u81EA\u52A8\u5728\u5DF2\u6709\u8BBE\u5B9A\u4E0A\u589E\u91CF\u66F4\u65B0\uFF09\u3002</div>
 
       <div class="wm-h" style="margin-top:12px">\u5177\u4F53\u8BBE\u5B9A\uFF08${secs.length}\uFF09</div>
       <div class="wm-world-secs">${secHtml || '<div class="wm-empty">\u6682\u65E0\u8BBE\u5B9A\u6761\u76EE\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE\u300D\u65B0\u5EFA</div>'}</div>
@@ -4003,7 +4017,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "items-dual-follow-tokens-bigsummary-hidefix";
+  window.WarmMemo.version = "worldview-once-and-status-strip";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

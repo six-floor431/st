@@ -258,6 +258,17 @@
       const labels = [];
 
       if (settings.autoWorld !== false) {
+        // 世界观自动只跑一次：若已有世界观数据（世界名/类型/简述/设定条目/旧纯文本任一），自动流程跳过，
+        // 后续只能由用户在「世界设定」面板手动点「生成世界设定」才再次调用 LLM（见 launcher world-gen）。
+        const hasWorld = (() => {
+          const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+          const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
+          const wold = WM.MemoryStore.getWorld ? WM.MemoryStore.getWorld() : '';
+          return !!(meta && (meta.name || meta.kind || meta.desc)) || (secs && secs.length) || (wold && String(wold).trim());
+        })();
+        if (hasWorld) {
+          // 跳过自动世界观，但仍占位不阻塞其它任务
+        } else {
         tasks.push((async () => {
           const world = await WM.Worldbook.inferWorldview(settings, { recent });
           if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
@@ -280,6 +291,7 @@
           return { kind: 'worldview', ok: true };
         })());
         labels.push('worldview');
+        }
       }
 
       if (settings.autoItems !== false) {

@@ -768,6 +768,7 @@
         <button data-act="sec-add" class="wm-btn">＋ 添加设定条目</button>
         <button data-act="world-gen" class="wm-btn">AI 补全设定</button>
       </div>
+      <div class="wm-hint" style="margin-top:6px">提示：世界观<b>自动只生成一次</b>（首次总结时）。之后想重新/补充推断，请点「AI 补全设定」手动调用（会自动在已有设定上增量更新）。</div>
 
       <div class="wm-h" style="margin-top:12px">具体设定（${secs.length}）</div>
       <div class="wm-world-secs">${secHtml || '<div class="wm-empty">暂无设定条目，点上方「添加设定条目」新建</div>'}</div>

@@ -4,7 +4,7 @@
 
 // 构建版本标记：每次发布时同步修改，用于确认酒馆加载的是否为最新版
 window.WarmMemo = window.WarmMemo || {};
-window.WarmMemo.version = 'items-dual-follow-tokens-bigsummary-hidefix';
+window.WarmMemo.version = 'worldview-once-and-status-strip';
 
 import './config/settings.js';
 import './config/storage.js';
