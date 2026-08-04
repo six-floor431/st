@@ -13,6 +13,27 @@
     });
   }
 
+  // 净化 LLM 原始输出：清理模型可能「回显」的提示词残留标记与寒暄前缀，
+  // 防止「把提示词里的示例/标签也写进结果」这种形式的跑题。只删明确属于噪声的行/前缀，不伤正文。
+  function sanitizeLLMText(raw) {
+    if (!raw) return '';
+    let t = String(raw);
+    // 1) 删除整行是提示词残留标记的行（如「【最高级禁令】」「【正确示例】」「【错误示例】」「【最近对话】」「【关系】」等方括号标题行）
+    t = t.split('\n').map((ln) => {
+      const s = ln.trim();
+      if (/^【[^】]{1,12}】$/.test(s)) return '';                       // 孤立的方括号标题行
+      if (/^(最高级禁令|正确示例|错误示例|写作要求|禁止事项|判断标准|说明|要求|说明：)[:：]/.test(s)) return '';
+      if (/^（(如|围绕|内容)[:：]/.test(s)) return '';                    // 提示词里的举例括号行
+      if (/^(以下是|好的，这是|这是为您|以上为|总结如下|以下是总结)[:：]/.test(s)) return '';
+      return ln;
+    }).join('\n');
+    // 2) 去掉开头的寒暄/声明前缀（一行内）
+    t = t.replace(/^(好的，?|当然，?|以下是|这是|为您)[^\n]{0,20}[:：]?\s*/i, '');
+    // 3) 合并多余空行
+    t = t.replace(/\n{3,}/g, '\n\n').trim();
+    return t;
+  }
+
   // 取得最近 N 条原始对话（用于总结）
   function getRecentMessages(n) {
     try {
@@ -55,7 +76,7 @@
         const out = await WM.LLMClient.complete(systemText, userText, settings, opts);
         const text = (out && out.trim && out.trim()) || '';
         if (!text) throw new Error('模型返回空内容');
-        return text;
+        return sanitizeLLMText(text);
       } catch (e) {
         lastErr = e;
         if (attempt < maxRetry) {
