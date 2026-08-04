@@ -17,7 +17,10 @@
 
     for (let i = 0; i < summaryPointer; i++) {
       const m = chat[i];
-      if (m && !m.is_wm_hidden) {
+      // 只隐藏「对话消息」（user/assistant），绝不隐藏酒馆自身的 system 消息，避免破坏角色卡/系统提示。
+      // 已隐藏的跳过，避免重复写。
+      if (m && !m.is_user && !m.is_system && !m.is_wm_hidden) {
+        m.is_original_system = false; // 标记：原本不是 system，反隐藏时可安全恢复
         m.is_system = true;
         m.is_wm_hidden = true;
       }

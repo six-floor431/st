@@ -71,16 +71,21 @@
     //   Qwen3 思考模型      : enable_thinking: true（部分兼容端点）
     if (deepOn) {
       const mdl = String(profile.model || '').toLowerCase();
-      if (/^o[0-9]|o1|o3|o4|gpt-5/.test(mdl)) {
+      if (/(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|gpt-5|gpt5/.test(mdl)) {
+        // OpenAI o 系列 / GPT-5：reasoning_effort
         body.reasoning_effort = /^(low|medium|high)$/.test(reasoningEffort) ? reasoningEffort : 'medium';
+        // 推理模型思考链较长，给足输出上限
+        body.max_tokens = Math.max(maxTokens, 2000);
       } else if (/reasoner/.test(mdl)) {
         // DeepSeek reasoner：思考链由模型自身产出（reasoning_content），无需额外参数；
         // 仅把输出上限放宽，避免思考链挤占正文导致"返回为空"
         body.max_tokens = Math.max(maxTokens, 2000);
-      } else if (/doubao|thinking|qwq|qwen3|qwen-3/.test(mdl)) {
-        // 火山豆包 thinking / Qwen 思考模型：通用 thinking 块
-        body.thinking = { type: 'enabled', budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 512), 8192) };
+      } else if (/doubao|thinking|qwq|qwen3|qwen-3|gemini|claude/.test(mdl)) {
+        // 火山豆包 thinking / Qwen 思考模型 / Gemini(adaptive) / Claude(extended)：通用 thinking 块
+        body.thinking = { type: 'enabled', budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 1024), 8192) };
         if (/qwen3|qwen-3/.test(mdl)) body.enable_thinking = true;
+        // thinking 模型同样需要足够输出空间，避免正文被预算挤没
+        body.max_tokens = Math.max(maxTokens, 1500);
       } else {
         // 未知/普通模型（如 gpt-4o）：开启开关但不强发任何字段，避免未知字段触发 400。
         // 这类模型本身无深度思考能力，开关开启仅作"预留"，请求保持标准格式。

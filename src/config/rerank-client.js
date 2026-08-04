@@ -35,7 +35,11 @@
 
   async function rerank(query, documents, rawSettings, options) {
     const s = rawSettings || {};
-    if (!s.rerankEnabled) return null; // 与 settings.rerankEnabled 对齐
+    // 重排启用判定：独立 rerankEnabled「或」向量接管模式下的 takeoverRerank 二者之一即可。
+    // 关键：vector-store.search 在「接管模式」下会调用本函数，但此时 rerankEnabled 往往为 false
+    // （用户只开了 takeoverRerank），必须同时认 takeoverRerank，否则接管重排静默失效。
+    const enabled = s.rerankEnabled || s.takeoverRerank;
+    if (!enabled) return null;
     const url = resolveRerankUrl(s);
     const model = s.rerankModel || 'BAAI/bge-reranker-v2-m3';
     const key = s.rerankApiKey || '';

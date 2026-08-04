@@ -208,7 +208,11 @@
             return { from, to, label };
           }).filter(Boolean);
         }
-        await WM.MemoryStore.setRelations(parsed);
+        // 合并到历史关系（累积权重、去重），而非整段覆盖——否则每轮总结都会清空关系图。
+        // 注意：本轮 LLM 输出的 parsed 不带 weight，mergeRelations 会对新边给默认权 1、旧边累加。
+        const prev = WM.MemoryStore.getRelations() || [];
+        const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
+        await WM.MemoryStore.setRelations(merged);
         return { kind: 'relations', ok: true };
       })());
       labels.push('relations');

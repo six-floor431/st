@@ -123,18 +123,22 @@
   }
 
   // 把温记 block 拼进 chat 的 system 消息（去重：先清掉上一次注入残留）
+  // 用唯一包裹标记（START/END）圈定本次注入范围，避免贪心正则误删温记块之后的其它 system 内容。
+  const WM_BLOCK_START = '【温记·BEGIN】';
+  const WM_BLOCK_END = '【温记·END】';
   function injectBlockIntoChat(chat, block) {
     if (!Array.isArray(chat) || !chat.length || !block) return chat;
     const sys = chat.find((m) => m && m.role === 'system');
-    const MARK = '【温记'; // 所有温记注入块的统一前缀
+    const wrapped = WM_BLOCK_START + '\n' + block + '\n' + WM_BLOCK_END;
     if (sys) {
-      if (sys.content && sys.content.indexOf(MARK) >= 0) {
-        // 清掉上一次注入的温记块，再追加新的（避免重复堆叠）
-        sys.content = sys.content.replace(/【温记[\s\S]*$/, '').replace(/\n+\s*$/, '');
+      let c = sys.content || '';
+      // 清掉上一次注入的温记块（精确匹配 START→END，不波及块外内容）
+      if (c.indexOf(WM_BLOCK_START) >= 0) {
+        c = c.replace(new RegExp(WM_BLOCK_START + '[\\s\\S]*?' + WM_BLOCK_END, 'g'), '').replace(/\n{3,}/g, '\n\n').trim();
       }
-      sys.content = (sys.content || '') + '\n\n' + block;
+      sys.content = (c ? c + '\n\n' : '') + wrapped;
     } else {
-      chat.unshift({ role: 'system', content: block });
+      chat.unshift({ role: 'system', content: wrapped });
     }
     return chat;
   }

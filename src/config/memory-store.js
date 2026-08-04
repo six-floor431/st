@@ -392,8 +392,28 @@
     const data = obj && obj.data ? obj.data : obj; // 兼容裸对象
     const base = emptyStore();
     const merged = Object.assign(base, data);
-    await save(merged);
+    // 复用 load() 的迁移补全逻辑，确保导入的旧备份/缺字段数据也被补齐，避免 UI 读 undefined
+    const safe = load_compat(merged);
+    await save(safe);
     return true;
+  }
+
+  // 与 load() 内联迁移一致：补齐新增字段，避免旧数据/导入数据缺字段导致 UI 异常
+  function load_compat(raw) {
+    const base = emptyStore();
+    const s = Object.assign(base, raw);
+    if (!s.worldMeta || typeof s.worldMeta !== 'object') s.worldMeta = { name: '', kind: '', desc: '' };
+    if (!Array.isArray(s.worldSections)) s.worldSections = [];
+    s.items = (Array.isArray(s.items) ? s.items : []).map((it) => Object.assign(
+      { id: 'it_' + Math.random().toString(36).slice(2), name: '', desc: '', owner: '', relatedPlots: [], origin: '', ts: Date.now() },
+      it,
+      { relatedPlots: Array.isArray(it && it.relatedPlots) ? it.relatedPlots : [] }
+    ));
+    s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => Object.assign(
+      { id: 'pl_' + Math.random().toString(36).slice(2), title: '', summary: '', time: '', status: 'active', ts: Date.now() },
+      p
+    ));
+    return s;
   }
 
   // ── 清空当前角色卡全部数据（不可还原） ──
@@ -411,7 +431,9 @@
         for (const m of chat) {
           if (m && m.is_wm_hidden) {
             m.is_wm_hidden = false;
-            m.is_system = false; // 仅去掉隐藏标记，不破坏其它 is_system（如系统提示）
+            // 仅恢复「被本扩展临时置为 system 以隐藏」的对话消息；
+            // 若该消息原本就是酒馆的 system 消息，不动它，避免破坏角色卡/系统提示。
+            if (!m.is_user && !m.is_original_system) m.is_system = false;
             changed = true;
           }
         }

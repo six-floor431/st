@@ -688,8 +688,25 @@ ${it.message}`;
       const data = obj && obj.data ? obj.data : obj;
       const base = emptyStore();
       const merged = Object.assign(base, data);
-      await save(merged);
+      const safe = load_compat(merged);
+      await save(safe);
       return true;
+    }
+    function load_compat(raw) {
+      const base = emptyStore();
+      const s = Object.assign(base, raw);
+      if (!s.worldMeta || typeof s.worldMeta !== "object") s.worldMeta = { name: "", kind: "", desc: "" };
+      if (!Array.isArray(s.worldSections)) s.worldSections = [];
+      s.items = (Array.isArray(s.items) ? s.items : []).map((it) => Object.assign(
+        { id: "it_" + Math.random().toString(36).slice(2), name: "", desc: "", owner: "", relatedPlots: [], origin: "", ts: Date.now() },
+        it,
+        { relatedPlots: Array.isArray(it && it.relatedPlots) ? it.relatedPlots : [] }
+      ));
+      s.plots = (Array.isArray(s.plots) ? s.plots : []).map((p) => Object.assign(
+        { id: "pl_" + Math.random().toString(36).slice(2), title: "", summary: "", time: "", status: "active", ts: Date.now() },
+        p
+      ));
+      return s;
     }
     async function clearAll() {
       await save(emptyStore());
@@ -701,7 +718,7 @@ ${it.message}`;
           for (const m of chat) {
             if (m && m.is_wm_hidden) {
               m.is_wm_hidden = false;
-              m.is_system = false;
+              if (!m.is_user && !m.is_original_system) m.is_system = false;
               changed = true;
             }
           }
@@ -841,13 +858,15 @@ ${it.message}`;
       };
       if (deepOn) {
         const mdl = String(profile.model || "").toLowerCase();
-        if (/^o[0-9]|o1|o3|o4|gpt-5/.test(mdl)) {
+        if (/(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|gpt-5|gpt5/.test(mdl)) {
           body.reasoning_effort = /^(low|medium|high)$/.test(reasoningEffort) ? reasoningEffort : "medium";
+          body.max_tokens = Math.max(maxTokens, 2e3);
         } else if (/reasoner/.test(mdl)) {
           body.max_tokens = Math.max(maxTokens, 2e3);
-        } else if (/doubao|thinking|qwq|qwen3|qwen-3/.test(mdl)) {
-          body.thinking = { type: "enabled", budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 512), 8192) };
+        } else if (/doubao|thinking|qwq|qwen3|qwen-3|gemini|claude/.test(mdl)) {
+          body.thinking = { type: "enabled", budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 1024), 8192) };
           if (/qwen3|qwen-3/.test(mdl)) body.enable_thinking = true;
+          body.max_tokens = Math.max(maxTokens, 1500);
         } else {
           if (WM.DebugLog) WM.DebugLog.logResponse("llm", { note: "\u6DF1\u5EA6\u601D\u8003\u5F00\u5173\u5DF2\u5F00\uFF0C\u4F46\u6A21\u578B\u300C" + profile.model + "\u300D\u672A\u5339\u914D\u5230\u5DF2\u77E5\u601D\u8003\u6A21\u578B\uFF0C\u672A\u6CE8\u5165\u601D\u8003\u53C2\u6570" });
         }
@@ -1293,7 +1312,8 @@ ${it.message}`;
     }
     async function rerank(query, documents, rawSettings, options) {
       const s = rawSettings || {};
-      if (!s.rerankEnabled) return null;
+      const enabled = s.rerankEnabled || s.takeoverRerank;
+      if (!enabled) return null;
       const url = resolveRerankUrl(s);
       const model = s.rerankModel || "BAAI/bge-reranker-v2-m3";
       const key = s.rerankApiKey || "";
@@ -1895,7 +1915,9 @@ ${recent}
                 return { from, to, label };
               }).filter(Boolean);
             }
-            await WM.MemoryStore.setRelations(parsed);
+            const prev = WM.MemoryStore.getRelations() || [];
+            const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
+            await WM.MemoryStore.setRelations(merged);
             return { kind: "relations", ok: true };
           })());
           labels.push("relations");
@@ -2179,17 +2201,20 @@ ${p.summary || ""}`.trim() });
       }
       return parts.filter(Boolean).join("\n\n");
     }
+    const WM_BLOCK_START = "\u3010\u6E29\u8BB0\xB7BEGIN\u3011";
+    const WM_BLOCK_END = "\u3010\u6E29\u8BB0\xB7END\u3011";
     function injectBlockIntoChat(chat, block) {
       if (!Array.isArray(chat) || !chat.length || !block) return chat;
       const sys = chat.find((m) => m && m.role === "system");
-      const MARK = "\u3010\u6E29\u8BB0";
+      const wrapped = WM_BLOCK_START + "\n" + block + "\n" + WM_BLOCK_END;
       if (sys) {
-        if (sys.content && sys.content.indexOf(MARK) >= 0) {
-          sys.content = sys.content.replace(/【温记[\s\S]*$/, "").replace(/\n+\s*$/, "");
+        let c = sys.content || "";
+        if (c.indexOf(WM_BLOCK_START) >= 0) {
+          c = c.replace(new RegExp(WM_BLOCK_START + "[\\s\\S]*?" + WM_BLOCK_END, "g"), "").replace(/\n{3,}/g, "\n\n").trim();
         }
-        sys.content = (sys.content || "") + "\n\n" + block;
+        sys.content = (c ? c + "\n\n" : "") + wrapped;
       } else {
-        chat.unshift({ role: "system", content: block });
+        chat.unshift({ role: "system", content: wrapped });
       }
       return chat;
     }
@@ -2264,7 +2289,8 @@ ${p.summary || ""}`.trim() });
       if (dialogueCount < summaryPointer + delay) return "summary_delay";
       for (let i = 0; i < summaryPointer; i++) {
         const m = chat[i];
-        if (m && !m.is_wm_hidden) {
+        if (m && !m.is_user && !m.is_system && !m.is_wm_hidden) {
+          m.is_original_system = false;
           m.is_system = true;
           m.is_wm_hidden = true;
         }
@@ -3727,7 +3753,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "optimize-all-prompts-anti-divergence";
+  window.WarmMemo.version = "bugfix-relations-merge-rerank-takeover-hide-inject";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
