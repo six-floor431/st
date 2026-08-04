@@ -78,7 +78,9 @@
       if (typeof ctx.saveMetadata === 'function') await ctx.saveMetadata();
       else if (typeof ctx.saveChat === 'function') await ctx.saveChat();
       // 存档成功后，异步把结构化数据拆分同步到世界书条目（不阻塞存档）
-      if (WM.Worldbook && WM.Settings && WM.Settings.load().worldToLorebook !== false) {
+      // 注意：开启「向量接管」时，内容改由温记自家 embedding+rerank 召回注入，不再拆写酒馆世界书，避免双重注入。
+      const st = WM.Settings && WM.Settings.load();
+      if (WM.Worldbook && st && st.worldToLorebook !== false && !(st.takeoverEmbedding && st.vectorEnabled)) {
         dispatchLorebook().catch((e) => console.warn('[WarmMemo] 世界书同步失败', e));
       }
       return true;
@@ -154,6 +156,7 @@
     const s = load();
     const settings = WM.Settings.load();
     if (settings.worldToLorebook === false) return; // 用户关闭了世界书写入
+    if (settings.takeoverEmbedding && settings.vectorEnabled) return; // 接管模式：内容由自家向量召回注入，不拆写世界书
     // 1) 每段总结/剧情摘要 → 独立条目（不挤在一起）
     for (const sm of s.summaries) {
       await WM.Worldbook.writeEntry({

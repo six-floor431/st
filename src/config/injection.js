@@ -90,21 +90,25 @@
 
     const wbOk = WM.Worldbook && WM.Worldbook.available();
     const candidates = collectCandidates();
+    const takeover = settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore;
 
-    // 情况 A：开启向量接管 → 用我们的 VectorStore 对候选召回 topK（替代酒馆原生向量检索）
-    if (settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore) {
+    // 情况 A：开启向量接管 → 用我们的 VectorStore 对候选召回 topK（真正替代酒馆原生向量检索）。
+    // 关键点：接管模式下必须「跳过酒馆原生世界书召回」（情况 B），否则情况 B 会提前 return，
+    // 导致温记自己的 embedding/rerank 永远不生效（这就是此前"假接管"的根因）。
+    if (takeover) {
       const q = WM.VectorStore.lastQuery || '';
       const ranked = q ? await WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
       const parts = [memBlock];
-      if (settings.injectMemories !== false && ranked.length) {
-        parts.push('【温记召回（向量接管）】\n' + ranked.map((c) => '· [' + c.type + '] ' + c.text).join('\n'));
+      if (settings.injectWorld !== false && ranked.length) {
+        parts.push('【温记召回（向量接管·自家 embedding+rerank）】\n' + ranked.map((c) => '· [' + c.type + '] ' + c.text).join('\n'));
       }
       return parts.filter(Boolean).join('\n\n');
     }
 
-    // 情况 B：世界书可用「且」用户开启了拆分写入世界书 → 条目由酒馆原生按 constant/keys 激活注入，
+    // 情况 B：未接管「且」世界书可用「且」用户开启拆分写入 → 条目由酒馆原生按 constant/keys 激活注入，
     // 本模块只兜底注入楼层记忆块。注意：wbOk 仅代表 API 可用，不代表有条目，必须看 worldToLorebook 开关。
     if (wbOk && settings.worldToLorebook !== false) {
+      // 同时若开启了 rerank 接管，但内容走酒馆原生召回时无法插入我们的重排——因此 rerank 接管仅在情况 A 生效。
       return memBlock; // 世界书条目由酒馆自己注入
     }
 

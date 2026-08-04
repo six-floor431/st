@@ -50,6 +50,7 @@
       apiKey: '',
       model: '',
       maxTokens: 700,   // 输出 token 上限：所有功能共用，模型会在该上限内尽量输出完整内容
+      deepThinking: false, // 深度思考开关：开启后按模型自适应注入深度思考参数（见 LLMClient）
     },
     // 预设前置：拼在我们自己可编辑的提示词「之前」
     //   mode: 'none'   => 不使用

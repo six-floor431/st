@@ -883,6 +883,8 @@
           <div class="wm-hint">直接填任意厂家的 Base URL 即可，自动按 OpenAI 兼容协议请求（火山引擎填 <code>https://ark.cn-beijing.volces.com/api/v3</code>，DeepSeek 填 <code>https://api.deepseek.com/v1</code>）。</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
+          <label class="wm-row"><input type="checkbox" id="llm-deep" ${c.deepThinking ? 'checked' : ''}/> 深度思考（推理模型）</label>
+          <div class="wm-hint" style="margin:-2px 0 4px">开启后按模型自动适配深度思考参数：OpenAI o 系列用 reasoning_effort；DeepSeek reasoner 走原生思考链；豆包/Qwen 思考模型用 thinking 块。普通模型（如 gpt-4o）开启无效，可放心留开。</div>
           <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能（总结/关系/剧情/世界观）共用，模型会在该范围内完整输出</span></label>
         </div>
         <div class="wm-divider"></div>
@@ -1120,6 +1122,7 @@
           apiKey: q('#llm-key') ? q('#llm-key').value.trim() : '',
           model: q('#llm-model') ? q('#llm-model').value.trim() : '',
           maxTokens: Math.max(50, parseInt(q('#llm-maxtok').value, 10) || 700),
+          deepThinking: !!(q('#llm-deep') && q('#llm-deep').checked),
         };
         s.presetPrefix = {
           mode: (q('input[name="pp-mode"]:checked') || {}).value || 'none',
@@ -1293,7 +1296,8 @@
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（本地反代留空）"/></label>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用我们自己的向量召回世界书条目）</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用温记自己的 embedding 召回，替代酒馆原生召回）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">开启后：温记内容<b>不再</b>拆写酒馆世界书，而由温记用你配置的 Embedding 做余弦召回 topK 注入，真正做到「用自家向量接管」。关闭则交回酒馆世界书原生激活。</div>
     </div>`;
   }
 
@@ -1307,7 +1311,8 @@
       <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选（本地反代留空）"/></label>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（用我们自己的 Rerank 重排召回结果）</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（在向量接管基础上，用温记自己的 Rerank 重排召回结果）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">需配合「接管向量检索」一起开启才生效：向量召回后再用你配置的 Rerank 服务重排，提升相关性。单独开启无效。</div>
     </div>`;
   }
 

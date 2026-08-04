@@ -51,6 +51,9 @@
     }
     const maxTokens = opts.maxTokens || profile.maxTokens || 700;
     const temperature = opts.temperature != null ? opts.temperature : (profile.temperature != null ? profile.temperature : 0.3);
+    // 深度思考：开启后按模型名自适应注入各家「深度思考/推理」参数
+    const deepOn = profile.deepThinking === true;
+    const reasoningEffort = (opts && opts.reasoningEffort) || profile.reasoningEffort || 'medium';
 
     // 组装 OpenAI 兼容请求体（只含我们自己的提示词）
     const body = {
@@ -59,19 +62,46 @@
       max_tokens: maxTokens,
       temperature: temperature,
     };
+
+    // —— 深度思考参数适配（按模型名判断厂家/系列）——
+    // 不同厂家对「深度思考」的实现完全不同，这里统一在开关开启时注入对应字段：
+    //   OpenAI o 系列      : reasoning_effort = low|medium|high
+    //   DeepSeek reasoner  : 模型本身即思考模型，返回 reasoning_content，无需额外参数（仅确保 max_tokens 充足）
+    //   火山/通用兼容 thinking : thinking: { type:'enabled', budget_tokens:N }
+    //   Qwen3 思考模型      : enable_thinking: true（部分兼容端点）
+    if (deepOn) {
+      const mdl = String(profile.model || '').toLowerCase();
+      if (/^o[0-9]|o1|o3|o4|gpt-5/.test(mdl)) {
+        body.reasoning_effort = /^(low|medium|high)$/.test(reasoningEffort) ? reasoningEffort : 'medium';
+      } else if (/reasoner/.test(mdl)) {
+        // DeepSeek reasoner：思考链由模型自身产出（reasoning_content），无需额外参数；
+        // 仅把输出上限放宽，避免思考链挤占正文导致"返回为空"
+        body.max_tokens = Math.max(maxTokens, 2000);
+      } else if (/doubao|thinking|qwq|qwen3|qwen-3/.test(mdl)) {
+        // 火山豆包 thinking / Qwen 思考模型：通用 thinking 块
+        body.thinking = { type: 'enabled', budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 512), 8192) };
+        if (/qwen3|qwen-3/.test(mdl)) body.enable_thinking = true;
+      } else {
+        // 未知/普通模型（如 gpt-4o）：开启开关但不强发任何字段，避免未知字段触发 400。
+        // 这类模型本身无深度思考能力，开关开启仅作"预留"，请求保持标准格式。
+        if (WM.DebugLog) WM.DebugLog.logResponse('llm', { note: '深度思考开关已开，但模型「' + profile.model + '」未匹配到已知思考模型，未注入思考参数' });
+      }
+    }
     const headers = { 'Content-Type': 'application/json' };
     if (profile.apiKey) headers['Authorization'] = 'Bearer ' + profile.apiKey;
 
     // —— 调试记录：请求 message ——
-    if (WM.DebugLog) {
-      WM.DebugLog.logRequest('llm', {
-        url,
-        model: body.model,
-        messages: body.messages,
-        max_tokens: maxTokens,
-        temperature: temperature,
-      });
-    }
+      if (WM.DebugLog) {
+        WM.DebugLog.logRequest('llm', {
+          url,
+          model: body.model,
+          messages: body.messages,
+          max_tokens: body.max_tokens,
+          temperature: temperature,
+          deepThinking: deepOn,
+          reasoningEffort: deepOn ? (body.reasoning_effort || (body.thinking ? 'thinking-block' : 'model-native')) : false,
+        });
+      }
 
     let res;
     try {

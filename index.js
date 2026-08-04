@@ -59,8 +59,10 @@
         apiUrl: "",
         apiKey: "",
         model: "",
-        maxTokens: 700
+        maxTokens: 700,
         // 输出 token 上限：所有功能共用，模型会在该上限内尽量输出完整内容
+        deepThinking: false
+        // 深度思考开关：开启后按模型自适应注入深度思考参数（见 LLMClient）
       },
       // 预设前置：拼在我们自己可编辑的提示词「之前」
       //   mode: 'none'   => 不使用
@@ -377,7 +379,8 @@ ${it.message}`;
         ctx.updateChatMetadata({ [FIELD]: store }, false);
         if (typeof ctx.saveMetadata === "function") await ctx.saveMetadata();
         else if (typeof ctx.saveChat === "function") await ctx.saveChat();
-        if (WM.Worldbook && WM.Settings && WM.Settings.load().worldToLorebook !== false) {
+        const st = WM.Settings && WM.Settings.load();
+        if (WM.Worldbook && st && st.worldToLorebook !== false && !(st.takeoverEmbedding && st.vectorEnabled)) {
           dispatchLorebook().catch((e) => console.warn("[WarmMemo] \u4E16\u754C\u4E66\u540C\u6B65\u5931\u8D25", e));
         }
         return true;
@@ -443,6 +446,7 @@ ${it.message}`;
       const s = load();
       const settings = WM.Settings.load();
       if (settings.worldToLorebook === false) return;
+      if (settings.takeoverEmbedding && settings.vectorEnabled) return;
       for (const sm of s.summaries) {
         await WM.Worldbook.writeEntry({
           kind: sm.kind === "plot" ? "summary" : "summary",
@@ -818,12 +822,27 @@ ${it.message}`;
       }
       const maxTokens = opts.maxTokens || profile.maxTokens || 700;
       const temperature = opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3;
+      const deepOn = profile.deepThinking === true;
+      const reasoningEffort = opts && opts.reasoningEffort || profile.reasoningEffort || "medium";
       const body = {
         model: profile.model || "",
         messages: messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : "system", content: String(m.content || "") })),
         max_tokens: maxTokens,
         temperature
       };
+      if (deepOn) {
+        const mdl = String(profile.model || "").toLowerCase();
+        if (/^o[0-9]|o1|o3|o4|gpt-5/.test(mdl)) {
+          body.reasoning_effort = /^(low|medium|high)$/.test(reasoningEffort) ? reasoningEffort : "medium";
+        } else if (/reasoner/.test(mdl)) {
+          body.max_tokens = Math.max(maxTokens, 2e3);
+        } else if (/doubao|thinking|qwq|qwen3|qwen-3/.test(mdl)) {
+          body.thinking = { type: "enabled", budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 512), 8192) };
+          if (/qwen3|qwen-3/.test(mdl)) body.enable_thinking = true;
+        } else {
+          if (WM.DebugLog) WM.DebugLog.logResponse("llm", { note: "\u6DF1\u5EA6\u601D\u8003\u5F00\u5173\u5DF2\u5F00\uFF0C\u4F46\u6A21\u578B\u300C" + profile.model + "\u300D\u672A\u5339\u914D\u5230\u5DF2\u77E5\u601D\u8003\u6A21\u578B\uFF0C\u672A\u6CE8\u5165\u601D\u8003\u53C2\u6570" });
+        }
+      }
       const headers = { "Content-Type": "application/json" };
       if (profile.apiKey) headers["Authorization"] = "Bearer " + profile.apiKey;
       if (WM.DebugLog) {
@@ -831,8 +850,10 @@ ${it.message}`;
           url,
           model: body.model,
           messages: body.messages,
-          max_tokens: maxTokens,
-          temperature
+          max_tokens: body.max_tokens,
+          temperature,
+          deepThinking: deepOn,
+          reasoningEffort: deepOn ? body.reasoning_effort || (body.thinking ? "thinking-block" : "model-native") : false
         });
       }
       let res;
@@ -2107,12 +2128,13 @@ ${p.summary || ""}`.trim() });
       }
       const wbOk = WM.Worldbook && WM.Worldbook.available();
       const candidates = collectCandidates();
-      if (settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore) {
+      const takeover = settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore;
+      if (takeover) {
         const q = WM.VectorStore.lastQuery || "";
         const ranked = q ? await WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));
         const parts2 = [memBlock];
-        if (settings.injectMemories !== false && ranked.length) {
-          parts2.push("\u3010\u6E29\u8BB0\u53EC\u56DE\uFF08\u5411\u91CF\u63A5\u7BA1\uFF09\u3011\n" + ranked.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
+        if (settings.injectWorld !== false && ranked.length) {
+          parts2.push("\u3010\u6E29\u8BB0\u53EC\u56DE\uFF08\u5411\u91CF\u63A5\u7BA1\xB7\u81EA\u5BB6 embedding+rerank\uFF09\u3011\n" + ranked.map((c) => "\xB7 [" + c.type + "] " + c.text).join("\n"));
         }
         return parts2.filter(Boolean).join("\n\n");
       }
@@ -3075,6 +3097,8 @@ ${p.summary || ""}`.trim() });
           <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u5382\u5BB6\u7684 Base URL \u5373\u53EF\uFF0C\u81EA\u52A8\u6309 OpenAI \u517C\u5BB9\u534F\u8BAE\u8BF7\u6C42\uFF08\u706B\u5C71\u5F15\u64CE\u586B <code>https://ark.cn-beijing.volces.com/api/v3</code>\uFF0CDeepSeek \u586B <code>https://api.deepseek.com/v1</code>\uFF09\u3002</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
+          <label class="wm-row"><input type="checkbox" id="llm-deep" ${c.deepThinking ? "checked" : ""}/> \u6DF1\u5EA6\u601D\u8003\uFF08\u63A8\u7406\u6A21\u578B\uFF09</label>
+          <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u540E\u6309\u6A21\u578B\u81EA\u52A8\u9002\u914D\u6DF1\u5EA6\u601D\u8003\u53C2\u6570\uFF1AOpenAI o \u7CFB\u5217\u7528 reasoning_effort\uFF1BDeepSeek reasoner \u8D70\u539F\u751F\u601D\u8003\u94FE\uFF1B\u8C46\u5305/Qwen \u601D\u8003\u6A21\u578B\u7528 thinking \u5757\u3002\u666E\u901A\u6A21\u578B\uFF08\u5982 gpt-4o\uFF09\u5F00\u542F\u65E0\u6548\uFF0C\u53EF\u653E\u5FC3\u7559\u5F00\u3002</div>
           <label class="wm-row">\u8F93\u51FA Token \u4E0A\u9650<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="\u9650\u5236\u6A21\u578B\u8F93\u51FA\u957F\u5EA6\uFF0C\u6240\u6709\u529F\u80FD\u5171\u7528\u6B64\u4E0A\u9650"/> <span class="wm-hint" style="margin:0">\u6240\u6709\u529F\u80FD\uFF08\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5/\u4E16\u754C\u89C2\uFF09\u5171\u7528\uFF0C\u6A21\u578B\u4F1A\u5728\u8BE5\u8303\u56F4\u5185\u5B8C\u6574\u8F93\u51FA</span></label>
         </div>
         <div class="wm-divider"></div>
@@ -3307,7 +3331,8 @@ ${p.summary || ""}`.trim() });
             apiUrl,
             apiKey: q("#llm-key") ? q("#llm-key").value.trim() : "",
             model: q("#llm-model") ? q("#llm-model").value.trim() : "",
-            maxTokens: Math.max(50, parseInt(q("#llm-maxtok").value, 10) || 700)
+            maxTokens: Math.max(50, parseInt(q("#llm-maxtok").value, 10) || 700),
+            deepThinking: !!(q("#llm-deep") && q("#llm-deep").checked)
           };
           s.presetPrefix = {
             mode: (q('input[name="pp-mode"]:checked') || {}).value || "none",
@@ -3483,7 +3508,8 @@ ${p.summary || ""}`.trim() });
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u672C\u5730\u53CD\u4EE3\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684\u5411\u91CF\u53EC\u56DE\u4E16\u754C\u4E66\u6761\u76EE\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 embedding \u53EC\u56DE\uFF0C\u66FF\u4EE3\u9152\u9986\u539F\u751F\u53EC\u56DE\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u540E\uFF1A\u6E29\u8BB0\u5185\u5BB9<b>\u4E0D\u518D</b>\u62C6\u5199\u9152\u9986\u4E16\u754C\u4E66\uFF0C\u800C\u7531\u6E29\u8BB0\u7528\u4F60\u914D\u7F6E\u7684 Embedding \u505A\u4F59\u5F26\u53EC\u56DE topK \u6CE8\u5165\uFF0C\u771F\u6B63\u505A\u5230\u300C\u7528\u81EA\u5BB6\u5411\u91CF\u63A5\u7BA1\u300D\u3002\u5173\u95ED\u5219\u4EA4\u56DE\u9152\u9986\u4E16\u754C\u4E66\u539F\u751F\u6FC0\u6D3B\u3002</div>
     </div>`;
     }
     function renderPaneRerank(s) {
@@ -3495,7 +3521,8 @@ ${p.summary || ""}`.trim() });
       <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009\uFF08\u672C\u5730\u53CD\u4EE3\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u7528\u6211\u4EEC\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
+      <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u5728\u5411\u91CF\u63A5\u7BA1\u57FA\u7840\u4E0A\uFF0C\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u9700\u914D\u5408\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u4E00\u8D77\u5F00\u542F\u624D\u751F\u6548\uFF1A\u5411\u91CF\u53EC\u56DE\u540E\u518D\u7528\u4F60\u914D\u7F6E\u7684 Rerank \u670D\u52A1\u91CD\u6392\uFF0C\u63D0\u5347\u76F8\u5173\u6027\u3002\u5355\u72EC\u5F00\u542F\u65E0\u6548\u3002</div>
     </div>`;
     }
     function renderPaneLore(s) {
@@ -3631,7 +3658,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "prompt-rewrite-lightnovel-and-filters";
+  window.WarmMemo.version = "deep-thinking-and-real-takeover";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
