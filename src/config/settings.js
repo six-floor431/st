@@ -158,8 +158,12 @@
       // 提示词版本迁移：用「用户实际保存」的 promptsVersion 判断（不能用被 DEFAULTS 覆盖后的 s.promptsVersion，
       // 否则 Object.assign 已把 DEFAULTS 的版本带进来，导致 3<3 永远 false、旧提示词永远不被覆盖）。
       // 若用户保存的版本低于当前版本，用 DEFAULTS 新提示词覆盖旧提示词，避免「源码改了但用户旧提示词仍在生效」。
+      // 兜底：即便版本号巧合一致，只要当前 summary 提示词里没有符号包裹标记（说明是旧版），也强制覆盖，
+      // 彻底解决「新的被旧的顶了」这类问题。
       const savedPromptVer = parsed.promptsVersion || 0;
-      if (savedPromptVer < DEFAULTS.promptsVersion) {
+      const savedSummary = (parsed.prompts && parsed.prompts.summary) || '';
+      const looksLegacy = !/<{3}SUMMARY_START>{3}>/.test(savedSummary);
+      if (savedPromptVer < DEFAULTS.promptsVersion || looksLegacy) {
         s.prompts = Object.assign({}, DEFAULTS.prompts);
         s.promptsVersion = DEFAULTS.promptsVersion;
       }

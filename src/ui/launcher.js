@@ -916,6 +916,9 @@
       <div class="wm-subtabs lv3" data-lv3="prompts">
         ${promptEditors.map((p, i) => `<button data-ptab="${p.key}" class="${i === 0 ? 'active' : ''}">${p.title.replace('提示词', '')}</button>`).join('')}
       </div>
+      <div class="wm-actions" style="margin:6px 0">
+        <button id="pp-reset" class="wm-btn" title="把下面 5 个提示词全部强制恢复为扩展内置的最新版（无视你之前手动改过/保存过的旧版）">↺ 一键恢复默认提示词（强制覆盖旧版）</button>
+      </div>
       <div class="wm-ptabs">
         ${promptEditors.map((p, i) => `
           <div class="wm-ptab-pane" data-ptab-pane="${p.key}" style="${i === 0 ? '' : 'display:none'}">
@@ -1266,6 +1269,21 @@
         };
       });
     });
+
+    // 一键恢复默认提示词：强制把 5 个 textarea 替换为扩展内置最新版，并立即保存（无视用户旧版/手动改过）
+    const resetBtn = body.querySelector('#pp-reset');
+    if (resetBtn) resetBtn.onclick = () => {
+      const defs = (WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.prompts) || {};
+      promptEditors.forEach((p) => {
+        const ta = body.querySelector('#pprompt-' + p.key);
+        if (ta && defs[p.key] != null) ta.value = defs[p.key];
+      });
+      // 同步进设置对象并立即持久化（绕过「仅保存当前二级标签页」的限制，直接全量写回）
+      s.prompts = Object.assign({}, defs);
+      s.promptsVersion = (WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.promptsVersion) || s.promptsVersion;
+      WM.Settings.save(s);
+      if (WM.UI && WM.UI.toast) WM.UI.toast('✓ 已强制恢复默认提示词（新版已顶替旧版），可直接使用');
+    };
 
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
