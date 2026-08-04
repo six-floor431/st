@@ -122,45 +122,86 @@
     return parts.filter(Boolean).join('\n\n');
   }
 
+  // 把温记 block 拼进 chat 的 system 消息（去重：先清掉上一次注入残留）
+  function injectBlockIntoChat(chat, block) {
+    if (!Array.isArray(chat) || !chat.length || !block) return chat;
+    const sys = chat.find((m) => m && m.role === 'system');
+    const MARK = '【温记'; // 所有温记注入块的统一前缀
+    if (sys) {
+      if (sys.content && sys.content.indexOf(MARK) >= 0) {
+        // 清掉上一次注入的温记块，再追加新的（避免重复堆叠）
+        sys.content = sys.content.replace(/【温记[\s\S]*$/, '').replace(/\n+\s*$/, '');
+      }
+      sys.content = (sys.content || '') + '\n\n' + block;
+    } else {
+      chat.unshift({ role: 'system', content: block });
+    }
+    return chat;
+  }
+
+  // 从 chat 提取「当前用户最新输入」作为向量检索 query（真搜索的关键）
+  function extractQueryFromChat(chat) {
+    if (!Array.isArray(chat) || !chat.length) return '';
+    const userMsgs = chat.filter((m) => m && m.role === 'user');
+    const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : '';
+    return lastUser ? String(lastUser).slice(0, 2000) : '';
+  }
+
+  // 真正执行一次注入（被下面的 hook filter / eventSource 两路共用）
+  async function doInject(chat) {
+    try {
+      const q = extractQueryFromChat(chat);
+      if (q && WM.VectorStore) WM.VectorStore.lastQuery = q;
+      const block = await buildMemoryBlock();
+      if (!block) return chat;
+      return injectBlockIntoChat(chat, block);
+    } catch (e) {
+      console.error('[WarmMemo] 注入失败', e);
+      return chat;
+    }
+  }
+
   function init() {
+    // 注入入口采用「双保险」：优先用酒馆官方过滤器钩子 window.hooks.addFilter，
+    // 它能真正修改最终送出的 prompt（很多版本里 eventSource 的 PROMPT_READY 事件触发时 prompt 已冻结，
+    // 仅靠 eventSource.on 改 event.detail.chat 不保证写回生效——这正是「接管无效」的根因）。
+    let bound = false;
+
+    // 入口 1：window.hooks.addFilter('chat_completion_prompt_ready', ...) —— 酒馆官方、最可靠的注入点
+    try {
+      if (window.hooks && typeof window.hooks.addFilter === 'function') {
+        window.hooks.addFilter('chat_completion_prompt_ready', async (chat) => {
+          // chat 形如 { type, chat: [...] } 或直接是 [...]；统一规整成数组
+          const arr = Array.isArray(chat) ? chat : (chat && chat.chat && Array.isArray(chat.chat) ? chat.chat : null);
+          if (!arr) return chat;
+          const out = await doInject(arr);
+          if (Array.isArray(chat)) return out;
+          chat.chat = out;
+          return chat;
+        }, 1000);
+        bound = true;
+        console.log('[WarmMemo] 注入钩子已绑定：window.hooks.addFilter(chat_completion_prompt_ready)');
+      }
+    } catch (e) { console.warn('[WarmMemo] addFilter 绑定失败', e); }
+
+    // 入口 2：eventSource 事件（双保险，覆盖无 hooks 的老版本）
     const ctx = getCtx();
     const es = ctx && ctx.eventSource;
-    if (!es || typeof es.on !== 'function') {
-      console.warn('[WarmMemo] 未找到 ctx.eventSource，注入不可用');
-      return;
+    if (es && typeof es.on === 'function') {
+      const readyEvent = getReadyEventName();
+      es.on(readyEvent, async (event) => {
+        const chat = event && event.detail && Array.isArray(event.detail.chat) ? event.detail.chat
+          : (event && Array.isArray(event.chat) ? event.chat : null);
+        if (!chat) return;
+        const out = await doInject(chat);
+        if (event && event.detail && Array.isArray(event.detail.chat)) event.detail.chat = out;
+        if (event && Array.isArray(event.chat)) event.chat = out;
+      });
+      if (bound) console.log('[WarmMemo] 注入钩子已追加双保险：', readyEvent);
+      else console.log('[WarmMemo] 注入钩子已绑定（仅 eventSource）：', readyEvent);
+    } else if (!bound) {
+      console.warn('[WarmMemo] 未找到任何可用的注入入口（hooks / eventSource 均不可用）');
     }
-    const readyEvent = getReadyEventName();
-    es.on(readyEvent, async (event) => {
-      try {
-        // 从事件中提取「当前用户最新输入」作为向量检索/重排的查询文本。
-        // 这是真搜索的关键：必须把 query 写进 VectorStore.lastQuery，否则检索永远走回退分支。
-        const evtChat = event && event.detail && event.detail.chat;
-        if (Array.isArray(evtChat) && evtChat.length) {
-          const userMsgs = evtChat.filter((m) => m && m.role === 'user');
-          const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : '';
-          if (lastUser && WM.VectorStore) WM.VectorStore.lastQuery = String(lastUser).slice(0, 2000);
-        }
-        const block = await buildMemoryBlock();
-        if (!block) return;
-        const chat = event && event.detail && event.detail.chat;
-        if (!Array.isArray(chat) || !chat.length) return;
-        const sys = chat.find((m) => m.role === 'system');
-        if (sys) {
-          if (sys.content && sys.content.includes('【有温度的记忆')) {
-            sys.content = sys.content.replace(/【有温度的记忆[\s\S]*$/, '') + '\n\n' + block;
-          } else if (sys.content && sys.content.includes('【温记')) {
-            sys.content = sys.content.replace(/【温记[\s\S]*$/, '') + '\n\n' + block;
-          } else {
-            sys.content = (sys.content || '') + '\n\n' + block;
-          }
-        } else {
-          chat.unshift({ role: 'system', content: block });
-        }
-      } catch (e) {
-        console.error('[WarmMemo] 注入失败', e);
-      }
-    });
-    console.log('[WarmMemo] 注入钩子已绑定：', readyEvent);
   }
 
   WM.Injection = { init, buildMemoryBlock, collectCandidates };

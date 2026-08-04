@@ -24,6 +24,8 @@
     rerankBaseUrl: '',
     rerankApiKey: '',
     rerankModel: 'BAAI/bge-reranker-v2-m3',
+    // Rerank 指令（对齐万楼）：自然语言告诉重排模型「按什么标准排序」，让召回更贴合当前用户输入意图
+    rerankInstruction: '请根据当前用户输入，判断每个候选记忆条目的相关性，将最相关、能直接延续或回答当前对话意图的条目排在前面。',
     // 自动总结楼层设置（自定义）
     autoSummaryEnabled: true,     // 是否开启自动总结
     autoSummaryMode: 'new',       // 'new'=只总结新增楼层, 'range'=按区间, 'count'=最近N条, 'floor'=按楼层区间(1-20,21-40...)

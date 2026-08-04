@@ -25,6 +25,8 @@
       rerankBaseUrl: "",
       rerankApiKey: "",
       rerankModel: "BAAI/bge-reranker-v2-m3",
+      // Rerank 指令（对齐万楼）：自然语言告诉重排模型「按什么标准排序」，让召回更贴合当前用户输入意图
+      rerankInstruction: "\u8BF7\u6839\u636E\u5F53\u524D\u7528\u6237\u8F93\u5165\uFF0C\u5224\u65AD\u6BCF\u4E2A\u5019\u9009\u8BB0\u5FC6\u6761\u76EE\u7684\u76F8\u5173\u6027\uFF0C\u5C06\u6700\u76F8\u5173\u3001\u80FD\u76F4\u63A5\u5EF6\u7EED\u6216\u56DE\u7B54\u5F53\u524D\u5BF9\u8BDD\u610F\u56FE\u7684\u6761\u76EE\u6392\u5728\u524D\u9762\u3002",
       // 自动总结楼层设置（自定义）
       autoSummaryEnabled: true,
       // 是否开启自动总结
@@ -1312,12 +1314,14 @@ ${it.message}`;
           q.searchParams.set("top_n", String(docs.length));
           finalUrl = q.toString();
         } else {
+          const rerankInstruction = typeof s.rerankInstruction === "string" && s.rerankInstruction.trim() ? s.rerankInstruction.trim() : "";
           body = JSON.stringify({
             model,
             query,
             documents: docs,
             top_n: docs.length,
-            return_documents: false
+            return_documents: false,
+            ...rerankInstruction ? { instruction: rerankInstruction } : {}
           });
         }
         if (WM.DebugLog) {
@@ -2160,43 +2164,72 @@ ${p.summary || ""}`.trim() });
       }
       return parts.filter(Boolean).join("\n\n");
     }
+    function injectBlockIntoChat(chat, block) {
+      if (!Array.isArray(chat) || !chat.length || !block) return chat;
+      const sys = chat.find((m) => m && m.role === "system");
+      const MARK = "\u3010\u6E29\u8BB0";
+      if (sys) {
+        if (sys.content && sys.content.indexOf(MARK) >= 0) {
+          sys.content = sys.content.replace(/【温记[\s\S]*$/, "").replace(/\n+\s*$/, "");
+        }
+        sys.content = (sys.content || "") + "\n\n" + block;
+      } else {
+        chat.unshift({ role: "system", content: block });
+      }
+      return chat;
+    }
+    function extractQueryFromChat(chat) {
+      if (!Array.isArray(chat) || !chat.length) return "";
+      const userMsgs = chat.filter((m) => m && m.role === "user");
+      const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : "";
+      return lastUser ? String(lastUser).slice(0, 2e3) : "";
+    }
+    async function doInject(chat) {
+      try {
+        const q = extractQueryFromChat(chat);
+        if (q && WM.VectorStore) WM.VectorStore.lastQuery = q;
+        const block = await buildMemoryBlock();
+        if (!block) return chat;
+        return injectBlockIntoChat(chat, block);
+      } catch (e) {
+        console.error("[WarmMemo] \u6CE8\u5165\u5931\u8D25", e);
+        return chat;
+      }
+    }
     function init() {
+      let bound = false;
+      try {
+        if (window.hooks && typeof window.hooks.addFilter === "function") {
+          window.hooks.addFilter("chat_completion_prompt_ready", async (chat) => {
+            const arr = Array.isArray(chat) ? chat : chat && chat.chat && Array.isArray(chat.chat) ? chat.chat : null;
+            if (!arr) return chat;
+            const out = await doInject(arr);
+            if (Array.isArray(chat)) return out;
+            chat.chat = out;
+            return chat;
+          }, 1e3);
+          bound = true;
+          console.log("[WarmMemo] \u6CE8\u5165\u94A9\u5B50\u5DF2\u7ED1\u5B9A\uFF1Awindow.hooks.addFilter(chat_completion_prompt_ready)");
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] addFilter \u7ED1\u5B9A\u5931\u8D25", e);
+      }
       const ctx = getCtx();
       const es = ctx && ctx.eventSource;
-      if (!es || typeof es.on !== "function") {
-        console.warn("[WarmMemo] \u672A\u627E\u5230 ctx.eventSource\uFF0C\u6CE8\u5165\u4E0D\u53EF\u7528");
-        return;
+      if (es && typeof es.on === "function") {
+        const readyEvent = getReadyEventName();
+        es.on(readyEvent, async (event) => {
+          const chat = event && event.detail && Array.isArray(event.detail.chat) ? event.detail.chat : event && Array.isArray(event.chat) ? event.chat : null;
+          if (!chat) return;
+          const out = await doInject(chat);
+          if (event && event.detail && Array.isArray(event.detail.chat)) event.detail.chat = out;
+          if (event && Array.isArray(event.chat)) event.chat = out;
+        });
+        if (bound) console.log("[WarmMemo] \u6CE8\u5165\u94A9\u5B50\u5DF2\u8FFD\u52A0\u53CC\u4FDD\u9669\uFF1A", readyEvent);
+        else console.log("[WarmMemo] \u6CE8\u5165\u94A9\u5B50\u5DF2\u7ED1\u5B9A\uFF08\u4EC5 eventSource\uFF09\uFF1A", readyEvent);
+      } else if (!bound) {
+        console.warn("[WarmMemo] \u672A\u627E\u5230\u4EFB\u4F55\u53EF\u7528\u7684\u6CE8\u5165\u5165\u53E3\uFF08hooks / eventSource \u5747\u4E0D\u53EF\u7528\uFF09");
       }
-      const readyEvent = getReadyEventName();
-      es.on(readyEvent, async (event) => {
-        try {
-          const evtChat = event && event.detail && event.detail.chat;
-          if (Array.isArray(evtChat) && evtChat.length) {
-            const userMsgs = evtChat.filter((m) => m && m.role === "user");
-            const lastUser = userMsgs.length ? userMsgs[userMsgs.length - 1].content : "";
-            if (lastUser && WM.VectorStore) WM.VectorStore.lastQuery = String(lastUser).slice(0, 2e3);
-          }
-          const block = await buildMemoryBlock();
-          if (!block) return;
-          const chat = event && event.detail && event.detail.chat;
-          if (!Array.isArray(chat) || !chat.length) return;
-          const sys = chat.find((m) => m.role === "system");
-          if (sys) {
-            if (sys.content && sys.content.includes("\u3010\u6709\u6E29\u5EA6\u7684\u8BB0\u5FC6")) {
-              sys.content = sys.content.replace(/【有温度的记忆[\s\S]*$/, "") + "\n\n" + block;
-            } else if (sys.content && sys.content.includes("\u3010\u6E29\u8BB0")) {
-              sys.content = sys.content.replace(/【温记[\s\S]*$/, "") + "\n\n" + block;
-            } else {
-              sys.content = (sys.content || "") + "\n\n" + block;
-            }
-          } else {
-            chat.unshift({ role: "system", content: block });
-          }
-        } catch (e) {
-          console.error("[WarmMemo] \u6CE8\u5165\u5931\u8D25", e);
-        }
-      });
-      console.log("[WarmMemo] \u6CE8\u5165\u94A9\u5B50\u5DF2\u7ED1\u5B9A\uFF1A", readyEvent);
     }
     WM.Injection = { init, buildMemoryBlock, collectCandidates };
   })();
@@ -3386,6 +3419,7 @@ ${p.summary || ""}`.trim() });
           s.rerankBaseUrl = q("#c-rk-url").value;
           s.rerankApiKey = q("#c-rk-key") ? q("#c-rk-key").value : s.rerankApiKey;
           s.rerankModel = q("#c-rk-model") ? q("#c-rk-model").value : s.rerankModel;
+          s.rerankInstruction = q("#c-rk-inst") ? q("#c-rk-inst").value : s.rerankInstruction;
           s.takeoverRerank = q("#c-take-re") ? q("#c-take-re").checked : s.takeoverRerank;
         }
       }
@@ -3537,6 +3571,9 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u670D\u52A1\u7684 Base URL\uFF0C\u81EA\u52A8\u9002\u914D\uFF1A<br/>\xB7 \u672C\u5730\u53CD\u4EE3/\u540C\u6E90\u4EE3\u7406\uFF1A<code>http://127.0.0.1:8080/vec</code>\uFF08\u81EA\u52A8\u8865 /v1/rerank\uFF09<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1/rerank</code></div>
       <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="\u53EF\u9009\uFF08\u672C\u5730\u53CD\u4EE3\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">Rerank \u6307\u4EE4\uFF08\u544A\u8BC9\u6A21\u578B\u6309\u4EC0\u4E48\u6807\u51C6\u6392\u5E8F\uFF09
+        <textarea id="c-rk-inst" rows="3" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(s.rerankInstruction || "")}</textarea>
+      </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u5728\u5411\u91CF\u63A5\u7BA1\u57FA\u7840\u4E0A\uFF0C\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
       <div class="wm-hint" style="margin:-2px 0 4px">\u9700\u914D\u5408\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u4E00\u8D77\u5F00\u542F\u624D\u751F\u6548\uFF1A\u5411\u91CF\u53EC\u56DE\u540E\u518D\u7528\u4F60\u914D\u7F6E\u7684 Rerank \u670D\u52A1\u91CD\u6392\uFF0C\u63D0\u5347\u76F8\u5173\u6027\u3002\u5355\u72EC\u5F00\u542F\u65E0\u6548\u3002</div>
@@ -3675,7 +3712,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "zero-config-takeover-reuse-llm";
+  window.WarmMemo.version = "hook-filter-injection-and-rerank-inst";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

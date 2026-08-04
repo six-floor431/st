@@ -57,12 +57,15 @@
         q.searchParams.set('top_n', String(docs.length));
         finalUrl = q.toString();
       } else {
+        // instruction 对齐万楼：用自然语言告诉 rerank 模型「按什么标准排序」（如「优先能直接回答用户当前意图的条目」）
+        const rerankInstruction = (typeof s.rerankInstruction === 'string' && s.rerankInstruction.trim()) ? s.rerankInstruction.trim() : '';
         body = JSON.stringify({
           model,
           query,
           documents: docs,
           top_n: docs.length,
           return_documents: false,
+          ...(rerankInstruction ? { instruction: rerankInstruction } : {}),
         });
       }
       // —— 调试记录：请求 message ——

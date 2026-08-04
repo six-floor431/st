@@ -1163,6 +1163,7 @@
         s.rerankBaseUrl = q('#c-rk-url').value;
         s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
         s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
+        s.rerankInstruction = q('#c-rk-inst') ? q('#c-rk-inst').value : s.rerankInstruction;
         s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
       }
     }
@@ -1314,6 +1315,9 @@
       <div class="wm-hint">直接填任意服务的 Base URL，自动适配：<br/>· 本地反代/同源代理：<code>http://127.0.0.1:8080/vec</code>（自动补 /v1/rerank）<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1/rerank</code></div>
       <label class="wm-row">API Key<input id="c-rk-key" type="password" value="${s.rerankApiKey}" placeholder="可选（本地反代留空）"/></label>
       <label class="wm-row">模型<input id="c-rk-model" value="${s.rerankModel}" placeholder="BAAI/bge-reranker-v2-m3"/></label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">Rerank 指令（告诉模型按什么标准排序）
+        <textarea id="c-rk-inst" rows="3" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(s.rerankInstruction||'')}</textarea>
+      </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（在向量接管基础上，用温记自己的 Rerank 重排召回结果）</label>
       <div class="wm-hint" style="margin:-2px 0 4px">需配合「接管向量检索」一起开启才生效：向量召回后再用你配置的 Rerank 服务重排，提升相关性。单独开启无效。</div>
