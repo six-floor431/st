@@ -13,25 +13,40 @@
     });
   }
 
+  // 禁止词汇表（覆盖 summary/plot/worldview 等所有提示词中明确禁止的元描述词汇）：
+  //   含这些词的行大概率是 LLM 回显指令或自我介绍，应删除。
+  var BANNED_WORDS_RE = /总结|梳理|概括|归纳|回顾|记录|时间线|时间顺序|按时间|状态标记|供后续参考|核心事件|关键信息|要点|摘要|概述|概要|简述|备注|注记|梳理如下|整理如下|汇总如下|分析如下|描述如下|说明如下|根据对话|用户让我|以下为|以上为|绝对禁止|最高级禁令|写作要求|判断标准|禁止事项/;
+
   // 净化 LLM 原始输出：清理模型可能「回显」的提示词残留标记与寒暄前缀，
   // 防止「把提示词里的示例/标签也写进结果」这种形式的跑题。只删明确属于噪声的行/前缀，不伤正文。
   function sanitizeLLMText(raw) {
     if (!raw) return '';
-    let t = String(raw);
-    // 1) 删除整行是提示词残留标记的行（如「【最高级禁令】」「【正确示例】」「【错误示例】」「【最近对话】」「【关系】」等方括号标题行）
-    t = t.split('\n').map((ln) => {
-      const s = ln.trim();
-      if (/^【[^】]{1,12}】$/.test(s)) return '';                       // 孤立的方括号标题行
-      if (/^(最高级禁令|正确示例|错误示例|写作要求|禁止事项|判断标准|说明|要求|说明：)[:：]/.test(s)) return '';
-      if (/^（(如|围绕|内容)[:：]/.test(s)) return '';                    // 提示词里的举例括号行
-      if (/^(以下是|好的，这是|这是为您|以上为|总结如下|以下是总结)[:：]/.test(s)) return '';
+    var t = String(raw);
+    t = t.split('\n').map(function (ln) {
+      var s = ln.trim();
+      if (!s) return ln; // 空行保留（由后续合并处理）
+      // 孤立的方括号标题行
+      if (/^【[^】]{1,20}】$/.test(s)) return '';
+      // 提示词结构标记行
+      if (/^(最高级禁令|正确示例|错误示例|写作要求|禁止事项|判断标准|说明|要求|说明：|绝对禁止)[:：]/.test(s)) return '';
+      // 提示词里的举例括号行
+      if (/^（(如|围绕|内容)[:：]/.test(s)) return '';
+      // 寒暄/声明前缀行（含"用户让我""根据对话""时间线梳理"等图2中实际出现的残留）
+      if (/^(以下是|好的，这是|这是为您|以上为|总结如下|以下是总结|时间线梳理|剧情事件如下|根据对话内容|用户让我|按照要求)[:：]/.test(s)) return '';
+      // 含禁止元词汇且以"如下/以下"结尾 → 指令回显引导行
+      if (/(如下|以下|为下)[:：]?\s*$/.test(s) && BANNED_WORDS_RE.test(s)) return '';
+      // 以"第X"/"首先"/"其次"开头且含禁止词 → 序号罗列式指令回显
+      if (/^(第[一二三四五六七八九十]|首先|其次|再次|最后|另外)[、，:：]/.test(s) && BANNED_WORDS_RE.test(s)) return '';
       return ln;
     }).join('\n');
-    // 2) 去掉开头的寒暄/声明前缀（一行内）
-    t = t.replace(/^(好的，?|当然，?|以下是|这是|为您)[^\n]{0,20}[:：]?\s*/i, '');
-    // 3) 合并多余空行
+    // 去掉开头的寒暄/声明前缀（一行内）
+    t = t.replace(/^(好的，?|当然，?|以下是|这是|为您|根据|按照)[^\n]{0,25}[:：]?\s*/i, '');
+    // 合并多余空行
     t = t.replace(/\n{3,}/g, '\n\n').trim();
-    return t;
+    // 二次扫描：如果开头第一行仍含明显指令回显特征，逐行删除
+    var lines = t.split('\n');
+    while (lines.length && BANNED_WORDS_RE.test(lines[0]) && /[:：]/.test(lines[0])) lines.shift();
+    return lines.join('\n');
   }
 
   // 取得最近 N 条原始对话（用于总结）
@@ -57,7 +72,7 @@
     }));
   }
 
-  // 构造传给 LLM 的「对话文本块」：对每条 content 应用标签过滤（剔除 <think> 等包裹内容）
+  // 构造传给 LLM 的「对话文本块」：对每条 content 应用标签过滤（剔除 {{{ }}} 等包裹内容）
   function buildDialogue(msgs, settings) {
     const rules = (settings && settings.tagStripRules) || [];
     return msgs.map((m) => {
@@ -80,7 +95,6 @@
       } catch (e) {
         lastErr = e;
         if (attempt < maxRetry) {
-          // 指数退避，避免 LLM 长时间挂起时卡死
           const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
           if (WM.ErrLog) await WM.ErrLog.add('llm', e, { phase: opts.phase || 'unknown', attempt, willRetry: true, backoffMs: backoff });
           await new Promise((r) => setTimeout(r, backoff));
@@ -96,34 +110,25 @@
   function isSummarizing() { return _summarizing; }
 
   // 触发一次完整总结（含关系/剧情/世界观/物品并行提炼）
-  // range: 可选 [start,end] 楼层区间，用于 UI 展示
-  // opts.forceEnd: 到达聊天末尾时强制收尾（即便不足一段也总结剩余楼层）
   async function triggerSummary(settings, opts) {
     opts = opts || {};
     settings = settings || {};
-    // 若传入的配置缺少可用的 LLM Base URL，强制回退到已持久化的最新设置，
-    // 避免「填了 URL 没保存 / 面板旧配置」导致总结拿到空 apiUrl 而失败。
     if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
       try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
     }
     const auto = settings.autoSummaryMode || 'new';
     if (!settings.autoSummaryEnabled) return { ok: false, reason: '自动总结未开启' };
-
-    // 防重入：上一段未跑完直接跳过，避免并行四项重叠
     if (_summarizing) return { ok: false, reason: '上一段总结仍在运行，请稍候' };
     _summarizing = true;
 
-    // 计算要总结的区间
     let range, total;
     try {
       const msgs = getRecentMessages(1000);
       total = msgs.length;
       if (!total) return { ok: false, range: [0, 0], reason: '当前对话没有可总结的楼层（请先有对话内容）' };
       if (opts.forceAll) {
-        // 「立即总结」按钮专用：无视模式与指针，强制总结全部楼层，确保一定发起 LLM 调用
         range = [1, total];
       } else if (auto === 'new') {
-        // 只总结新增楼层：从 summaryPointer 之后到最新
         const ptr = WM.MemoryStore.getSummaryPointer();
         if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: '没有新增楼层需要总结（已总结到最新）' };
         range = [ptr + 1, total];
@@ -139,17 +144,15 @@
         if (start > end) return { ok: false, range: [start, end], reason: '区间起始大于结束' };
         range = [start, end];
       } else if (auto === 'floor') {
-        // 楼层区间模式：每 autoSummaryFloor 层触发一段（1-20,21-40,...）
         const floor = Math.max(1, settings.autoSummaryFloor || 20);
         const ptr = WM.MemoryStore.getSummaryPointer();
-        const segEnd = Math.floor(ptr / floor) * floor + floor; // 下一段的结束楼层
+        const segEnd = Math.floor(ptr / floor) * floor + floor;
         if (opts.forceEnd) {
-          // 末尾收尾：聊天已到末尾，仍有未总结楼层则强制收尾（即使不足一段）
-          if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: '已全部总结完，无新增楼层' }; // 已全部总结完
+          if (ptr >= total) return { ok: false, range: [ptr + 1, total], reason: '已全部总结完，无新增楼层' };
           if (total < segEnd) range = [ptr + 1, total];
           else range = [ptr + 1, Math.min(total, segEnd)];
         } else {
-          if (total < segEnd) return { ok: false, range: [ptr + 1, Math.min(total, segEnd)], reason: '尚未攒满一段，暂不总结' }; // 还没攒够一整段，等待
+          if (total < segEnd) return { ok: false, range: [ptr + 1, Math.min(total, segEnd)], reason: '尚未攒满一段，暂不总结' };
           range = [ptr + 1, Math.min(total, segEnd)];
         }
       } else {
@@ -158,7 +161,6 @@
     const recent = msgs.slice(range[0] - 1, range[1]);
     if (!recent.length) return { ok: false, range, reason: '计算出的总结区间为空' };
 
-    // 关系/剧情/世界观/物品 的可复用上下文
     const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `· ${s.title}：${s.text}`).join('\n');
     const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `· ${r.from} → ${r.to}：${r.label || ''}`).join('\n');
     const plotsText = (WM.MemoryStore.getPlots() || []).map((p) => `· ${p.title}：${p.summary}`).join('\n');
@@ -172,7 +174,6 @@
       await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
       await WM.MemoryStore.setSummaryPointer(range[1]);
     } catch (e) {
-      // 总结本身失败 → 直接上报并弹窗，后续并行任务无意义
       if (WM.ErrLog) await WM.ErrLog.add('summary', e, { range });
       WM.UI && WM.UI.toast && WM.UI.toast('总结失败：' + (e.message || e), 'error');
       return { ok: false, range, reason: (e && e.message) ? e.message : String(e) };
@@ -182,7 +183,6 @@
     const tasks = [];
     const labels = [];
 
-    // 关系（受 autoRelation 开关控制；关闭则不跑，保留用户手动编辑的关系）
     if (settings.autoRelation !== false) {
       tasks.push((async () => {
         const tpl = settings.prompts && settings.prompts.relations;
@@ -193,23 +193,18 @@
           const arr = JSON.parse(out);
           if (Array.isArray(arr)) parsed = arr;
         } catch (e) {
-          // 严格解析：只接受 "A → B：词" 格式；过滤分析句/长句
           const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
           parsed = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
             const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
             if (!m) return null;
             const from = m[1].trim(), to = m[2].trim(), label = (m[3] || '').trim();
-            // 过滤：from/to 含分析词、label 超过 10 字（说明是句子不是关系词）、from 或 to 为空
             if (!from || !to || !label) return null;
             if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
             if (label.length > 10) return null;
-            // from/to 本身不能是长句（超过 8 字说明不是人名）
             if (from.length > 8 || to.length > 8) return null;
             return { from, to, label };
           }).filter(Boolean);
         }
-        // 合并到历史关系（累积权重、去重），而非整段覆盖——否则每轮总结都会清空关系图。
-        // 注意：本轮 LLM 输出的 parsed 不带 weight，mergeRelations 会对新边给默认权 1、旧边累加。
         const prev = WM.MemoryStore.getRelations() || [];
         const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
         await WM.MemoryStore.setRelations(merged);
@@ -218,27 +213,22 @@
       labels.push('relations');
     }
 
-    // 剧情：时间｜标题｜内容｜状态（受 autoPlot 开关控制；标题去重避免重复追加）
     if (settings.autoPlot !== false) {
       tasks.push((async () => {
         const tpl = settings.prompts && settings.prompts.plot;
         const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries, relations: relationsText });
         const out = await callLLM(s, '请输出本段剧情（每行 时间｜标题｜内容｜状态）：', settings, { temperature: 0.4, phase: 'plot' });
-        // 宽松状态识别：把各种说法归一为 active/done/abandon
         function normStatus(raw) {
           if (!raw) return 'active';
           const t = String(raw).replace(/[【】\[\]（）()]/g, '').trim();
-          // done：明确完结词（精确匹配 + 包含匹配）
           if (/^(已完结|完结|已完成|结束|完结了|告一段落|已结束|收尾|落幕|落幕了|大结局|终章|结局|圆满|成功|解决|完成)$/.test(t)) return 'done';
           if (/(完结|完成|结束|告一段落|落幕|解决|达成|实现)/.test(t)) return 'done';
-          // abandon：明确废弃/放弃词
           if (/^(已废弃|废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止|夭折|不了了之)$/.test(t)) return 'abandon';
           if (/(废弃|放弃|停止|作废|取消|烂尾|搁置|中断|终止)/.test(t)) return 'abandon';
-          // active：进行中/持续（含默认）
           return 'active';
         }
         const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
-          .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l)); // 滤掉表头/分隔线
+          .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
         for (const ln of lines) {
           const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
           if (!parts.length) continue;
@@ -252,7 +242,6 @@
             title = parts[0]; summary = parts[1];
           } else { title = parts[0]; }
           if (!title) continue;
-          // 标题去重：已存在同名剧情则更新，否则新增，避免每次总结重复追加
           const exist = (WM.MemoryStore.getPlots() || []).find((p) => p.title === title);
           if (exist) await WM.MemoryStore.updatePlot(exist.id, { time, title, summary, status });
           else await WM.MemoryStore.addPlot({ time, title, summary, status });
@@ -262,7 +251,6 @@
       labels.push('plot');
     }
 
-    // 世界观：解析结构化输出 → worldMeta + worldSections
     if (settings.autoWorld !== false) {
       tasks.push((async () => {
         const world = await WM.Worldbook.inferWorldview(settings, { recent });
@@ -288,12 +276,10 @@
       labels.push('worldview');
     }
 
-    // 物品：物品名｜作用｜持有者｜关联剧情｜来历（物品须关联角色与剧情线）
     if (settings.autoItems !== false) {
       tasks.push((async () => {
         const tpl = settings.prompts && settings.prompts.itemExtract;
         if (!tpl) return { kind: 'items', ok: true, skipped: true };
-        // 把已有剧情线标题喂给模型，便于它做关联
         const knownPlots = (WM.MemoryStore.getPlots() || [])
           .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
         const s = fillTemplate(tpl, {
@@ -309,7 +295,6 @@
           const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
           const name = parts[0];
           if (!name) continue;
-          // 关联剧情：把标题映射回剧情 id
           const relIds = [];
           if (!blank(parts[3])) {
             for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
@@ -317,7 +302,6 @@
               if (hit) relIds.push(hit.id);
             }
           }
-          // 同名物品则更新，避免重复堆积
           const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
           const data = {
             name,
@@ -334,7 +318,6 @@
       labels.push('items');
     }
 
-    // 并行执行 + 全部失败收集
     const results = await Promise.allSettled(tasks);
     const failures = [];
     const successes = [];
@@ -349,12 +332,10 @@
     });
 
     if (failures.length === results.length && failures.length > 0) {
-      // 全部失败 → 弹窗 + 上报
       const reason = failures.map((f) => '【' + f.scope + '】' + (f.err && f.err.message ? f.err.message : f.err)).join('；\n');
       if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('所有并行任务失败'), { range, reason });
       WM.UI && WM.UI.toast && WM.UI.toast('提炼全部失败，见「错误报告」：\n' + reason, 'error');
     } else if (failures.length > 0) {
-      // 部分失败 → 明确标注成功/失败项，便于用户感知
       const okList = successes.join('、') || '无';
       const failList = failures.map((f) => f.scope).join('、');
       const detail = '成功：' + okList + '；失败：' + failList;
@@ -362,7 +343,6 @@
       WM.UI && WM.UI.toast && WM.UI.toast('部分提炼失败 → ' + detail, 'warn');
     }
 
-    // 触发面板与记忆刷新
     if (WM.UI && WM.UI.refresh) WM.UI.refresh();
     return {
       ok: true,
@@ -379,10 +359,9 @@
       },
     };
   } finally {
-    _summarizing = false; // 无论成功/失败/提前 return，都释放防重入锁
+    _summarizing = false;
   }
 }
 
-  // 兼容旧 UI 调用名
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, getRecentMessages, toMessages, isSummarizing };
 })();
