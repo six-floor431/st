@@ -204,32 +204,45 @@
   }
 
   // 解析 AI 输出的结构化世界观文本 → { name, kind, desc, sections:[{title,body}] }
-  // 期望格式：
-  //   世界名：九霄大陆
-  //   世界类型：修仙世界
-  //   简述：……
-  //   ## 修炼体系
-  //   ……
+  // 支持两种格式（向后兼容）：
+  //   新格式（推荐，对齐物品结构化风格）：
+  //     世界名：九霄大陆
+  //     世界类型：修仙世界
+  //     简述：……
+  //     ■灵气运行法则｜灵气自子夜起最为充盈，修者需在此时吐纳方能进阶
+  //     ■封印契约体系｜仙家封印需以丹药与阵法配合
+  //   旧格式（markdown）：
+  //     世界名：xxx  /  ## 修炼体系  /  内容……
   function parseWorldview(text) {
     if (!text || !String(text).trim()) return null;
     const lines = String(text).replace(/\r\n/g, '\n').split('\n');
     const out = { name: '', kind: '', desc: '', sections: [] };
-    let cur = null;
     const descBuf = [];
     for (const raw of lines) {
       const line = raw.trim();
-      if (!line) { if (cur) cur.body.push(''); continue; }
-      // 小标题：## xxx 或 【xxx】 或 「xxx」
-      let m = line.match(/^#{1,6}\s*(.+?)\s*$/) || line.match(/^【(.+?)】\s*$/) || line.match(/^「(.+?)」\s*$/);
-      if (m) { cur = { title: m[1].trim(), body: [] }; out.sections.push(cur); continue; }
+      if (!line) continue;
+      // 新格式：■标题｜内容  → 一条设定
+      let m = line.match(/^■\s*(.+?)\s*[｜|]\s*([\s\S]*)$/);
+      if (m) {
+        const title = m[1].trim();
+        const body = m[2].trim();
+        if (title) out.sections.push({ title, body });
+        continue;
+      }
+      // 旧格式小标题：## xxx 或 【xxx】 或 「xxx」
+      m = line.match(/^#{1,6}\s*(.+?)\s*$/) || line.match(/^【(.+?)】\s*$/) || line.match(/^「(.+?)」\s*$/);
+      if (m) { out.sections.push({ title: m[1].trim(), body: '' }); continue; }
       // 顶部字段
       m = line.match(/^(?:世界名(?:称)?|世界)\s*[:：]\s*(.+)$/);
-      if (m && !cur) { out.name = m[1].trim(); continue; }
+      if (m && !out.name) { out.name = m[1].trim(); continue; }
       m = line.match(/^世界类型\s*[:：]\s*(.+)$/);
-      if (m && !cur) { out.kind = m[1].trim(); continue; }
+      if (m && !out.kind) { out.kind = m[1].trim(); continue; }
       m = line.match(/^(?:简述|世界简述|概述)\s*[:：]\s*(.+)$/);
-      if (m && !cur) { descBuf.push(m[1].trim()); continue; }
-      if (cur) cur.body.push(line);
+      if (m) { descBuf.push(m[1].trim()); continue; }
+      // 旧格式：## 标题 之后的正文行（上一节是 section 且无 body 时接上）
+      const last = out.sections[out.sections.length - 1];
+      if (last && !last.body) last.body = line;
+      else if (last && last.body) last.body += (last.body ? '\n' : '') + line;
       else descBuf.push(line);
     }
     out.desc = descBuf.join('\n').trim();
@@ -238,7 +251,7 @@
     // 仅当标题命中实体词「且」带具体命名标记（冒号/·）时才丢弃，避免误删纯规则名（如「势力格局」）。
     const ENTITY_NOISE = /(物品|道具|物件|武器|装备|信物|角色|人物|地点|场所|城市|城镇|村庄|村落|门派|宗门|势力|公会|家族|国家|组织|帮派|商店|店铺|NPC|具体人名)/;
     out.sections = out.sections
-      .map((s) => ({ title: s.title, body: s.body.join('\n').trim() }))
+      .map((s) => ({ title: s.title, body: s.body.trim() }))
       .filter((s) => s.title || s.body)
       .filter((s) => !(s.title && ENTITY_NOISE.test(s.title) && /[:：·]/.test(s.title)));
     if (!out.name && !out.kind && !out.desc && !out.sections.length) return null;
@@ -267,7 +280,7 @@
       prevMeta.name ? `世界名：${prevMeta.name}` : '',
       prevMeta.kind ? `世界类型：${prevMeta.kind}` : '',
       prevMeta.desc ? `简述：${prevMeta.desc}` : '',
-      ...prevSecs.map((w) => `## ${w.title}\n${w.body}`),
+      ...prevSecs.map((w) => `■${w.title}｜${w.body}`),
     ].filter(Boolean).join('\n');
     const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
     const recentRaw = (ctx && ctx.chat) ? ctx.chat.slice(-30).map((m) => (m.name ? '【' + m.name + '】' : '') + (m.mes || '')).join('\n') : (recentText || '（无）');
@@ -286,25 +299,22 @@ ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction +
     return extracted && extracted.trim() ? extracted.trim() : prev;
   }
 
-  const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个故事所处世界本身的「底层规则设定」。
+  const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个世界本身的「底层规则设定」。
 
 严格按以下格式输出，不要添加任何多余说明：
 
 世界名：（这个世界/大陆/城市叫什么，没有就起一个贴切的）
 世界类型：（用一个词概括，如：修仙世界、赛博朋克、蒸汽朋克、现代都市、剑与魔法）
 简述：（一到两句话说明这是个什么样的世界）
-
-## 设定标题一
-（围绕"世界类型"展开的具体规则与法则。例如修仙世界就写修炼体系的境界划分、灵气运行法则；赛博朋克就写义体改造规则、企业与财阀的运行法则）
-
-## 设定标题二
-（内容）
+■设定标题一｜（围绕"世界类型"展开的具体规则与法则。例如修仙世界就写修炼体系的境界划分、灵气运行法则；赛博朋克就写义体改造规则、企业与财阀的运行法则）
+■设定标题二｜（内容）
 
 要求：
 1. 「世界设定」只写世界本身的通用规则、法则、历史背景、力量体系，绝不写单个具体物品、单个具体角色姓名、单个具体地点名称。
 2. 「世界类型」决定了下面写什么。修仙世界就必须写修炼体系、灵气、法则等，不要写无关内容。
-3. 每条设定要具体、可被后续剧情引用，不要空泛。
-4. 输出 3-6 条设定条目。
+3. 每条设定用 ■ 起头、标题与内容用单个｜分隔（如「■灵气运行法则｜灵气自子夜起最充盈」）。
+4. 每条设定要具体、可被后续剧情引用，不要空泛。
+5. 输出 3-6 条设定条目。
 
 【剧情线】
 {{plot}}
