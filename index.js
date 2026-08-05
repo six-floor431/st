@@ -1831,16 +1831,17 @@ ${recent}
     function isJunkText(v) {
       const s = String(v == null ? "" : v).trim();
       if (!s) return false;
+      if (s.length > 60) return false;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s)) return true;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s：:]/i.test(s)) return true;
-      if (/(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将)/.test(s)) return true;
-      if (/(未提及|未填写|可能还需要|建议考虑|需进一步|有待补充|待补充|暂无|占位|示例|示例如下|不确定|不清楚|不知道)/.test(s)) return true;
+      if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将)/.test(s)) return true;
+      if (s.length < 30 && /(未提及|未填写|可能还需要|建议考虑|需进一步|有待补充|待补充|暂无|占位|示例|示例如下|不确定|不清楚|不知道)/.test(s)) return true;
       if (/^第[一二三四五六七八九十百]+段/.test(s)) return true;
       if (/^\d+\s*[\.、\)\）]/.test(s)) return true;
       if (/^\s*\{['"]?\w+['"]?\s*:/.test(s)) return true;
       if (/^\d+\s*[\.、]\s*\{/.test(s)) return true;
       if (/^[\d\s\{\}\[\]"'\.\,\;\:\|｜\-–—•·]+$/.test(s)) return true;
-      if (/(只输出|不要任何|markdown|代码块|格式如下|输出格式|输出应该|注意：输出)/.test(s) && s.length < 60) return true;
+      if (/(只输出|不要任何|markdown|代码块|格式如下|输出格式|输出应该|注意：输出)/.test(s)) return true;
       return false;
     }
     function sanitizeLLMText(raw) {
@@ -2083,7 +2084,8 @@ ${recent}
       if (!ok || !Array.isArray(data)) return [];
       return data.filter((p) => p && typeof p === "object").map((p) => ({
         time: String(p.time || "").trim().slice(0, 20),
-        title: String(p.title || "").trim().slice(0, 12),
+        // 末尾断句符先去掉（LLM 常给标题加尾标点）；内部仍含则由 filter 判为句子丢弃
+        title: String(p.title || "").trim().replace(/[。！？!?\n]+$/g, "").trim().slice(0, 12),
         summary: String(p.summary || "").trim().slice(0, 80)
       })).filter((p) => {
         if (!p.title) return false;
@@ -2109,7 +2111,7 @@ ${recent}
       const { ok, data } = parseJSON(out);
       if (!ok || !Array.isArray(data)) return [];
       const items = data.filter((it) => it && typeof it === "object").map((it) => {
-        let name = String(it.name || "").trim();
+        let name = String(it.name || "").trim().replace(/[。！？!?\n]+$/g, "").trim();
         let desc = String(it.desc || "").trim();
         let owner = String(it.owner || "").trim();
         let origin = String(it.origin || "").trim();
@@ -2489,12 +2491,12 @@ ${s.text}`).join("\n\n");
     const WM = window.WarmMemo || (window.WarmMemo = {});
     function mergeRelations(oldList, newList) {
       const map = /* @__PURE__ */ new Map();
-      oldList.forEach((r) => map.set(r.from + "" + r.to + "" + r.label, r));
+      oldList.forEach((r) => map.set(r.from + "" + r.to + "" + r.label, Object.assign({ weight: 1 }, r)));
       newList.forEach((r) => {
         const k = r.from + "" + r.to + "" + r.label;
         const ex = map.get(k);
-        if (ex) ex.weight = Math.min(5, (ex.weight || 2) + (r.weight || 1));
-        else map.set(k, Object.assign({}, r));
+        if (ex) ex.weight = Math.min(5, (ex.weight || 1) + (r.weight || 1));
+        else map.set(k, Object.assign({ weight: 1 }, r));
       });
       return Array.from(map.values());
     }
@@ -3094,7 +3096,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-list" id="rel-list"></div></div>`;
       drawGraph(body.querySelector("#wm-graph"));
       const rels = WM.MemoryStore.getRelations();
-      body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(r.weight)}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>';
+      body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(Math.max(0, r.weight || 1))}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>';
     }
     function getUserName() {
       try {
@@ -3207,7 +3209,7 @@ ${p.summary || ""}`.trim() });
           listEl.innerHTML = `<div class="wm-h">\u300C${escapeHtml(name)}\u300D\u7684\u5173\u7CFB\uFF08${rels2.length}\uFF09</div>` + rels2.map((r) => {
             const other = r.from === name ? r.to : r.from;
             const dir = r.from === name ? "\u2192" : "\u2190";
-            return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${"\u25CF".repeat(r.weight)}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
+            return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${"\u25CF".repeat(Math.max(0, r.weight || 1))}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
           }).join("");
         });
       });

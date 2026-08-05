@@ -413,7 +413,7 @@
       <div class="wm-list" id="rel-list"></div></div>`;
     drawGraph(body.querySelector('#wm-graph'));
     const rels = WM.MemoryStore.getRelations();
-    body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>';
+    body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(Math.max(0, r.weight || 1))}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>';
   }
 
   // 取得对话中的 user 名字（作为关系图中心）
@@ -511,7 +511,7 @@
         listEl.innerHTML = `<div class="wm-h">「${escapeHtml(name)}」的关系（${rels.length}）</div>` + rels.map((r) => {
           const other = r.from === name ? r.to : r.from;
           const dir = r.from === name ? '→' : '←';
-          return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
+          return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${'●'.repeat(Math.max(0, r.weight || 1))}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
         }).join('');
       });
     });

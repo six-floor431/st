@@ -7,12 +7,14 @@
   // 合并新旧关系（同边累加权重，去重）
   function mergeRelations(oldList, newList) {
     const map = new Map();
-    oldList.forEach((r) => map.set(r.from + '\u0001' + r.to + '\u0001' + r.label, r));
+    // 补默认 weight=1：parseRelations 输出无 weight 字段，历史数据也可能缺，
+    //   缺失时渲染层 '●'.repeat(undefined) 会抛 RangeError，整个关系列表会因此空白。
+    oldList.forEach((r) => map.set(r.from + '\u0001' + r.to + '\u0001' + r.label, Object.assign({ weight: 1 }, r)));
     newList.forEach((r) => {
       const k = r.from + '\u0001' + r.to + '\u0001' + r.label;
       const ex = map.get(k);
-      if (ex) ex.weight = Math.min(5, (ex.weight || 2) + (r.weight || 1));
-      else map.set(k, Object.assign({}, r));
+      if (ex) ex.weight = Math.min(5, (ex.weight || 1) + (r.weight || 1));
+      else map.set(k, Object.assign({ weight: 1 }, r));
     });
     return Array.from(map.values());
   }
