@@ -304,13 +304,17 @@
   padding: 7px 9px;
   border: 1px solid var(--wm-line-strong);
   border-radius: 8px 2px 8px 2px;
-  background: rgba(255,255,255,.6);
+  background: #ffffff;
   color: #000 !important;       /* 已输入文字：纯黑（!important 压过酒馆 @layer 主题色） */
   font-size: 14px !important;
   font-family: var(--wm-font-ui) !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
-  transition: border-color .15s, box-shadow .15s;
+  /* 关键：清除酒馆全局给 input 加的 filter:brightness() 与 inset box-shadow，
+     否则移动端 WebView 里文字会因 filter 合成层重影发虚 */
+  filter: none !important;
+  box-shadow: none !important;
+  transition: border-color .15s;
 }
 /* 占位提示：浅灰，明显区别于黑色已输入文字 */
 .wm-row input::placeholder, .wm-row textarea::placeholder, .wm-row select::placeholder {
@@ -755,6 +759,10 @@
   font-family: var(--wm-font-ui) !important;
   -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
+  /* 关键：清除酒馆全局给 input 加的 filter:brightness() 与 inset box-shadow，
+     否则移动端 WebView 里文字会因 filter 合成层重影发虚 */
+  filter: none !important;
+  box-shadow: none !important;
   min-width: 0;
 }
 /* 占位提示：浅灰，明显区别于黑色已输入文字 */
@@ -955,6 +963,10 @@
     color: #000 !important;
     -webkit-font-smoothing: antialiased !important;
     -moz-osx-font-smoothing: grayscale !important;
+    /* 清除酒馆全局给 input 加的 filter:brightness() 与 inset box-shadow，
+       否则移动端 WebView 文字因合成层重影发虚（按钮不受影响，故只有输入框糊） */
+    filter: none !important;
+    box-shadow: none !important;
   }
   .wm-panel input::placeholder, .wm-modal input::placeholder, .wm-overlay input::placeholder,
   .wm-panel textarea::placeholder, .wm-modal textarea::placeholder, .wm-overlay textarea::placeholder,
