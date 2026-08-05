@@ -553,16 +553,25 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-          const out = await callLLM(s, '请基于已有剧情线继续推进，输出本段新增的剧情事件（每行 时间｜标题｜事件叙述）：', settings, { temperature: 0.4, phase: 'plot' });
+          const out = await callLLM(s, '只输出【最近对话】里本段新发生、推动剧情的事件（每行 时间｜标题｜事件叙述）；没有新事件就只写 <<<PLOT_START>>> 和 <<<PLOT_END>>> 中间留空，严禁回显已有剧情线。', settings, { temperature: 0.4, phase: 'plot' });
           const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
+          // 归一化 key：用于跨次去重，避免模型偶尔回显旧事件时产生重复条目
+          const normKey = (p) => `${(p.time || '').replace(/\s/g, '')}|${(p.title || '').replace(/\s/g, '')}|${(p.summary || '').replace(/\s/g, '')}`;
+          const existKeys = new Set(existing.map(normKey));
+          let added = 0, skipped = 0;
           for (const ev of parsed) {
-            const exist = existing.find((p) => p.title === ev.title);
-            if (exist) await WM.MemoryStore.updatePlot(exist.id, ev);
-            else await WM.MemoryStore.addPlot(ev);
+            // 增量语义：只追加「新事件」，已有（key 相同）一律跳过，不覆盖、不重复
+            if (existKeys.has(normKey(ev))) { skipped++; continue; }
+            await WM.MemoryStore.addPlot(ev);
+            added++;
           }
-          await WM.MemoryStore.setPlotPointer(range[1]);
-          return { kind: 'plot', ok: true };
+          // 指针推进：仅「仅新增楼层(new)」与「立即处理全部(forceAll)」推进指针，
+          // 避免 count/range/floor 等窗口模式跑一次就把指针顶到 total → 之后永远 skip 导致"不自动更新"。
+          if (settings.autoPlotMode === 'new' || opts.forceAll) {
+            await WM.MemoryStore.setPlotPointer(range[1]);
+          }
+          return { kind: 'plot', ok: true, added, skipped };
         })());
         labels.push('plot');
       }
