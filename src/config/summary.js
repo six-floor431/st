@@ -149,7 +149,20 @@
         const out = await WM.LLMClient.complete(systemText, userText, settings, opts);
         const text = (out && out.trim && out.trim()) || '';
         if (!text) throw new Error('模型返回空内容');
-        return sanitizeLLMText(text);
+        const cleaned = sanitizeLLMText(text);
+    // 输出过短保护：模型偶尔抽风只回一两个字（如"和"），这种无效片段不应被当成成功。
+    // 按 phase 给不同最小长度预期（可在 opts.minLen 覆盖）；非 phase 调用默认 8。
+    let minLen = 8;
+    if (opts && opts.minLen != null) minLen = opts.minLen;
+    else if (opts && opts.phase === 'summary') minLen = 30;
+    else if (opts && opts.phase === 'world') minLen = 20;
+    else if (opts && opts.phase === 'plot') minLen = 15;
+    else if (opts && opts.phase === 'items') minLen = 10;
+    else if (opts && opts.phase === 'relations') minLen = 6;
+        if (cleaned.length < minLen) {
+          throw new Error('模型返回过短（仅 ' + cleaned.length + ' 字：' + cleaned.slice(0, 20) + '），疑似截断/抽风');
+        }
+        return cleaned;
       } catch (e) {
         lastErr = e;
         if (attempt < maxRetry) {

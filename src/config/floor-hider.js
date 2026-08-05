@@ -32,9 +32,12 @@
   }
 
   // 隐藏直到指定楼层（含）：总结后调用，hideUntil(lastIndex)
+  // lastIndex 为 1-based 楼层号（如 range[1]=3 表示已处理到第 3 层）。
+  // 要隐藏的是第 1..lastIndex 层，对应 0-indexed 的 0..lastIndex-1，
+  // 故传给 applySummaryPointerHiding 的指针应为 lastIndex（循环条件 i < lastIndex）。
   async function hideUntil(lastIndex, settings) {
     if (lastIndex == null || lastIndex < 0) return 'invalid';
-    return applySummaryPointerHiding(lastIndex + 1, settings);
+    return applySummaryPointerHiding(lastIndex, settings);
   }
 
   WM.FloorHider = { applySummaryPointerHiding, hideUntil };

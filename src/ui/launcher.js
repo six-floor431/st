@@ -197,6 +197,26 @@
           <summary>自动抽取子任务</summary>
           <div class="wm-hint">记忆类（随总结一起跑）：世界观设定。<br/>物品追踪：<b>同时跟随「总结」和「剧情线」两个流程</b>各跑一次，确保不漏。<br/>剧情类（独立流程，与总结解耦）：剧情线 + 关系图 —— 触发时并联调用，并基于「已有剧情线」自我推进，总结不再顺带跑它们。</div>
           <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled!==false?'checked':''}/> 启用剧情线独立推进（含关系图）</label>
+          <div class="wm-row" style="margin-left:8px;flex-direction:column;align-items:flex-start;gap:6px">
+            <div>剧情线处理楼层：
+              <select id="p-mode">
+                <option value="new" ${s.autoPlotMode==='new'?'selected':''}>仅新增楼层</option>
+                <option value="count" ${s.autoPlotMode==='count'?'selected':''}>最近 N 条</option>
+                <option value="range" ${s.autoPlotMode==='range'?'selected':''}>自定义楼层区间</option>
+                <option value="floor" ${s.autoPlotMode==='floor'?'selected':''}>按楼层区间（1-20,21-40…）</option>
+              </select>
+            </div>
+            <div id="p-count-row" style="${s.autoPlotMode==='count'?'':'display:none'}">最近条数：
+              <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
+            </div>
+            <div id="p-range-row" style="${s.autoPlotMode==='range'?'':'display:none'}">
+              楼层 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
+              <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
+            </div>
+            <div id="p-floor-row" style="${s.autoPlotMode==='floor'?'':'display:none'}">
+              每 <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> 层推进一段
+            </div>
+          </div>
           <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation!==false?'checked':''}/> 关系图（随剧情线一并跑）</label>
           <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot!==false?'checked':''}/> 剧情线</label>
           <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld!==false?'checked':''}/> 世界观设定</label>
@@ -220,6 +240,12 @@
       body.querySelector('#a-count-row').style.display = mode.value === 'count' ? '' : 'none';
       body.querySelector('#a-range-row').style.display = mode.value === 'range' ? '' : 'none';
       body.querySelector('#a-floor-row').style.display = mode.value === 'floor' ? '' : 'none';
+    };
+    const pmode = body.querySelector('#p-mode');
+    if (pmode) pmode.onchange = () => {
+      body.querySelector('#p-count-row').style.display = pmode.value === 'count' ? '' : 'none';
+      body.querySelector('#p-range-row').style.display = pmode.value === 'range' ? '' : 'none';
+      body.querySelector('#p-floor-row').style.display = pmode.value === 'floor' ? '' : 'none';
     };
 
     // 标签过滤规则渲染（同一标签可多重形态并存）
@@ -270,11 +296,13 @@
       s.autoPlot = body.querySelector('#a-plot').checked;
       s.autoWorld = body.querySelector('#a-world').checked;
       s.autoItems = body.querySelector('#a-item').checked;
-      s.autoPlotMode = mode.value;
-      s.autoPlotCount = parseInt(body.querySelector('#a-count').value, 10) || 20;
-      s.autoPlotFloor = parseInt(body.querySelector('#a-floor').value, 10) || 20;
-      s.autoPlotStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
-      s.autoPlotEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
+      // 剧情线独立楼层配置（与总结解耦，使用各自的 UI 控件）
+      const pModeEl = body.querySelector('#p-mode');
+      s.autoPlotMode = pModeEl ? pModeEl.value : (mode ? mode.value : 'new');
+      s.autoPlotCount = parseInt(body.querySelector('#p-count') ? body.querySelector('#p-count').value : body.querySelector('#a-count').value, 10) || 20;
+      s.autoPlotFloor = parseInt(body.querySelector('#p-floor') ? body.querySelector('#p-floor').value : body.querySelector('#a-floor').value, 10) || 20;
+      s.autoPlotStart = parseInt(body.querySelector('#p-start') ? body.querySelector('#p-start').value : body.querySelector('#a-start').value, 10) || 0;
+      s.autoPlotEnd = parseInt(body.querySelector('#p-end') ? body.querySelector('#p-end').value : body.querySelector('#a-end').value, 10) || -1;
       // 自动大总结配置
       s.bigSummaryEnabled = body.querySelector('#a-big')?.checked ?? s.bigSummaryEnabled;
       s.bigSummaryEvery = Math.max(2, parseInt(body.querySelector('#a-big-every')?.value, 10) || s.bigSummaryEvery || 5);
@@ -385,7 +413,7 @@
       <div class="wm-list" id="rel-list"></div></div>`;
     drawGraph(body.querySelector('#wm-graph'));
     const rels = WM.MemoryStore.getRelations();
-    body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系，先总结</div>';
+    body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(r.weight)}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>';
   }
 
   // 取得对话中的 user 名字（作为关系图中心）
@@ -669,7 +697,10 @@
       return `<div class="wm-item-card" data-id="${i.id}">
         <div class="wm-item-name">${escapeHtml(i.name || '（未命名）')}${
           i.origin ? `<span class="wm-tag">来历：${escapeHtml(i.origin)}</span>` : ''}</div>
-        <div class="wm-item-effect">${escapeHtml(i.desc || '（未填写作用）')}</div>
+        <div>
+          <div class="wm-item-block-label">作用</div>
+          <div class="wm-item-effect">${escapeHtml(i.desc || '（未填写作用）')}</div>
+        </div>
         <div class="wm-item-owner">
           <span><b>持有者：</b>${escapeHtml(i.owner || '未知')}</span>
           ${rel.length ? `<span><b>关联剧情：</b>${escapeHtml(rel.join('、'))}</span>` : ''}

@@ -1928,7 +1928,18 @@ ${recent}
           const out = await WM.LLMClient.complete(systemText, userText, settings, opts);
           const text = out && out.trim && out.trim() || "";
           if (!text) throw new Error("\u6A21\u578B\u8FD4\u56DE\u7A7A\u5185\u5BB9");
-          return sanitizeLLMText(text);
+          const cleaned = sanitizeLLMText(text);
+          let minLen = 8;
+          if (opts && opts.minLen != null) minLen = opts.minLen;
+          else if (opts && opts.phase === "summary") minLen = 30;
+          else if (opts && opts.phase === "world") minLen = 20;
+          else if (opts && opts.phase === "plot") minLen = 15;
+          else if (opts && opts.phase === "items") minLen = 10;
+          else if (opts && opts.phase === "relations") minLen = 6;
+          if (cleaned.length < minLen) {
+            throw new Error("\u6A21\u578B\u8FD4\u56DE\u8FC7\u77ED\uFF08\u4EC5 " + cleaned.length + " \u5B57\uFF1A" + cleaned.slice(0, 20) + "\uFF09\uFF0C\u7591\u4F3C\u622A\u65AD/\u62BD\u98CE");
+          }
+          return cleaned;
         } catch (e) {
           lastErr = e;
           if (attempt < maxRetry) {
@@ -2593,7 +2604,7 @@ ${p.summary || ""}`.trim() });
     }
     async function hideUntil(lastIndex, settings) {
       if (lastIndex == null || lastIndex < 0) return "invalid";
-      return applySummaryPointerHiding(lastIndex + 1, settings);
+      return applySummaryPointerHiding(lastIndex, settings);
     }
     WM.FloorHider = { applySummaryPointerHiding, hideUntil };
   })();
@@ -2774,6 +2785,26 @@ ${p.summary || ""}`.trim() });
           <summary>\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</summary>
           <div class="wm-hint">\u8BB0\u5FC6\u7C7B\uFF08\u968F\u603B\u7ED3\u4E00\u8D77\u8DD1\uFF09\uFF1A\u4E16\u754C\u89C2\u8BBE\u5B9A\u3002<br/>\u7269\u54C1\u8FFD\u8E2A\uFF1A<b>\u540C\u65F6\u8DDF\u968F\u300C\u603B\u7ED3\u300D\u548C\u300C\u5267\u60C5\u7EBF\u300D\u4E24\u4E2A\u6D41\u7A0B</b>\u5404\u8DD1\u4E00\u6B21\uFF0C\u786E\u4FDD\u4E0D\u6F0F\u3002<br/>\u5267\u60C5\u7C7B\uFF08\u72EC\u7ACB\u6D41\u7A0B\uFF0C\u4E0E\u603B\u7ED3\u89E3\u8026\uFF09\uFF1A\u5267\u60C5\u7EBF + \u5173\u7CFB\u56FE \u2014\u2014 \u89E6\u53D1\u65F6\u5E76\u8054\u8C03\u7528\uFF0C\u5E76\u57FA\u4E8E\u300C\u5DF2\u6709\u5267\u60C5\u7EBF\u300D\u81EA\u6211\u63A8\u8FDB\uFF0C\u603B\u7ED3\u4E0D\u518D\u987A\u5E26\u8DD1\u5B83\u4EEC\u3002</div>
           <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled !== false ? "checked" : ""}/> \u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\uFF08\u542B\u5173\u7CFB\u56FE\uFF09</label>
+          <div class="wm-row" style="margin-left:8px;flex-direction:column;align-items:flex-start;gap:6px">
+            <div>\u5267\u60C5\u7EBF\u5904\u7406\u697C\u5C42\uFF1A
+              <select id="p-mode">
+                <option value="new" ${s.autoPlotMode === "new" ? "selected" : ""}>\u4EC5\u65B0\u589E\u697C\u5C42</option>
+                <option value="count" ${s.autoPlotMode === "count" ? "selected" : ""}>\u6700\u8FD1 N \u6761</option>
+                <option value="range" ${s.autoPlotMode === "range" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u697C\u5C42\u533A\u95F4</option>
+                <option value="floor" ${s.autoPlotMode === "floor" ? "selected" : ""}>\u6309\u697C\u5C42\u533A\u95F4\uFF081-20,21-40\u2026\uFF09</option>
+              </select>
+            </div>
+            <div id="p-count-row" style="${s.autoPlotMode === "count" ? "" : "display:none"}">\u6700\u8FD1\u6761\u6570\uFF1A
+              <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
+            </div>
+            <div id="p-range-row" style="${s.autoPlotMode === "range" ? "" : "display:none"}">
+              \u697C\u5C42 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
+              <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
+            </div>
+            <div id="p-floor-row" style="${s.autoPlotMode === "floor" ? "" : "display:none"}">
+              \u6BCF <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> \u5C42\u63A8\u8FDB\u4E00\u6BB5
+            </div>
+          </div>
           <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation !== false ? "checked" : ""}/> \u5173\u7CFB\u56FE\uFF08\u968F\u5267\u60C5\u7EBF\u4E00\u5E76\u8DD1\uFF09</label>
           <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot !== false ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
           <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld !== false ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
@@ -2797,6 +2828,12 @@ ${p.summary || ""}`.trim() });
         body.querySelector("#a-count-row").style.display = mode.value === "count" ? "" : "none";
         body.querySelector("#a-range-row").style.display = mode.value === "range" ? "" : "none";
         body.querySelector("#a-floor-row").style.display = mode.value === "floor" ? "" : "none";
+      };
+      const pmode = body.querySelector("#p-mode");
+      if (pmode) pmode.onchange = () => {
+        body.querySelector("#p-count-row").style.display = pmode.value === "count" ? "" : "none";
+        body.querySelector("#p-range-row").style.display = pmode.value === "range" ? "" : "none";
+        body.querySelector("#p-floor-row").style.display = pmode.value === "floor" ? "" : "none";
       };
       function renderTagRules() {
         const box = body.querySelector("#tag-rules");
@@ -2843,11 +2880,12 @@ ${p.summary || ""}`.trim() });
         s.autoPlot = body.querySelector("#a-plot").checked;
         s.autoWorld = body.querySelector("#a-world").checked;
         s.autoItems = body.querySelector("#a-item").checked;
-        s.autoPlotMode = mode.value;
-        s.autoPlotCount = parseInt(body.querySelector("#a-count").value, 10) || 20;
-        s.autoPlotFloor = parseInt(body.querySelector("#a-floor").value, 10) || 20;
-        s.autoPlotStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
-        s.autoPlotEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
+        const pModeEl = body.querySelector("#p-mode");
+        s.autoPlotMode = pModeEl ? pModeEl.value : mode ? mode.value : "new";
+        s.autoPlotCount = parseInt(body.querySelector("#p-count") ? body.querySelector("#p-count").value : body.querySelector("#a-count").value, 10) || 20;
+        s.autoPlotFloor = parseInt(body.querySelector("#p-floor") ? body.querySelector("#p-floor").value : body.querySelector("#a-floor").value, 10) || 20;
+        s.autoPlotStart = parseInt(body.querySelector("#p-start") ? body.querySelector("#p-start").value : body.querySelector("#a-start").value, 10) || 0;
+        s.autoPlotEnd = parseInt(body.querySelector("#p-end") ? body.querySelector("#p-end").value : body.querySelector("#a-end").value, 10) || -1;
         s.bigSummaryEnabled = body.querySelector("#a-big")?.checked ?? s.bigSummaryEnabled;
         s.bigSummaryEvery = Math.max(2, parseInt(body.querySelector("#a-big-every")?.value, 10) || s.bigSummaryEvery || 5);
         s.bigSummaryMaxSegments = parseInt(body.querySelector("#a-big-max")?.value, 10) || s.bigSummaryMaxSegments || 0;
@@ -2953,7 +2991,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-list" id="rel-list"></div></div>`;
       drawGraph(body.querySelector("#wm-graph"));
       const rels = WM.MemoryStore.getRelations();
-      body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(r.weight)}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\uFF0C\u5148\u603B\u7ED3</div>';
+      body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(r.weight)}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>';
     }
     function getUserName() {
       try {
@@ -3251,7 +3289,10 @@ ${p.summary || ""}`.trim() });
         const rel = (i.relatedPlots || []).map((pid) => plotTitle[pid]).filter(Boolean);
         return `<div class="wm-item-card" data-id="${i.id}">
         <div class="wm-item-name">${escapeHtml(i.name || "\uFF08\u672A\u547D\u540D\uFF09")}${i.origin ? `<span class="wm-tag">\u6765\u5386\uFF1A${escapeHtml(i.origin)}</span>` : ""}</div>
-        <div class="wm-item-effect">${escapeHtml(i.desc || "\uFF08\u672A\u586B\u5199\u4F5C\u7528\uFF09")}</div>
+        <div>
+          <div class="wm-item-block-label">\u4F5C\u7528</div>
+          <div class="wm-item-effect">${escapeHtml(i.desc || "\uFF08\u672A\u586B\u5199\u4F5C\u7528\uFF09")}</div>
+        </div>
         <div class="wm-item-owner">
           <span><b>\u6301\u6709\u8005\uFF1A</b>${escapeHtml(i.owner || "\u672A\u77E5")}</span>
           ${rel.length ? `<span><b>\u5173\u8054\u5267\u60C5\uFF1A</b>${escapeHtml(rel.join("\u3001"))}</span>` : ""}
