@@ -915,22 +915,32 @@ ${it.message}`;
       const temperature = opts.temperature != null ? opts.temperature : profile.temperature != null ? profile.temperature : 0.3;
       const deepOn = profile.deepThinking === true;
       const reasoningEffort = opts && opts.reasoningEffort || profile.reasoningEffort || "medium";
+      const mdl = String(profile.model || "").toLowerCase();
+      const isJsonCapable = /deepseek|gpt-4|gpt-3\.5|openai|qwen|通义|dashscope|moonshot|kimi|glm|智谱|zhipu|doubao|豆包|volc|abab|minimax|baichuan|chatglm/.test(mdl) && !/reasoner|(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|qwq|qwen-?3.*thinking|thinking/.test(mdl);
+      const wantJson = opts.jsonMode === true && isJsonCapable;
       const body = {
         model: profile.model || "",
         messages: messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : "system", content: String(m.content || "") })),
         max_tokens: maxTokens,
         temperature
       };
+      if (wantJson) {
+        body.response_format = { type: "json_object" };
+        const lastUser = body.messages.filter((m) => m.role === "user").pop();
+        if (lastUser && !/json/i.test(lastUser.content)) {
+          lastUser.content += "\n\u8BF7\u4E25\u683C\u4EE5 JSON \u683C\u5F0F\u8F93\u51FA\u3002";
+        }
+      }
       if (deepOn) {
-        const mdl = String(profile.model || "").toLowerCase();
-        if (/(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|gpt-5|gpt5/.test(mdl)) {
+        const mdl2 = String(profile.model || "").toLowerCase();
+        if (/(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|gpt-5|gpt5/.test(mdl2)) {
           body.reasoning_effort = /^(low|medium|high)$/.test(reasoningEffort) ? reasoningEffort : "medium";
           body.max_tokens = Math.max(maxTokens, 2e3);
-        } else if (/reasoner/.test(mdl)) {
+        } else if (/reasoner/.test(mdl2)) {
           body.max_tokens = Math.max(maxTokens, 2e3);
-        } else if (/doubao|thinking|qwq|qwen3|qwen-3|gemini|claude/.test(mdl)) {
+        } else if (/doubao|thinking|qwq|qwen3|qwen-3|gemini|claude/.test(mdl2)) {
           body.thinking = { type: "enabled", budget_tokens: Math.min(Math.max(Math.floor(maxTokens * 0.6), 1024), 8192) };
-          if (/qwen3|qwen-3/.test(mdl)) body.enable_thinking = true;
+          if (/qwen3|qwen-3/.test(mdl2)) body.enable_thinking = true;
           body.max_tokens = Math.max(maxTokens, 1500);
         } else {
           if (WM.DebugLog) WM.DebugLog.logResponse("llm", { note: "\u6DF1\u5EA6\u601D\u8003\u5F00\u5173\u5DF2\u5F00\uFF0C\u4F46\u6A21\u578B\u300C" + profile.model + "\u300D\u672A\u5339\u914D\u5230\u5DF2\u77E5\u601D\u8003\u6A21\u578B\uFF0C\u672A\u6CE8\u5165\u601D\u8003\u53C2\u6570" });
@@ -1730,7 +1740,7 @@ ${recentText || recentRaw || "\uFF08\u65E0\uFF09"}
 ${known || prev || "\uFF08\u65E0\uFF09"}
 ${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.extraInstruction + "\n" : ""}\u8BF7\u6309\u89C4\u5B9A\u683C\u5F0F\u8F93\u51FA\u4E16\u754C\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
-      const out = await WM.Summary.callLLM(sys, userMsg + "\n\u53EA\u8F93\u51FA JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3002", settings, { temperature: 0.4 });
+      const out = await WM.Summary.callLLM(sys, userMsg + "\n\u53EA\u8F93\u51FA JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3002", settings, { temperature: 0.4, jsonMode: true });
       const parsed = WM.Summary.parseWorld ? WM.Summary.parseWorld(out) : null;
       if (!parsed || !parsed.name && !parsed.type && !parsed.desc && !parsed.rules.length) return prev;
       const lines = [];
@@ -2247,7 +2257,7 @@ ${recent}
         const summaryTpl = settings.prompts && settings.prompts.summary;
         const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
         try {
-          const rawSummary = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary" });
+          const rawSummary = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary", jsonMode: true });
           const summaryText = taggedSummary(rawSummary);
           await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
           await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -2298,7 +2308,7 @@ ${recent}
             if (!tpl) return { kind: "items", ok: true, skipped: true };
             const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items", jsonMode: true });
             const itemRaw = taggedItems(out);
             const parsedItems = parseItems(itemRaw);
             const allPlots = WM.MemoryStore.getPlots() || [];
@@ -2400,7 +2410,7 @@ ${recent}
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.relations;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "relations" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "relations", jsonMode: true });
             const parsed = parseRelations(taggedRelations(out));
             const prev = WM.MemoryStore.getRelations() || [];
             const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
@@ -2413,7 +2423,7 @@ ${recent}
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.plot;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002", settings, { temperature: 0.4, phase: "plot" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002", settings, { temperature: 0.4, phase: "plot", jsonMode: true });
             const parsed = parsePlots(taggedPlot(out));
             const existing = WM.MemoryStore.getPlots() || [];
             const normKey = (p) => `${(p.time || "").replace(/\s/g, "")}|${(p.title || "").replace(/\s/g, "")}|${(p.summary || "").replace(/\s/g, "")}`;
@@ -2440,7 +2450,7 @@ ${recent}
             if (!tpl) return { kind: "items", ok: true, skipped: true };
             const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items", jsonMode: true });
             const itemRaw = taggedItems(out);
             const parsedItems = parseItems(itemRaw);
             const allPlots = WM.MemoryStore.getPlots() || [];
@@ -2532,7 +2542,7 @@ ${s.text}`).join("\n\n");
         historySummary: ""
       });
       try {
-        const rawBig = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary" });
+        const rawBig = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary", jsonMode: true });
         const text = taggedSummary(rawBig);
         await WM.MemoryStore.addSummary(text, "big", "\u5927\u603B\u7ED3\uFF08\u6574\u5408 " + recentSmalls.length + " \u6BB5\u5C0F\u603B\u7ED3\uFF09");
         return { ok: true, count: recentSmalls.length };

@@ -54,6 +54,13 @@
     // 深度思考：开启后按模型名自适应注入各家「深度思考/推理」参数
     const deepOn = profile.deepThinking === true;
     const reasoningEffort = (opts && opts.reasoningEffort) || profile.reasoningEffort || 'medium';
+    // 原生 JSON 模式：仅当调用方明确要求（opts.jsonMode）且模型支持时注入。
+    // 支持列表：DeepSeek（api.deepseek.com）、OpenAI（gpt-4o/gpt-4/gpt-4.1 等非思考系）、通义/兼容 OpenAI 的 JSON 端点。
+    // 思考模型（o 系列 / deepseek-reasoner / qwen3-thinking 等）不强制 json_object，避免与思考链冲突——它们已靠 prompt 约束。
+    const mdl = String(profile.model || '').toLowerCase();
+    const isJsonCapable = /deepseek|gpt-4|gpt-3\.5|openai|qwen|通义|dashscope|moonshot|kimi|glm|智谱|zhipu|doubao|豆包|volc|abab|minimax|baichuan|chatglm/.test(mdl)
+      && !/reasoner|(^|[^a-z0-9])o[0-9]|(^|[^a-z0-9])(o1|o3|o4)([^a-z0-9]|$)|qwq|qwen-?3.*thinking|thinking/.test(mdl);
+    const wantJson = opts.jsonMode === true && isJsonCapable;
 
     // 组装 OpenAI 兼容请求体（只含我们自己的提示词）
     const body = {
@@ -62,6 +69,18 @@
       max_tokens: maxTokens,
       temperature: temperature,
     };
+
+    // 原生 JSON 模式：API 层强制输出合法 JSON（比 prompt 软约束可靠得多）。
+    // 仅在调用方要求且模型支持时注入；思考模型不注入以免与思考链冲突。
+    if (wantJson) {
+      body.response_format = { type: 'json_object' };
+      // DeepSeek 要求：开启 JSON 模式时，system 或 user 消息里需包含「json」字样，否则易 400。
+      // 我们的 prompt 已含 JSON 示例，这里再保险地在 user 末尾追加一句，确保兼容。
+      const lastUser = body.messages.filter((m) => m.role === 'user').pop();
+      if (lastUser && !/json/i.test(lastUser.content)) {
+        lastUser.content += '\n请严格以 JSON 格式输出。';
+      }
+    }
 
     // —— 深度思考参数适配（按模型名判断厂家/系列）——
     // 不同厂家对「深度思考」的实现完全不同，这里统一在开关开启时注入对应字段：
