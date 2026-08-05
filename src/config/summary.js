@@ -151,10 +151,15 @@
     // 优先 JSON：{"text":"..."}
     const { ok, data } = parseJSON(out);
     if (ok && data && typeof data === 'object' && data.text != null) {
-      return cleanSummaryText(String(data.text));
+      const text = cleanSummaryText(String(data.text));
+      // summary 最终卫生检查：不能太短、不能含元指令
+      if (text.length >= 10 && !_isDirtyValue(text)) return text;
     }
     // 回退：旧式 <<<SUMMARY_START>>> 标签
-    return cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY'));
+    const fallback = cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY'));
+    // 回退结果也必须通过卫生检查，否则返回空串（宁缺毋滥）
+    if (fallback.length >= 10 && !_isDirtyValue(fallback)) return fallback;
+    return '';
   }
   function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
   function taggedPlot(out) { return out; } // plot 现为 JSON 数组，交由 parsePlots 解析
@@ -163,6 +168,9 @@
 
   // ── 通用 JSON 解析：容忍模型加的 ```json 围栏、前后噪声、截断 ──
   // 返回 { ok, data }；解析失败 ok=false, data=null
+  //
+  // ⚠️ 关键防护（v5）：修复策略拼出的结果必须通过 sanity check，
+  //   拒绝「碰巧能 JSON.parse 但内容是垃圾」的情况（如截取到 {"time":""} 这种片段）。
   function parseJSON(raw) {
     if (raw == null) return { ok: false, data: null };
     let s = String(raw).trim();
@@ -172,26 +180,96 @@
     const start = s.search(/[[{]/);
     const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
     if (start === -1) return { ok: false, data: null };
-    s = end >= start ? s.slice(start, end + 1) : s.slice(start); // 无闭合括号时取从 start 到末尾，后续尝试补闭合
+    s = end >= start ? s.slice(start, end + 1) : s.slice(start);
     try {
       const data = JSON.parse(s);
-      return { ok: true, data };
+      return _sanityCheck(data) ? { ok: true, data } : { ok: false, data: null };
     } catch (e) {
       // 尝试修复尾部残缺（模型常截断在字符串中途、缺闭合引号/括号）
       const fixes = [
-        s + '"',                         // 补字符串闭合引号
-        s + '"}',                        // 补 引号+对象闭合
-        s + ']',                         // 补数组闭合
-        s + '}]',                        // 补对象+数组闭合
-        s.replace(/,\s*$/, '') + '}',    // 去尾逗号再补 }
+        s + '"',
+        s + '"}',
+        s + ']',
+        s + '}]',
+        s.replace(/,\s*$/, '') + '}',
         s.replace(/,\s*$/, '') + '"}',
-        s + '}',                         // 补对象闭合
+        s + '}',
       ];
       for (const f of fixes) {
-        try { return { ok: true, data: JSON.parse(f) }; } catch (e2) {}
+        try {
+          const d = JSON.parse(f);
+          if (_sanityCheck(d)) return { ok: true, data: d };
+        } catch (e2) {}
       }
       return { ok: false, data: null };
     }
+  }
+
+  // ── Sanity check：验证解析结果是否为"合理的数据结构"而非垃圾片段 ──
+  // 拒绝以下情况：
+  //   - 纯字符串值但长度 > 500（大概率是整段叙事/指令回显）
+  //   - 对象的所有 value 都是空串（如 {"time":"","title":"","summary":""}）
+  //   - 数组中每个元素的所有可枚举 value 都空（同上）
+  //   - 值包含明显的 JSON 片段残留（{"time":""} 这类字面量）
+  //   - 值包含元指令特征（"只输出"/"不要解释"/"JSON 格式"等）
+  function _sanityCheck(data) {
+    if (data == null) return false;
+    if (typeof data === 'string') {
+      // 字符串只在 summary 场景合法，且不能太长（>800 大概率是垃圾）
+      return data.length > 0 && data.length <= 800;
+    }
+    if (typeof data !== 'object') return false;
+    if (Array.isArray(data)) {
+      // 空数组 [] 是合法的（表示"无新事件/无关系"）
+      if (data.length === 0) return true;
+      // 非空数组：只要存在至少一个非 junk 元素就通过（不过滤，留给上层 parsePlots/parseItems 做逐条过滤）
+      // 这样避免"一个坏元素害死整个数组"的问题
+      return data.some((item) => item && typeof item === 'object' && Object.keys(item).length > 0 && !_isJunkObject(item));
+    }
+    // 普通对象
+    return Object.keys(data).length > 0 && !_isJunkObject(data);
+  }
+
+  // 检测一个对象是否为"垃圾对象"（所有字段值都空，或含明显非法内容）
+  function _isJunkObject(obj) {
+    if (!obj || typeof obj !== 'object') return true;
+    const vals = Object.values(obj).map((v) => String(v == null ? '' : v));
+    // 所有值都空 → 垃圾
+    if (vals.every((v) => v.trim() === '')) return true;
+    // 任一值含 JSON 片段残留或元指令 → 整个对象可疑
+    const junkPat = /^\s*\{["']?\w+["']?\s*:\s*["']?\s*["']?\}/;  // {"time":""} 这类
+    const numberedJsonPat = /^\d+\s*[\.\、]\s*\{/;  // "6. {\"time\":\"}" 这类
+    // 元指令/思考过程关键词（不设长度下限，短文本也要拦）
+    const metaPat = /只输出|不要任何|JSON|markdown|代码块|格式如下|输出格式|系统要求|请严格|注意[:：]|我们需要|让我们构造|时间点.*可以是|按顺序|分析物品|关联剧情标题|我们分析/;
+    for (const v of vals) {
+      if (junkPat.test(v.trim())) return true;
+      if (numberedJsonPat.test(v.trim())) return true;
+      if (metaPat.test(v)) return true;
+      // 字符串值超长（>800）→ 大概率是整段叙事/指令回显被塞进了单个字段
+      if (v.length > 800) return true;
+    }
+    return false;
+  }
+
+  // ── 字段值卫生检查：检测单个字段值是否含非法内容 ──
+  function _isDirtyValue(v) {
+    const s = String(v == null ? '' : v);
+    if (!s) return false;  // 空值不算脏，由上层必填校验处理
+    // 含字段名模式（模型把 "desc xxx；owner yyy" 当成 desc 的值）
+    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s]/i.test(s.trim())) return true;
+    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s.trim())) return true;
+    // 含元指令/思考过程残留
+    if (/只输出|不要任何|markdown 代码块|JSON 格式|输出应该|我们需要压缩|注意：输出/.test(s) && s.length > 8) return true;
+    // 占位符/无意义填充
+    if (/^[\(（](未填写|无|未知|空)[^)）]*[\)）]$/.test(s.trim())) return true;
+    if (/^(未填写作用|（未填写作用）)$/.test(s.trim())) return true;
+    // 含 JSON 片段字面量（如 {"time":""} 被当成 title）
+    if (/^\s*\{".*"\s*\}/.test(s.trim())) return true;
+    // 思考过程/元语句前缀
+    if (/^(让我们构造|按顺序|时间点.*可以是|分析物品|关联剧情标题|我们分析|让我们)/.test(s.trim())) return true;
+    // 编号+JSON片段（如 "6. {\"time\":\"}" 这类）
+    if (/^\d+\s*[\.\、]\s*\{/.test(s.trim())) return true;
+    return false;
   }
 
   // 取得最近 N 条原始对话（用于总结）
@@ -347,7 +425,11 @@
           to: String(r.to || '').trim(),
           label: String(r.label || '').trim(),
         }))
-        .filter((r) => r.from && r.to && r.label && r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8);
+        .filter((r) => {
+          if (!r.from || !r.to || !r.label) return false;
+          if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
+          return r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8;
+        });
     }
     // 回退：旧式「A → B：关系」文本
     const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
@@ -374,7 +456,18 @@
           title: String(p.title || '').slice(0, 12).trim(),
           summary: String(p.summary || '').slice(0, 80).trim(),
         }))
-        .filter((p) => p.title);
+        .filter((p) => {
+          // title 必须有实质内容（不能是空串、不能是 JSON 片段、不能是元指令）
+          if (!p.title) return false;
+          if (_isDirtyValue(p.title)) return false;
+          if (_isDirtyValue(p.summary)) { p.summary = ''; }  // summary 脏则清空，不整条丢弃
+          if (_isDirtyValue(p.time)) { p.time = ''; }
+          // title 不能是纯标点/数字/单个字符（如 "." / "1" / "{"）
+          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
+          // title 长度至少 2 字符
+          if (p.title.length < 2) return false;
+          return true;
+        });
     }
     // 回退：旧式「时间｜标题｜事件」文本
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
@@ -391,6 +484,10 @@
         title = parts[0]; summary = parts[1];
       } else { title = parts[0]; }
       if (!title) continue;
+      // 回退路径也做卫生检查
+      if (_isDirtyValue(title)) continue;
+      if (_isDirtyValue(summary)) continue;
+      if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(title) || title.length < 2) continue;
       result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
     }
     return result;
@@ -422,11 +519,22 @@
             origin: String(it.origin || '').trim(),
             relatedPlotText: relText,
           };
+          // 卫生检查：脏值清空而非存入
+          if (_isDirtyValue(obj.desc)) obj.desc = '';
+          if (_isDirtyValue(obj.owner)) obj.owner = '';
+          if (_isDirtyValue(obj.origin)) obj.origin = '';
+          if (_isDirtyValue(obj.relatedPlotText)) obj.relatedPlotText = '';
           const relIds = matchPlotIds(relText);
           if (relIds.length) obj.relatedPlots = relIds; // 匹配到则直接给 ID 数组，与存储层对齐
           return obj;
         })
-        .filter((it) => it.name);
+        .filter((it) => {
+          if (!it.name) return false;
+          if (_isDirtyValue(it.name)) return false;
+          // name 不能是纯标点/JSON 片段/元指令
+          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name) || it.name.length < 1) return false;
+          return true;
+        });
       return truncateItemFields(items);
     }
     // 回退：旧式「物品名｜作用｜持有者｜关联剧情｜来历」文本
@@ -469,14 +577,17 @@
       const rules = Array.isArray(data.rules) ? data.rules
         .filter((r) => r && typeof r === 'object')
         .map((r) => ({ title: String(r.title || '').slice(0, 20).trim(), content: String(r.content || '').slice(0, 60).trim() }))
-        .filter((r) => r.title && r.content)
+        .filter((r) => {
+          if (!r.title || !r.content) return false;
+          if (_isDirtyValue(r.title) || _isDirtyValue(r.content)) return false;
+          return true;
+        })
         : [];
-      return {
-        name: String(data.name || '').slice(0, 30).trim(),
-        type: String(data.type || '').slice(0, 20).trim(),
-        desc: String(data.desc || '').slice(0, 80).trim(),
-        rules: rules.slice(0, 6),
-      };
+      // name/type/desc 卫生检查
+      const name = _isDirtyValue(data.name) ? '' : String(data.name || '').slice(0, 30).trim();
+      const type = _isDirtyValue(data.type) ? '' : String(data.type || '').slice(0, 20).trim();
+      const desc = _isDirtyValue(data.desc) ? '' : String(data.desc || '').slice(0, 80).trim();
+      return { name, type, desc, rules: rules.slice(0, 6) };
     }
     // 回退：旧式「■标题｜内容」文本
     const text = out.replace(/<<<\s*[A-Z_]+\s*>>>/g, '').trim();

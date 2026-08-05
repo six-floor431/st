@@ -122,29 +122,20 @@
       // 扩展自带提示词（均可编辑）。保留 {{变量}} 占位符，运行时被真实数据替换：
       //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系   {{plot}} 剧情线
       // 注：世界观走独立推断函数（inferWorldview），不通过模板占位符注入。
-      promptsVersion: 4,
+      promptsVersion: 5,
       // 提示词结构/内容版本。每次大改提示词 +1；低于此版本时自动覆盖用户已保存的旧提示词（保留其它设置）。
       prompts: {
         // ═══════════════════════════════════════════
-        // 统一输出格式约定（所有提示词必须遵守）：
-        //   每个任务的输出必须用专用符号包裹，便于代码精确解析：
-        //     <<<SUMMARY_START>>>  ...  <<<SUMMARY_END>>>
-        //     <<<RELATIONS_START>>> ... <<<RELATIONS_END>>>
-        //     <<<PLOT_START>>>       ...  <<<PLOT_END>>>
-        //     <<<WORLD_START>>>      ...  <<<WORLD_END>>>
-        //     <<<ITEMS_START>>>      ...  <<<ITEMS_END>>>
-        //   符号标记之外的内容一律视为残留指令/回显，会被自动清除。
+        // ⚠️ 绝对输出格式约定（v5 硬锁）：
+        //   每个任务**只允许输出纯 JSON**，不允许任何其他格式。
+        //   代码层用 parseJSON 强校验 + sanity check 双重过滤，
+        //   任何非 JSON / 含指令回显 / 字段值含元关键词的输出将被直接丢弃（返回空）。
         // ═══════════════════════════════════════════
-        //
-        // 核心原则（参考 memoir 的「事实锚定」思路，解决"提取到与角色不相干的句子"）：
-        //   只提取【已登场角色】直接相关、且对剧情/关系/设定/物品有实际作用的内容；
-        //   丢弃与角色无关的闲笔、环境描写、心理分析、抽象气氛标签。
-        //   严格只基于【对话原文】已发生的事实，禁止编造、禁止评价、禁止渲染。
-        summary: '\u628A\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u538B\u7F29\u6210\u4E00\u6BB5\u53D9\u4E8B\uFF0C\u53EA\u5199\u52A8\u4F5C\u548C\u4E8B\u4EF6\uFF0C\u5BF9\u8BDD\u6700\u591A\u7559\u4E00\u53E5\u5173\u952E\u53F0\u8BCD\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n{"text":"\uFF082-5\u4E2A\u81EA\u7136\u6BB5\u7684\u6563\u6587\u53D9\u4E8B\uFF0C\u7EAF\u52A8\u4F5C\u4E0E\u4E8B\u4EF6\uFF0C\u4E0D\u5206\u6790\u5FC3\u7406\u4E0D\u6E32\u67D3\u6C14\u6C1B\uFF09"}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        relations: '\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u4E24\u4E2A\u5DF2\u767B\u573A\u89D2\u8272\u4E4B\u95F4\u7684\u76F4\u63A5\u5173\u7CFB\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"from":"\u89D2\u8272A","to":"\u89D2\u8272B","label":"\u5173\u7CFB\u8BCD(2-6\u5B57)"}]\n\u65E0\u4E92\u52A8\u5219\u4E0D\u5199\u3002\u6700\u591A8\u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        plot: '\u4ECE\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\u3002\u5DF2\u6709\u5267\u60C5\u7EBF\u4EC5\u4F9B\u53C2\u8003\u3001\u4E0D\u8981\u91CD\u590D\u5B83\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4\u3002\u6700\u591A8\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"time":"\u5267\u60C5\u65F6\u95F4\u70B9(\u672A\u63D0\u53CA\u5199\u7A7A\u4E32)","title":"\u4E0D\u8D85\u8FC712\u5B57\u7684\u77ED\u6807\u9898","summary":"1-2\u53E5\u5BA2\u89C2\u4E8B\u4EF6\u63CF\u8FF0(\u4EBA\u7269+\u52A8\u4F5C+\u573A\u666F)"}]\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        worldview: '\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u7684\u901A\u7528\u89C4\u5219\uFF08\u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\uFF09\u30023-6\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n{"name":"\u4E16\u754C\u540D","type":"\u4E16\u754C\u7C7B\u578B","desc":"1-2\u53E5\u7B80\u8FF0","rules":[{"title":"\u8BBE\u5B9A\u6807\u9898","content":"\u8BBE\u5B9A\u5185\u5BB9(\u4E00\u53E5\u8BDD)"}]}\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        itemExtract: '\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\u3002\u6700\u591A8\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"name":"\u7269\u54C1\u540D(\u53EA\u5199\u540D\u5B57)","desc":"\u4F5C\u7528(\u4E00\u53E5\u8BDD\u4E0D\u8D85\u8FC720\u5B57)","owner":"\u5F53\u524D\u6301\u6709\u8005","related":"\u5173\u8054\u5267\u60C5\u6807\u9898(\u65E0\u5219\u7A7A\u4E32)","origin":"\u6765\u5386(\u7B80\u77ED)"}]\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}'
+        summary: '\u3010\u4EFB\u52A1\u3011\u628A\u6700\u8FD1\u5BF9\u8BDD\u538B\u7F29\u6210\u4E00\u6BB5\u53D9\u4E8B\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u53EA\u5199\u5DF2\u53D1\u751F\u7684\u52A8\u4F5C\u548C\u4E8B\u4EF6\uFF0C\u4E0D\u5206\u6790\u5FC3\u7406\u3001\u4E0D\u6E32\u67D3\u6C14\u6C1B\u3001\u4E0D\u5199\u5BF9\u8BDD\u5185\u5FC3\u72EC\u767D\n2. \u5BF9\u8BDD\u6700\u591A\u4FDD\u75591\u53E5\u5173\u952E\u53F0\u8BCD\n3. 2-5\u4E2A\u81EA\u7136\u6BB5\uFF0C\u6BCF\u6BB51-4\u53E5\u8BDD\n4. \u7981\u6B62\u51FA\u73B0"\u603B\u7ED3""\u68B3\u7406""\u6982\u62EC""\u8BB0\u5F55""\u65F6\u95F4\u7EBF""\u6CE8\u610F""\u8F93\u51FA\u5E94\u8BE5""\u6211\u4EEC\u9700\u8981"\u7B49\u5143\u8BCD\u6C47\n5. \u7981\u6B62\u590D\u8FF0\u6216\u56DE\u663E\u672C\u63D0\u793A\u8BCD\u7684\u4EFB\u4F55\u5185\u5BB9\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FA\u4E00\u4E2AJSON\u5BF9\u8C61\uFF0C\u683C\u5F0F\u5982\u4E0B\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n{"text":"\u4F60\u7684\u53D9\u4E8B\u6B63\u6587"}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        relations: '\u3010\u4EFB\u52A1\u3011\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u4E24\u4E2A\u5DF2\u767B\u573A\u89D2\u8272\u4E4B\u95F4\u7684\u76F4\u63A5\u5173\u7CFB\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u53EA\u63D0\u53D6\u6709\u660E\u786E\u4E92\u52A8\u4F9D\u636E\u7684\u5173\u7CFB\uFF0C\u7981\u6B62\u63A8\u6D4B\n2. label 2-6\u5B57\uFF0C\u5FC5\u987B\u662F\u5173\u7CFB\u8BCD\uFF08\u5982\u5E08\u5F92/\u604B\u4EBA/\u654C\u5BF9/\u4E3B\u4EC6\uFF09\n3. from/to \u5FC5\u987B\u662F\u5BF9\u8BDD\u4E2D\u51FA\u73B0\u7684\u89D2\u8272\u540D\u6216\u79F0\u547C\n4. \u65E0\u4E92\u52A8\u5219\u8F93\u51FA\u7A7A\u6570\u7EC4[]\n5. \u6700\u591A8\u6761\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u6570\u7EC4\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n[{"from":"\u89D2\u8272A","to":"\u89D2\u8272B","label":"\u5173\u7CFB\u8BCD"}]\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        plot: '\u3010\u4EFB\u52A1\u3011\u4ECE\u6700\u8FD1\u5BF9\u8BDD\u4E2D\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u5DF2\u6709\u5267\u60C5\u7EBF\u4EC5\u4F5C\u4E0A\u4E0B\u6587\u53C2\u8003\uFF0C\u4E25\u7981\u91CD\u590D\u65E7\u4E8B\u4EF6\u3001\u4E25\u7981\u56DE\u663E\u65E7\u7EBF\n2. \u6CA1\u6709\u65B0\u4E8B\u4EF6\u5FC5\u987B\u8F93\u51FA\u7A7A\u6570\u7EC4[]\uFF0C\u4E0D\u8981\u7F16\u9020\n3. title \u4E0D\u8D85\u8FC712\u5B57\u7684\u77ED\u6807\u9898\uFF08\u540D\u8BCD+\u52A8\u8BCD\uFF0C\u5982"\u4E39\u623F\u521D\u9047""\u7A81\u7834\u5883\u754C"\uFF09\n4. summary 1-2\u53E5\u5BA2\u89C2\u63CF\u8FF0\uFF08\u4EBA\u7269+\u52A8\u4F5C+\u7ED3\u679C\uFF09\uFF0C\u4E0D\u542B\u5FC3\u7406\u63CF\u5199\n5. time \u662F\u5267\u60C5\u5185\u65F6\u95F4\u70B9\uFF08\u5982"\u7B2C\u4E00\u5929""\u5348\u540E"\uFF09\uFF0C\u672A\u63D0\u53CA\u5219\u5199\u7A7A\u4E32""\n6. \u6700\u591A8\u6761\n7. \u7981\u6B62\u8F93\u51FA\u601D\u8003\u8FC7\u7A0B\u3001"\u8BA9\u6211\u4EEC\u6784\u9020"/"\u6309\u987A\u5E8F"/"\u65F6\u95F4\u70B9\u53EF\u4EE5\u662F"\u7B49\u5143\u8BED\u53E5\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u6570\u7EC4\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\u3001\u65E0\u65B0\u4E8B\u4EF6\u5219[]\uFF09\uFF1A\n[{"time":"\u65F6\u95F4\u70B9\u6216\u7A7A\u4E32","title":"\u77ED\u6807\u9898","summary":"\u5BA2\u89C2\u4E8B\u4EF6\u63CF\u8FF0"}]\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        worldview: '\u3010\u4EFB\u52A1\u3011\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u901A\u7528\u89C4\u5219\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\u540D\u79F0\n2. \u5199\u8BE5\u4E16\u754C\u7684\u901A\u7528\u8BBE\u5B9A\uFF08\u4FEE\u70BC\u4F53\u7CFB/\u793E\u4F1A\u89C4\u5219/\u81EA\u7136\u6CD5\u5219\u7B49\uFF09\n3. 3-6\u6761\u89C4\u5219\n4. title \u8BBE\u5B9A\u6807\u9898(\u226410\u5B57)\uFF0Ccontent \u4E00\u53E5\u8BDD\u8BF4\u660E(\u226440\u5B57)\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u5BF9\u8C61\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n{"name":"\u4E16\u754C\u540D","type":"\u4E16\u754C\u7C7B\u578B","desc":"1-2\u53E5\u7B80\u8FF0","rules":[{"title":"\u8BBE\u5B9A\u6807\u9898","content":"\u8BBE\u5B9A\u5185\u5BB9"}]}\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        itemExtract: '\u3010\u4EFB\u52A1\u3011\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. name \u53EA\u5199\u7269\u54C1\u540D\u5B57\uFF0C\u4E0D\u52A0\u4FEE\u9970\u8BED\n2. desc \u4E00\u53E5\u8BDD\u8BF4\u660E\u4F5C\u7528(\u226420\u5B57)\uFF0C\u4E0D\u80FD\u5305\u542B"desc""owner""origin"\u7B49\u5B57\u6BB5\u540D\n3. owner \u5F53\u524D\u6301\u6709\u8005\u59D3\u540D\uFF08\u672A\u77E5\u5219\u7A7A\u4E32""\uFF09\n4. related \u5173\u8054\u7684\u5267\u60C5\u6807\u9898\uFF08\u65E0\u5219\u7A7A\u4E32""\uFF09\n5. origin \u6765\u5386\u7B80\u77ED(\u226415\u5B57)\n6. \u6700\u591A8\u6761\n7. "\u672A\u586B\u5199\u4F5C\u7528""\uFF08\u672A\u586B\u5199\u4F5C\u7528\uFF09"\u7B49\u5360\u4F4D\u7B26\u4E00\u5F8B\u5199\u7A7A\u4E32""\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u6570\u7EC4\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n[{"name":"\u7269\u54C1\u540D","desc":"\u4E00\u53E5\u8BDD\u4F5C\u7528","owner":"\u6301\u6709\u8005\u6216\u7A7A\u4E32","related":"\u5173\u8054\u5267\u60C5\u6216\u7A7A\u4E32","origin":"\u6765\u5386\u7B80\u77ED"}]\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}'
       }
     };
     function load() {
@@ -1927,9 +1918,12 @@ ${recent}
     function taggedSummary(out) {
       const { ok, data } = parseJSON(out);
       if (ok && data && typeof data === "object" && data.text != null) {
-        return cleanSummaryText(String(data.text));
+        const text = cleanSummaryText(String(data.text));
+        if (text.length >= 10 && !_isDirtyValue(text)) return text;
       }
-      return cleanSummaryText(extractTagged(out, "SUMMARY", "SUMMARY"));
+      const fallback = cleanSummaryText(extractTagged(out, "SUMMARY", "SUMMARY"));
+      if (fallback.length >= 10 && !_isDirtyValue(fallback)) return fallback;
+      return "";
     }
     function taggedRelations(out) {
       return extractTagged(out, "RELATIONS", "RELATIONS");
@@ -1953,31 +1947,66 @@ ${recent}
       s = end >= start ? s.slice(start, end + 1) : s.slice(start);
       try {
         const data = JSON.parse(s);
-        return { ok: true, data };
+        return _sanityCheck(data) ? { ok: true, data } : { ok: false, data: null };
       } catch (e) {
         const fixes = [
           s + '"',
-          // 补字符串闭合引号
           s + '"}',
-          // 补 引号+对象闭合
           s + "]",
-          // 补数组闭合
           s + "}]",
-          // 补对象+数组闭合
           s.replace(/,\s*$/, "") + "}",
-          // 去尾逗号再补 }
           s.replace(/,\s*$/, "") + '"}',
           s + "}"
-          // 补对象闭合
         ];
         for (const f of fixes) {
           try {
-            return { ok: true, data: JSON.parse(f) };
+            const d = JSON.parse(f);
+            if (_sanityCheck(d)) return { ok: true, data: d };
           } catch (e2) {
           }
         }
         return { ok: false, data: null };
       }
+    }
+    function _sanityCheck(data) {
+      if (data == null) return false;
+      if (typeof data === "string") {
+        return data.length > 0 && data.length <= 800;
+      }
+      if (typeof data !== "object") return false;
+      if (Array.isArray(data)) {
+        if (data.length === 0) return true;
+        return data.some((item) => item && typeof item === "object" && Object.keys(item).length > 0 && !_isJunkObject(item));
+      }
+      return Object.keys(data).length > 0 && !_isJunkObject(data);
+    }
+    function _isJunkObject(obj) {
+      if (!obj || typeof obj !== "object") return true;
+      const vals = Object.values(obj).map((v) => String(v == null ? "" : v));
+      if (vals.every((v) => v.trim() === "")) return true;
+      const junkPat = /^\s*\{["']?\w+["']?\s*:\s*["']?\s*["']?\}/;
+      const numberedJsonPat = /^\d+\s*[\.\、]\s*\{/;
+      const metaPat = /只输出|不要任何|JSON|markdown|代码块|格式如下|输出格式|系统要求|请严格|注意[:：]|我们需要|让我们构造|时间点.*可以是|按顺序|分析物品|关联剧情标题|我们分析/;
+      for (const v of vals) {
+        if (junkPat.test(v.trim())) return true;
+        if (numberedJsonPat.test(v.trim())) return true;
+        if (metaPat.test(v)) return true;
+        if (v.length > 800) return true;
+      }
+      return false;
+    }
+    function _isDirtyValue(v) {
+      const s = String(v == null ? "" : v);
+      if (!s) return false;
+      if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s]/i.test(s.trim())) return true;
+      if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s.trim())) return true;
+      if (/只输出|不要任何|markdown 代码块|JSON 格式|输出应该|我们需要压缩|注意：输出/.test(s) && s.length > 8) return true;
+      if (/^[\(（](未填写|无|未知|空)[^)）]*[\)）]$/.test(s.trim())) return true;
+      if (/^(未填写作用|（未填写作用）)$/.test(s.trim())) return true;
+      if (/^\s*\{".*"\s*\}/.test(s.trim())) return true;
+      if (/^(让我们构造|按顺序|时间点.*可以是|分析物品|关联剧情标题|我们分析|让我们)/.test(s.trim())) return true;
+      if (/^\d+\s*[\.\、]\s*\{/.test(s.trim())) return true;
+      return false;
     }
     function getRecentMessages(n) {
       try {
@@ -2114,7 +2143,11 @@ ${recent}
           from: String(r.from || "").trim(),
           to: String(r.to || "").trim(),
           label: String(r.label || "").trim()
-        })).filter((r) => r.from && r.to && r.label && r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8);
+        })).filter((r) => {
+          if (!r.from || !r.to || !r.label) return false;
+          if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
+          return r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8;
+        });
       }
       const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
       return out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -2135,7 +2168,19 @@ ${recent}
           time: String(p.time || "").slice(0, 20).trim(),
           title: String(p.title || "").slice(0, 12).trim(),
           summary: String(p.summary || "").slice(0, 80).trim()
-        })).filter((p) => p.title);
+        })).filter((p) => {
+          if (!p.title) return false;
+          if (_isDirtyValue(p.title)) return false;
+          if (_isDirtyValue(p.summary)) {
+            p.summary = "";
+          }
+          if (_isDirtyValue(p.time)) {
+            p.time = "";
+          }
+          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
+          if (p.title.length < 2) return false;
+          return true;
+        });
       }
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
       const result = [];
@@ -2154,6 +2199,9 @@ ${recent}
           title = parts[0];
         }
         if (!title) continue;
+        if (_isDirtyValue(title)) continue;
+        if (_isDirtyValue(summary)) continue;
+        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(title) || title.length < 2) continue;
         result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
       }
       return result;
@@ -2180,10 +2228,19 @@ ${recent}
             origin: String(it.origin || "").trim(),
             relatedPlotText: relText
           };
+          if (_isDirtyValue(obj.desc)) obj.desc = "";
+          if (_isDirtyValue(obj.owner)) obj.owner = "";
+          if (_isDirtyValue(obj.origin)) obj.origin = "";
+          if (_isDirtyValue(obj.relatedPlotText)) obj.relatedPlotText = "";
           const relIds = matchPlotIds(relText);
           if (relIds.length) obj.relatedPlots = relIds;
           return obj;
-        }).filter((it) => it.name);
+        }).filter((it) => {
+          if (!it.name) return false;
+          if (_isDirtyValue(it.name)) return false;
+          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name) || it.name.length < 1) return false;
+          return true;
+        });
         return truncateItemFields(items);
       }
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
@@ -2223,13 +2280,15 @@ ${recent}
     function parseWorld(out) {
       const { ok, data } = parseJSON(out);
       if (ok && data && typeof data === "object") {
-        const rules2 = Array.isArray(data.rules) ? data.rules.filter((r) => r && typeof r === "object").map((r) => ({ title: String(r.title || "").slice(0, 20).trim(), content: String(r.content || "").slice(0, 60).trim() })).filter((r) => r.title && r.content) : [];
-        return {
-          name: String(data.name || "").slice(0, 30).trim(),
-          type: String(data.type || "").slice(0, 20).trim(),
-          desc: String(data.desc || "").slice(0, 80).trim(),
-          rules: rules2.slice(0, 6)
-        };
+        const rules2 = Array.isArray(data.rules) ? data.rules.filter((r) => r && typeof r === "object").map((r) => ({ title: String(r.title || "").slice(0, 20).trim(), content: String(r.content || "").slice(0, 60).trim() })).filter((r) => {
+          if (!r.title || !r.content) return false;
+          if (_isDirtyValue(r.title) || _isDirtyValue(r.content)) return false;
+          return true;
+        }) : [];
+        const name = _isDirtyValue(data.name) ? "" : String(data.name || "").slice(0, 30).trim();
+        const type = _isDirtyValue(data.type) ? "" : String(data.type || "").slice(0, 20).trim();
+        const desc = _isDirtyValue(data.desc) ? "" : String(data.desc || "").slice(0, 80).trim();
+        return { name, type, desc, rules: rules2.slice(0, 6) };
       }
       const text = out.replace(/<<<\s*[A-Z_]+\s*>>>/g, "").trim();
       const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
