@@ -1274,9 +1274,10 @@
     const resetBtn = body.querySelector('#pp-reset');
     if (resetBtn) resetBtn.onclick = () => {
       const defs = (WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.prompts) || {};
-      promptEditors.forEach((p) => {
-        const ta = body.querySelector('#pprompt-' + p.key);
-        if (ta && defs[p.key] != null) ta.value = defs[p.key];
+      const keys = ['summary', 'relations', 'plot', 'worldview', 'itemExtract'];
+      keys.forEach((key) => {
+        const ta = body.querySelector('#pprompt-' + key);
+        if (ta && defs[key] != null) ta.value = defs[key];
       });
       // 同步进设置对象并立即持久化（绕过「仅保存当前二级标签页」的限制，直接全量写回）
       s.prompts = Object.assign({}, defs);

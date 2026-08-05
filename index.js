@@ -3122,64 +3122,7 @@ ${p.summary || ""}`.trim() });
       </div>`;
         const mountRoot = document.documentElement || document.body;
         mountRoot.appendChild(mask);
-        const healModal = () => {
-          try {
-            const box = mask.querySelector(".wm-modal");
-            if (!box) return;
-            const vh = Math.max(
-              window.innerHeight || 0,
-              document.documentElement && document.documentElement.clientHeight || 0
-            ) || 600;
-            const vw = Math.max(
-              window.innerWidth || 0,
-              document.documentElement && document.documentElement.clientWidth || 0
-            ) || 360;
-            const mr = mask.getBoundingClientRect();
-            if (mr.height < 80 || mr.width < 80) {
-              mask.style.setProperty("position", "fixed", "important");
-              mask.style.setProperty("left", "0px", "important");
-              mask.style.setProperty("top", "0px", "important");
-              mask.style.setProperty("width", vw + "px", "important");
-              mask.style.setProperty("height", vh + "px", "important");
-              mask.style.setProperty("display", "flex", "important");
-            }
-            const br = box.getBoundingClientRect();
-            if (br.height < 60) {
-              const isMobile = vw <= 768;
-              box.style.setProperty("min-height", "160px", "important");
-              box.style.setProperty("height", "auto", "important");
-              box.style.setProperty("max-height", Math.round(vh * 0.88) + "px", "important");
-              box.style.setProperty("display", "flex", "important");
-              box.style.setProperty("flex-direction", "column", "important");
-              box.style.setProperty("overflow", "hidden", "important");
-              if (isMobile) {
-                box.style.setProperty("width", "100%", "important");
-                box.style.setProperty("max-width", "100%", "important");
-              }
-              const bodyEl = box.querySelector(".wm-modal-body");
-              if (bodyEl) {
-                bodyEl.style.setProperty("flex", "1 1 auto", "important");
-                bodyEl.style.setProperty("min-height", "80px", "important");
-                bodyEl.style.setProperty("overflow-y", "auto", "important");
-              }
-              const headEl = box.querySelector(".wm-modal-head");
-              if (headEl) headEl.style.setProperty("min-height", "44px", "important");
-              const footEl = box.querySelector(".wm-modal-foot");
-              if (footEl) footEl.style.setProperty("min-height", "48px", "important");
-            }
-          } catch (e) {
-          }
-        };
-        healModal();
-        if (typeof requestAnimationFrame === "function") requestAnimationFrame(healModal);
-        setTimeout(healModal, 60);
-        setTimeout(healModal, 300);
-        const onResize = () => healModal();
-        window.addEventListener("resize", onResize);
-        window.addEventListener("orientationchange", onResize);
         const close = (val) => {
-          window.removeEventListener("resize", onResize);
-          window.removeEventListener("orientationchange", onResize);
           if (mask.parentNode) mask.parentNode.removeChild(mask);
           resolve(val);
         };
@@ -3540,7 +3483,7 @@ ${p.summary || ""}`.trim() });
         presetNames = [];
       }
       const _D = WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.prompts || {};
-      const promptEditors2 = [
+      const promptEditors = [
         { key: "summary", title: "\u603B\u7ED3\u63D0\u793A\u8BCD", holder: "\u652F\u6301 {{recent}}", def: _D.summary || "" },
         { key: "relations", title: "\u5173\u7CFB\u63D0\u793A\u8BCD", holder: "\u652F\u6301 {{recent}}", def: _D.relations || "" },
         { key: "plot", title: "\u5267\u60C5\u63D0\u793A\u8BCD", holder: "\u652F\u6301 {{historyPlot}} {{relations}} {{recent}}", def: _D.plot || "" },
@@ -3549,13 +3492,13 @@ ${p.summary || ""}`.trim() });
       ];
       const promptHtml = `
       <div class="wm-subtabs lv3" data-lv3="prompts">
-        ${promptEditors2.map((p, i) => `<button data-ptab="${p.key}" class="${i === 0 ? "active" : ""}">${p.title.replace("\u63D0\u793A\u8BCD", "")}</button>`).join("")}
+        ${promptEditors.map((p, i) => `<button data-ptab="${p.key}" class="${i === 0 ? "active" : ""}">${p.title.replace("\u63D0\u793A\u8BCD", "")}</button>`).join("")}
       </div>
       <div class="wm-actions" style="margin:6px 0">
         <button id="pp-reset" class="wm-btn" title="\u628A\u4E0B\u9762 5 \u4E2A\u63D0\u793A\u8BCD\u5168\u90E8\u5F3A\u5236\u6062\u590D\u4E3A\u6269\u5C55\u5185\u7F6E\u7684\u6700\u65B0\u7248\uFF08\u65E0\u89C6\u4F60\u4E4B\u524D\u624B\u52A8\u6539\u8FC7/\u4FDD\u5B58\u8FC7\u7684\u65E7\u7248\uFF09">\u21BA \u4E00\u952E\u6062\u590D\u9ED8\u8BA4\u63D0\u793A\u8BCD\uFF08\u5F3A\u5236\u8986\u76D6\u65E7\u7248\uFF09</button>
       </div>
       <div class="wm-ptabs">
-        ${promptEditors2.map((p, i) => `
+        ${promptEditors.map((p, i) => `
           <div class="wm-ptab-pane" data-ptab-pane="${p.key}" style="${i === 0 ? "" : "display:none"}">
             <div class="wm-hint">\u5360\u4F4D\u7B26\uFF1A${p.holder}\uFF08\u8FD0\u884C\u65F6\u81EA\u52A8\u66FF\u6362\u4E3A\u771F\u5B9E\u6570\u636E\uFF09</div>
             <textarea id="pprompt-${p.key}" rows="${p.key === "summary" ? 4 : 3}" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(prompts[p.key] != null ? prompts[p.key] : p.def)}</textarea>
@@ -3897,9 +3840,10 @@ ${p.summary || ""}`.trim() });
       const resetBtn = body.querySelector("#pp-reset");
       if (resetBtn) resetBtn.onclick = () => {
         const defs = WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.prompts || {};
-        promptEditors.forEach((p) => {
-          const ta = body.querySelector("#pprompt-" + p.key);
-          if (ta && defs[p.key] != null) ta.value = defs[p.key];
+        const keys = ["summary", "relations", "plot", "worldview", "itemExtract"];
+        keys.forEach((key) => {
+          const ta = body.querySelector("#pprompt-" + key);
+          if (ta && defs[key] != null) ta.value = defs[key];
         });
         s.prompts = Object.assign({}, defs);
         s.promptsVersion = WM.Settings && WM.Settings.DEFAULTS && WM.Settings.DEFAULTS.promptsVersion || s.promptsVersion;
@@ -4169,19 +4113,7 @@ ${p.summary || ""}`.trim() });
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = {
-      init,
-      renderTab,
-      renderCfg,
-      renderWorld,
-      renderAuto,
-      renderMem,
-      renderRel,
-      renderItem,
-      renderPlot,
-      // 导出弹窗以便自动化回归测试（手机端弹窗塌陷问题）
-      openModal
-    };
+    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
   })();
 
   // src/index.js
