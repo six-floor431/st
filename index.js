@@ -2808,11 +2808,350 @@ ${p.summary || ""}`.trim() });
     WM.FloorHider = { applySummaryPointerHiding, hideUntil };
   })();
 
+  // src/ui/rel-graph.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    const SVGNS = "http://www.w3.org/2000/svg";
+    function ensureStyle() {
+      if (document.getElementById("wm-relgraph-style")) return;
+      const st = document.createElement("style");
+      st.id = "wm-relgraph-style";
+      st.textContent = `
+.wm-graph-wrap{position:relative;width:100%;height:380px;background:var(--wm-paper,#f6f1ea);border:1px solid var(--wm-line,#d8cdbf);border-radius:8px;overflow:hidden;cursor:grab;touch-action:none}
+.wm-graph-wrap.panning{cursor:grabbing}
+.wm-graph{width:100%;height:100%;display:block;touch-action:none;user-select:none}
+.wm-graph .wm-edge{stroke:var(--wm-jade,#6b8e7f);transition:opacity .2s}
+.wm-graph .wm-edge.dim{opacity:.1}
+.wm-graph .wm-edge.hi{stroke:var(--wm-rose,#b56a6a);opacity:.95}
+.wm-graph .wm-node{stroke:var(--wm-paper,#f6f1ea);stroke-width:2;cursor:grab;transition:r .12s}
+.wm-graph .wm-node-g.dragging .wm-node{cursor:grabbing}
+.wm-graph .wm-node.dim{opacity:.25}
+.wm-graph .wm-node.hi{stroke:var(--wm-rose,#b56a6a);stroke-width:3}
+.wm-graph text{fill:var(--wm-ink-soft,#5a4a3a);user-select:none;pointer-events:none;font-family:inherit}
+.wm-graph text.hi{fill:var(--wm-rose,#b56a6a);font-weight:bold}
+.wm-graph text.dim{opacity:.3}
+.wm-graph-ctrls{position:absolute;right:8px;bottom:8px;display:flex;flex-direction:column;gap:4px;opacity:.85}
+.wm-graph-ctrls button{width:30px;height:30px;border-radius:6px;border:1px solid var(--wm-line,#d8cdbf);background:var(--wm-paper,#f6f1ea);color:var(--wm-ink,#3a2a1a);cursor:pointer;font-size:16px;line-height:1;padding:0}
+.wm-graph-ctrls button:hover{background:var(--wm-jade-soft,#d8e4dc)}
+.wm-rel-names{display:flex;flex-wrap:wrap;gap:6px;padding:10px 2px 4px}
+.wm-name-chip{padding:3px 11px;border-radius:13px;background:var(--wm-jade-soft,#d8e4dc);color:var(--wm-ink,#3a2a1a);font-size:12px;cursor:pointer;border:1px solid transparent;transition:all .15s;user-select:none}
+.wm-name-chip:hover{border-color:var(--wm-jade,#6b8e7f)}
+.wm-name-chip.active{background:var(--wm-rose,#b56a6a);color:#fff;border-color:var(--wm-rose,#b56a6a)}
+.wm-rel-detail{margin-top:4px}
+.wm-rel-row{padding:5px 10px;border-left:3px solid var(--wm-jade,#6b8e7f);margin:4px 0;background:var(--wm-jade-soft,#eef3ef);border-radius:0 5px 5px 0;font-size:13px}
+.wm-rel-row .wm-arrow{color:var(--wm-jade,#6b8e7f);margin:0 6px;font-weight:bold}
+.wm-rel-row .wm-lbl{color:var(--wm-rose,#b56a6a);font-weight:600}`;
+      document.head.appendChild(st);
+    }
+    function create(svg, rels, opts) {
+      opts = opts || {};
+      ensureStyle();
+      if (!svg) return noopCtrl();
+      const nameSet = /* @__PURE__ */ new Set();
+      (rels || []).forEach((r) => {
+        if (r && r.from) nameSet.add(r.from);
+        if (r && r.to) nameSet.add(r.to);
+      });
+      const W = 400, H = 380, cx = W / 2, cy = H / 2;
+      const names = Array.from(nameSet);
+      if (!names.length) {
+        svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+        svg.innerHTML = '<text x="200" y="190" text-anchor="middle" fill="#9b8579" font-size="13">\u6682\u65E0\u5173\u7CFB\u6570\u636E</text>';
+        return noopCtrl();
+      }
+      const nodes = names.map((id, i) => {
+        const a = i / names.length * Math.PI * 2;
+        return { id, x: cx + Math.cos(a) * 70, y: cy + Math.sin(a) * 70, vx: 0, vy: 0, deg: 0 };
+      });
+      const nodeMap = {};
+      nodes.forEach((n) => {
+        nodeMap[n.id] = n;
+      });
+      const edges = (rels || []).filter((r) => r && nodeMap[r.from] && nodeMap[r.to] && r.from !== r.to).map((r) => ({ a: nodeMap[r.from], b: nodeMap[r.to], label: r.label || "", weight: Number.isFinite(r.weight) ? r.weight : 2 }));
+      edges.forEach((e) => {
+        e.a.deg++;
+        e.b.deg++;
+      });
+      let center = nodeMap[opts.userName || ""];
+      if (!center) {
+        center = nodes[0];
+        nodes.forEach((n) => {
+          if (n.deg > center.deg) center = n;
+        });
+      }
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      svg.classList.add("wm-graph");
+      svg.innerHTML = '<g class="wm-viewport"><g class="wm-edges"></g><g class="wm-nodes"></g></g>';
+      const edgesG = svg.querySelector(".wm-edges");
+      const nodesG = svg.querySelector(".wm-nodes");
+      edges.forEach((e) => {
+        const line = document.createElementNS(SVGNS, "line");
+        line.setAttribute("class", "wm-edge");
+        line.setAttribute("stroke-width", Math.min(e.weight, 6));
+        line.setAttribute("stroke-opacity", e.a === center || e.b === center ? 0.8 : 0.4);
+        edgesG.appendChild(line);
+        e.el = line;
+      });
+      nodes.forEach((n) => {
+        const g = document.createElementNS(SVGNS, "g");
+        g.setAttribute("class", "wm-node-g");
+        g.setAttribute("data-name", n.id);
+        const c = document.createElementNS(SVGNS, "circle");
+        c.setAttribute("class", "wm-node");
+        c.setAttribute("r", n === center ? 9 : 6);
+        c.setAttribute("fill", n === center ? "var(--wm-rose,#b56a6a)" : "var(--wm-jade,#6b8e7f)");
+        const t = document.createElementNS(SVGNS, "text");
+        t.setAttribute("class", "wm-node-label");
+        t.setAttribute("font-size", n === center ? 11 : 10);
+        t.textContent = n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id;
+        g.appendChild(c);
+        g.appendChild(t);
+        nodesG.appendChild(g);
+        n.g = g;
+        n.c = c;
+        n.t = t;
+      });
+      const K_REP = 2600, K_SPRING = 0.045, REST = 92, K_CENTER = 0.018, DAMPING = 0.84;
+      let dragging = null;
+      let panning = null;
+      let downPos = null;
+      let selected = null;
+      let rafId = null, running = true, stableFrames = 0;
+      function step() {
+        for (let i = 0; i < nodes.length; i++) {
+          const a = nodes[i];
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            let dx = a.x - b.x, dy = a.y - b.y;
+            let d2 = dx * dx + dy * dy;
+            if (d2 < 0.01) {
+              dx = Math.random() - 0.5;
+              dy = Math.random() - 0.5;
+              d2 = dx * dx + dy * dy + 0.1;
+            }
+            const d = Math.sqrt(d2);
+            const f = K_REP / d2;
+            const fx = f * dx / d, fy = f * dy / d;
+            a.vx += fx;
+            a.vy += fy;
+            b.vx -= fx;
+            b.vy -= fy;
+          }
+        }
+        edges.forEach((e) => {
+          const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+          const f = K_SPRING * (d - REST);
+          const fx = f * dx / d, fy = f * dy / d;
+          e.a.vx += fx;
+          e.a.vy += fy;
+          e.b.vx -= fx;
+          e.b.vy -= fy;
+        });
+        let totalV = 0;
+        nodes.forEach((n) => {
+          if (n === dragging) {
+            n.vx = 0;
+            n.vy = 0;
+            return;
+          }
+          n.vx += (cx - n.x) * K_CENTER;
+          n.vy += (cy - n.y) * K_CENTER;
+          n.vx *= DAMPING;
+          n.vy *= DAMPING;
+          n.x += n.vx;
+          n.y += n.vy;
+          n.x = Math.max(24, Math.min(W - 24, n.x));
+          n.y = Math.max(24, Math.min(H - 24, n.y));
+          totalV += Math.abs(n.vx) + Math.abs(n.vy);
+        });
+        render();
+        if (totalV < 0.4) {
+          stableFrames++;
+          if (stableFrames > 40) {
+            running = false;
+            rafId = null;
+            return;
+          }
+        } else stableFrames = 0;
+        rafId = requestAnimationFrame(step);
+      }
+      function render() {
+        edges.forEach((e) => {
+          e.el.setAttribute("x1", e.a.x.toFixed(1));
+          e.el.setAttribute("y1", e.a.y.toFixed(1));
+          e.el.setAttribute("x2", e.b.x.toFixed(1));
+          e.el.setAttribute("y2", e.b.y.toFixed(1));
+        });
+        nodes.forEach((n) => {
+          n.c.setAttribute("cx", n.x.toFixed(1));
+          n.c.setAttribute("cy", n.y.toFixed(1));
+          n.t.setAttribute("x", (n.x + (n === center ? 11 : 8)).toFixed(1));
+          n.t.setAttribute("y", (n.y + 4).toFixed(1));
+        });
+      }
+      function wake() {
+        if (!running) {
+          running = true;
+          stableFrames = 0;
+          if (!rafId) rafId = requestAnimationFrame(step);
+        }
+      }
+      let view = { x: 0, y: 0, w: W, h: H };
+      function applyView() {
+        svg.setAttribute("viewBox", `${view.x.toFixed(1)} ${view.y.toFixed(1)} ${view.w.toFixed(1)} ${view.h.toFixed(1)}`);
+      }
+      function screenToWorld(clientX, clientY) {
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return { x: clientX, y: clientY };
+        const p = pt.matrixTransform(ctm.inverse());
+        return { x: p.x, y: p.y };
+      }
+      svg.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        const ng = ev.target.closest(".wm-node-g");
+        const world = screenToWorld(ev.clientX, ev.clientY);
+        downPos = { x: ev.clientX, y: ev.clientY, moved: false };
+        try {
+          svg.setPointerCapture(ev.pointerId);
+        } catch (e) {
+        }
+        if (ng) {
+          dragging = nodeMap[ng.getAttribute("data-name")];
+          ng.classList.add("dragging");
+          dragging.x = world.x;
+          dragging.y = world.y;
+          wake();
+        } else {
+          panning = { sx: ev.clientX, sy: ev.clientY, vx: view.x, vy: view.y };
+          svg.parentElement.classList.add("panning");
+        }
+      });
+      svg.addEventListener("pointermove", (ev) => {
+        if (downPos && (Math.abs(ev.clientX - downPos.x) > 3 || Math.abs(ev.clientY - downPos.y) > 3)) downPos.moved = true;
+        if (dragging) {
+          const w = screenToWorld(ev.clientX, ev.clientY);
+          dragging.x = w.x;
+          dragging.y = w.y;
+          dragging.vx = 0;
+          dragging.vy = 0;
+          wake();
+        } else if (panning) {
+          const rect = svg.getBoundingClientRect();
+          const s = view.w / rect.width;
+          view.x = panning.vx - (ev.clientX - panning.sx) * s;
+          view.y = panning.vy - (ev.clientY - panning.sy) * s;
+          applyView();
+        }
+      });
+      function endPointer(ev) {
+        if (dragging) {
+          const g = nodesG.querySelector(".wm-node-g.dragging");
+          if (g) g.classList.remove("dragging");
+          dragging = null;
+          nodes.forEach((n) => {
+            n.vx += (Math.random() - 0.5) * 0.5;
+            n.vy += (Math.random() - 0.5) * 0.5;
+          });
+          wake();
+        }
+        if (panning) {
+          panning = null;
+          svg.parentElement.classList.remove("panning");
+        }
+        if (downPos && !downPos.moved) {
+          const ng = ev && ev.target && ev.target.closest && ev.target.closest(".wm-node-g");
+          if (ng) select(ng.getAttribute("data-name"));
+        }
+        downPos = null;
+        if (ev) {
+          try {
+            svg.releasePointerCapture(ev.pointerId);
+          } catch (e) {
+          }
+        }
+      }
+      svg.addEventListener("pointerup", endPointer);
+      svg.addEventListener("pointercancel", (ev) => {
+        dragging = null;
+        panning = null;
+        downPos = null;
+        svg.parentElement.classList.remove("panning");
+      });
+      svg.addEventListener("wheel", (ev) => {
+        ev.preventDefault();
+        const delta = ev.deltaY > 0 ? 1.14 : 0.88;
+        zoomAt(ev.clientX, ev.clientY, delta);
+      }, { passive: false });
+      function zoomAt(clientX, clientY, factor) {
+        const w = screenToWorld(clientX, clientY);
+        const newW = Math.max(90, Math.min(1600, view.w * factor));
+        const newH = newW * (H / W);
+        view.x = w.x - (w.x - view.x) * (newW / view.w);
+        view.y = w.y - (w.y - view.y) * (newH / view.h);
+        view.w = newW;
+        view.h = newH;
+        applyView();
+      }
+      function select(name) {
+        selected = name;
+        nodes.forEach((n) => {
+          const related = name && (n.id === name || edges.some((e) => e.a.id === name && e.b.id === n.id || e.b.id === name && e.a.id === n.id));
+          n.c.classList.toggle("hi", n.id === name);
+          n.c.classList.toggle("dim", !!name && !related);
+          n.t.classList.toggle("hi", n.id === name);
+          n.t.classList.toggle("dim", !!name && !related);
+        });
+        edges.forEach((e) => {
+          const related = name && (e.a.id === name || e.b.id === name);
+          e.el.classList.toggle("hi", related);
+          e.el.classList.toggle("dim", !!name && !related);
+        });
+        if (opts.onSelect) opts.onSelect(name);
+      }
+      function focus(name) {
+        if (!nodeMap[name]) return;
+        select(name);
+        view.x = nodeMap[name].x - view.w / 2;
+        view.y = nodeMap[name].y - view.h / 2;
+        applyView();
+      }
+      function zoom(factor) {
+        zoomAt(svg.getBoundingClientRect().left + svg.clientWidth / 2, svg.getBoundingClientRect().top + svg.clientHeight / 2, factor);
+      }
+      function resetView() {
+        view = { x: 0, y: 0, w: W, h: H };
+        applyView();
+      }
+      function destroy() {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = null;
+        running = false;
+      }
+      rafId = requestAnimationFrame(step);
+      return { destroy, focus, select, zoom, resetView };
+    }
+    function noopCtrl() {
+      return { destroy() {
+      }, focus() {
+      }, select() {
+      }, zoom() {
+      }, resetView() {
+      } };
+    }
+    WM.RelGraph = { create };
+  })();
+
   // src/ui/launcher.js
   (function() {
     "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
     let panelEl = null, btnEl = null, graphSvg = null, graphTimer = null;
+    let currentRelGraph = null;
     function findInputContainer() {
       const sel = [
         "#send_form .input-options",
@@ -2894,6 +3233,10 @@ ${p.summary || ""}`.trim() });
     }
     let currentTab = "auto";
     function closePanel() {
+      if (currentRelGraph) {
+        currentRelGraph.destroy();
+        currentRelGraph = null;
+      }
       if (panelEl) panelEl.classList.remove("open", "wm-maximized");
       const ov = document.getElementById("warmmemo-overlay");
       if (ov) ov.classList.remove("open");
@@ -2937,6 +3280,10 @@ ${p.summary || ""}`.trim() });
     }
     function renderTab(tab) {
       currentTab = tab || "auto";
+      if (currentRelGraph) {
+        currentRelGraph.destroy();
+        currentRelGraph = null;
+      }
       const body = panelEl.querySelector(".wm-body");
       if (tab === "auto") return renderAuto(body);
       if (tab === "mem") return renderMem(body);
@@ -3184,13 +3531,73 @@ ${p.summary || ""}`.trim() });
       };
     }
     function renderRel(body) {
-      body.innerHTML = `<div class="wm-card"><div class="wm-h">\u5173\u7CFB\u56FE\uFF08\u52A8\u6001\u529B\u5BFC\u5411\uFF09</div>
-      <div class="wm-hint">\u7EBF\u8D8A\u7C97=\u5173\u7CFB\u8D8A\u5F3A\uFF0C\u53EF\u62D6\u62FD\u8282\u70B9</div>
-      <svg id="wm-graph" class="wm-graph" viewBox="0 0 320 320"></svg>
-      <div class="wm-list" id="rel-list"></div></div>`;
-      drawGraph(body.querySelector("#wm-graph"));
+      if (currentRelGraph) {
+        currentRelGraph.destroy();
+        currentRelGraph = null;
+      }
       const rels = WM.MemoryStore.getRelations();
-      body.querySelector("#rel-list").innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${"\u25CF".repeat(Math.max(0, r.weight || 1))}</span> ${escapeHtml(r.label)} \u2192 ${escapeHtml(r.to)}</div>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>';
+      const deg = {}, set = /* @__PURE__ */ new Set(), names = [];
+      rels.forEach((r) => {
+        if (r.from && !set.has(r.from)) {
+          set.add(r.from);
+          names.push(r.from);
+        }
+        if (r.to && !set.has(r.to)) {
+          set.add(r.to);
+          names.push(r.to);
+        }
+        if (r.from) deg[r.from] = (deg[r.from] || 0) + 1;
+        if (r.to) deg[r.to] = (deg[r.to] || 0) + 1;
+      });
+      names.sort((a, b) => (deg[b] || 0) - (deg[a] || 0));
+      body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">\u5173\u7CFB\u56FE<span class="wm-h-sub">\uFF08\u52A8\u6001\u529B\u5BFC\u5411\uFF09</span></div>
+      <div class="wm-hint">\u6EDA\u8F6E\u7F29\u653E \xB7 \u62D6\u7A7A\u767D\u5E73\u79FB \xB7 \u62D6\u8282\u70B9\u91CD\u6392 \xB7 \u70B9\u8282\u70B9\u6216\u4E0B\u65B9\u540D\u5B57\u67E5\u770B\u8BE5\u89D2\u8272\u5173\u7CFB</div>
+      <div class="wm-graph-wrap">
+        <svg id="wm-graph"></svg>
+        <div class="wm-graph-ctrls">
+          <button data-act="in" title="\u653E\u5927">+</button>
+          <button data-act="out" title="\u7F29\u5C0F">\u2212</button>
+          <button data-act="reset" title="\u91CD\u7F6E\u89C6\u56FE">\u27F2</button>
+        </div>
+      </div>
+      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>'}</div>
+      <div class="wm-rel-detail" id="rel-detail"></div>
+    </div>`;
+      const svg = body.querySelector("#wm-graph");
+      const detailEl = body.querySelector("#rel-detail");
+      const namesEl = body.querySelector("#rel-names");
+      function showDetail(name) {
+        namesEl.querySelectorAll(".wm-name-chip").forEach((c) => c.classList.toggle("active", c.dataset.name === name));
+        const all = WM.MemoryStore.getRelations();
+        if (!name) {
+          detailEl.innerHTML = all.length ? `<div class="wm-h">\u5168\u90E8\u5173\u7CFB\uFF08${all.length}\uFF09</div>` + all.map((r) => `<div class="wm-rel-row">${escapeHtml(r.from)} <span class="wm-arrow">\u2192</span><span class="wm-lbl">${escapeHtml(r.label || "")}</span><span class="wm-arrow">\u2192</span> ${escapeHtml(r.to)}</div>`).join("") : "";
+          return;
+        }
+        const mine = all.filter((r) => r.from === name || r.to === name);
+        detailEl.innerHTML = `<div class="wm-h">\u300C${escapeHtml(name)}\u300D\u7684\u5173\u7CFB\uFF08${mine.length}\uFF09</div>` + (mine.length ? mine.map((r) => {
+          const other = r.from === name ? r.to : r.from;
+          const dir = r.from === name ? "\u2192" : "\u2190";
+          return `<div class="wm-rel-row">${escapeHtml(name)} <span class="wm-arrow">${dir}</span><span class="wm-lbl">${escapeHtml(r.label || "")}</span><span class="wm-arrow">${dir}</span> ${escapeHtml(other)}</div>`;
+        }).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB</div>');
+      }
+      if (!names.length) return;
+      currentRelGraph = WM.RelGraph.create(svg, rels, { userName: getUserName(), onSelect: showDetail });
+      namesEl.querySelectorAll(".wm-name-chip").forEach((c) => {
+        c.onclick = () => {
+          currentRelGraph && currentRelGraph.focus(c.dataset.name);
+          showDetail(c.dataset.name);
+        };
+      });
+      body.querySelectorAll(".wm-graph-ctrls button").forEach((b) => {
+        b.onclick = () => {
+          if (!currentRelGraph) return;
+          if (b.dataset.act === "in") currentRelGraph.zoom(0.8);
+          else if (b.dataset.act === "out") currentRelGraph.zoom(1.25);
+          else currentRelGraph.resetView();
+        };
+      });
+      showDetail(null);
     }
     function getUserName() {
       try {
@@ -3209,123 +3616,6 @@ ${p.summary || ""}`.trim() });
       } catch (e) {
       }
       return "\u6211";
-    }
-    function drawGraph(svg) {
-      const rels = WM.MemoryStore.getRelations();
-      const names = /* @__PURE__ */ new Set();
-      rels.forEach((r) => {
-        if (r.from) names.add(r.from);
-        if (r.to) names.add(r.to);
-      });
-      const nodes = Array.from(names).map((id) => ({ id }));
-      if (!nodes.length) {
-        svg.innerHTML = '<text x="160" y="160" text-anchor="middle" fill="#9b8579">\u6682\u65E0\u5173\u7CFB</text>';
-        return;
-      }
-      const W = 320, H = 320, cx = W / 2, cy = H / 2;
-      const user = getUserName();
-      const degree = {};
-      rels.forEach((r) => {
-        degree[r.from] = (degree[r.from] || 0) + 1;
-        degree[r.to] = (degree[r.to] || 0) + 1;
-      });
-      let center = nodes.find((n) => n.id === user);
-      if (!center) {
-        let best = null, bestD = -1;
-        nodes.forEach((n) => {
-          if ((degree[n.id] || 0) > bestD) {
-            bestD = degree[n.id] || 0;
-            best = n;
-          }
-        });
-        center = best || nodes[0];
-      }
-      const adj = {};
-      rels.forEach((r) => {
-        (adj[r.from] = adj[r.from] || []).push(r.to);
-        (adj[r.to] = adj[r.to] || []).push(r.from);
-      });
-      const dist = { [center.id]: 0 };
-      const q = [center.id];
-      while (q.length) {
-        const cur = q.shift();
-        (adj[cur] || []).forEach((nb) => {
-          if (dist[nb] == null) {
-            dist[nb] = dist[cur] + 1;
-            q.push(nb);
-          }
-        });
-      }
-      nodes.forEach((n) => {
-        if (dist[n.id] == null) dist[n.id] = 99;
-      });
-      const pos = {};
-      pos[center.id] = { x: cx, y: cy };
-      const rings = {};
-      nodes.forEach((n) => {
-        if (n.id === center.id) return;
-        const d = Math.min(dist[n.id], 3);
-        (rings[d] = rings[d] || []).push(n);
-      });
-      const ringRadius = { 1: 95, 2: 140, 3: 150 };
-      Object.keys(rings).forEach((d) => {
-        const arr = rings[d];
-        const R = ringRadius[d] || 150;
-        arr.forEach((n, i) => {
-          const a = i / arr.length * Math.PI * 2 - Math.PI / 2;
-          pos[n.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
-        });
-      });
-      let s = "";
-      rels.forEach((r) => {
-        const a = pos[r.from], b = pos[r.to];
-        if (!a || !b) return;
-        const w = Number.isFinite(r.weight) ? r.weight : 2;
-        const isUserEdge = r.from === center.id || r.to === center.id;
-        s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${Math.min(w, 6)}" stroke-opacity="${isUserEdge ? 0.85 : 0.45}" class="wm-edge"/>`;
-      });
-      nodes.forEach((n) => {
-        const isCenter = n.id === center.id;
-        s += `<circle cx="${pos[n.id].x.toFixed(0)}" cy="${pos[n.id].y.toFixed(0)}" r="${isCenter ? 9 : 6}" fill="${isCenter ? "var(--wm-rose)" : "var(--wm-jade)"}" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-        const lbl = n.id.length > 6 ? n.id.slice(0, 6) + "\u2026" : n.id;
-        s += `<text x="${(pos[n.id].x + (isCenter ? 11 : 8)).toFixed(0)}" y="${(pos[n.id].y + 4).toFixed(0)}" font-size="${isCenter ? 10 : 9}" fill="var(--wm-ink-soft)" ${isCenter ? 'font-weight="bold"' : ""}>${escapeHtml(lbl)}</text>`;
-      });
-      svg.innerHTML = s;
-      svg.querySelectorAll(".wm-node").forEach((c) => {
-        c.addEventListener("click", () => {
-          const name = c.getAttribute("data-name");
-          const rels2 = WM.MemoryStore.getRelations().filter((r) => r.from === name || r.to === name);
-          const listEl = document.getElementById("rel-list");
-          if (!rels2.length) {
-            listEl.innerHTML = `<div class="wm-empty">\u300C${escapeHtml(name)}\u300D\u6682\u65E0\u5173\u7CFB</div>`;
-            return;
-          }
-          listEl.innerHTML = `<div class="wm-h">\u300C${escapeHtml(name)}\u300D\u7684\u5173\u7CFB\uFF08${rels2.length}\uFF09</div>` + rels2.map((r) => {
-            const other = r.from === name ? r.to : r.from;
-            const dir = r.from === name ? "\u2192" : "\u2190";
-            return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${"\u25CF".repeat(Math.max(0, r.weight || 1))}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
-          }).join("");
-        });
-      });
-      svg.querySelectorAll(".wm-node").forEach((c) => {
-        c.addEventListener("mousedown", (ev) => {
-          ev.preventDefault();
-          const move = (e) => {
-            const pt = svg.createSVGPoint();
-            pt.x = e.clientX;
-            pt.y = e.clientY;
-            const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-            c.setAttribute("cx", loc.x);
-            c.setAttribute("cy", loc.y);
-          };
-          const up = () => {
-            document.removeEventListener("mousemove", move);
-            document.removeEventListener("mouseup", up);
-          };
-          document.addEventListener("mousemove", move);
-          document.addEventListener("mouseup", up);
-        });
-      });
     }
     function openModal(opts) {
       return new Promise((resolve) => {

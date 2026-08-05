@@ -5,6 +5,7 @@
   const WM = window.WarmMemo || (window.WarmMemo = {});
 
   let panelEl = null, btnEl = null, graphSvg = null, graphTimer = null;
+  let currentRelGraph = null; // 力导向图实例（切 tab / 关面板时需 destroy，避免 rAF 泄漏）
 
   // 输入框旁的挂载点：优先输入框选项区（桌面/新版通用），逐级回退。
   function findInputContainer() {
@@ -96,6 +97,7 @@
 
   let currentTab = 'auto';
   function closePanel() {
+    if (currentRelGraph) { currentRelGraph.destroy(); currentRelGraph = null; }
     if (panelEl) panelEl.classList.remove('open', 'wm-maximized');
     const ov = document.getElementById('warmmemo-overlay');
     if (ov) ov.classList.remove('open');
@@ -149,6 +151,7 @@
   // ── 各 Tab 渲染 ──
   function renderTab(tab) {
     currentTab = tab || 'auto';
+    if (currentRelGraph) { currentRelGraph.destroy(); currentRelGraph = null; }
     const body = panelEl.querySelector('.wm-body');
     if (tab === 'auto') return renderAuto(body);
     if (tab === 'mem') return renderMem(body);
@@ -407,13 +410,68 @@
   }
 
   function renderRel(body) {
-    body.innerHTML = `<div class="wm-card"><div class="wm-h">关系图（动态力导向）</div>
-      <div class="wm-hint">线越粗=关系越强，可拖拽节点</div>
-      <svg id="wm-graph" class="wm-graph" viewBox="0 0 320 320"></svg>
-      <div class="wm-list" id="rel-list"></div></div>`;
-    drawGraph(body.querySelector('#wm-graph'));
+    if (currentRelGraph) { currentRelGraph.destroy(); currentRelGraph = null; }
     const rels = WM.MemoryStore.getRelations();
-    body.querySelector('#rel-list').innerHTML = rels.length ? rels.map((r) => `<div class="wm-item">${escapeHtml(r.from)} <span class="wm-weight">${'●'.repeat(Math.max(0, r.weight || 1))}</span> ${escapeHtml(r.label)} → ${escapeHtml(r.to)}</div>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>';
+    const deg = {}, set = new Set(), names = [];
+    rels.forEach((r) => {
+      if (r.from && !set.has(r.from)) { set.add(r.from); names.push(r.from); }
+      if (r.to && !set.has(r.to)) { set.add(r.to); names.push(r.to); }
+      if (r.from) deg[r.from] = (deg[r.from] || 0) + 1;
+      if (r.to) deg[r.to] = (deg[r.to] || 0) + 1;
+    });
+    names.sort((a, b) => (deg[b] || 0) - (deg[a] || 0));
+
+    body.innerHTML = `<div class="wm-card">
+      <div class="wm-h">关系图<span class="wm-h-sub">（动态力导向）</span></div>
+      <div class="wm-hint">滚轮缩放 · 拖空白平移 · 拖节点重排 · 点节点或下方名字查看该角色关系</div>
+      <div class="wm-graph-wrap">
+        <svg id="wm-graph"></svg>
+        <div class="wm-graph-ctrls">
+          <button data-act="in" title="放大">+</button>
+          <button data-act="out" title="缩小">−</button>
+          <button data-act="reset" title="重置视图">⟲</button>
+        </div>
+      </div>
+      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>'}</div>
+      <div class="wm-rel-detail" id="rel-detail"></div>
+    </div>`;
+
+    const svg = body.querySelector('#wm-graph');
+    const detailEl = body.querySelector('#rel-detail');
+    const namesEl = body.querySelector('#rel-names');
+
+    function showDetail(name) {
+      namesEl.querySelectorAll('.wm-name-chip').forEach((c) => c.classList.toggle('active', c.dataset.name === name));
+      const all = WM.MemoryStore.getRelations();
+      if (!name) {
+        detailEl.innerHTML = all.length ? `<div class="wm-h">全部关系（${all.length}）</div>` + all.map((r) => `<div class="wm-rel-row">${escapeHtml(r.from)} <span class="wm-arrow">→</span><span class="wm-lbl">${escapeHtml(r.label || '')}</span><span class="wm-arrow">→</span> ${escapeHtml(r.to)}</div>`).join('') : '';
+        return;
+      }
+      const mine = all.filter((r) => r.from === name || r.to === name);
+      detailEl.innerHTML = `<div class="wm-h">「${escapeHtml(name)}」的关系（${mine.length}）</div>` + (mine.length
+        ? mine.map((r) => {
+            const other = r.from === name ? r.to : r.from;
+            const dir = r.from === name ? '→' : '←';
+            return `<div class="wm-rel-row">${escapeHtml(name)} <span class="wm-arrow">${dir}</span><span class="wm-lbl">${escapeHtml(r.label || '')}</span><span class="wm-arrow">${dir}</span> ${escapeHtml(other)}</div>`;
+          }).join('')
+        : '<div class="wm-empty">暂无关系</div>');
+    }
+
+    if (!names.length) return;
+
+    currentRelGraph = WM.RelGraph.create(svg, rels, { userName: getUserName(), onSelect: showDetail });
+    namesEl.querySelectorAll('.wm-name-chip').forEach((c) => {
+      c.onclick = () => { currentRelGraph && currentRelGraph.focus(c.dataset.name); showDetail(c.dataset.name); };
+    });
+    body.querySelectorAll('.wm-graph-ctrls button').forEach((b) => {
+      b.onclick = () => {
+        if (!currentRelGraph) return;
+        if (b.dataset.act === 'in') currentRelGraph.zoom(0.8);
+        else if (b.dataset.act === 'out') currentRelGraph.zoom(1.25);
+        else currentRelGraph.resetView();
+      };
+    });
+    showDetail(null);
   }
 
   // 取得对话中的 user 名字（作为关系图中心）
@@ -434,100 +492,6 @@
       }
     } catch (e) {}
     return '我'; // 用"我"代替"用户"，更自然
-  }
-
-  // 关系图：以 user 为中心，关系线向外辐射（中心 + 内环直接关联 + 外环间接关联）
-  function drawGraph(svg) {
-    const rels = WM.MemoryStore.getRelations();
-    const names = new Set();
-    rels.forEach((r) => { if (r.from) names.add(r.from); if (r.to) names.add(r.to); });
-    const nodes = Array.from(names).map((id) => ({ id }));
-    if (!nodes.length) { svg.innerHTML = '<text x="160" y="160" text-anchor="middle" fill="#9b8579">暂无关系</text>'; return; }
-
-    const W = 320, H = 320, cx = W / 2, cy = H / 2;
-    // 1) 选定中心：优先对话 user 名；否则取度数最高的实体
-    const user = getUserName();
-    const degree = {};
-    rels.forEach((r) => { degree[r.from] = (degree[r.from] || 0) + 1; degree[r.to] = (degree[r.to] || 0) + 1; });
-    let center = nodes.find((n) => n.id === user);
-    if (!center) {
-      let best = null, bestD = -1;
-      nodes.forEach((n) => { if ((degree[n.id] || 0) > bestD) { bestD = degree[n.id] || 0; best = n; } });
-      center = best || nodes[0];
-    }
-    // 2) 计算每个节点到中心的最短跳数（BFS），决定环层
-    const adj = {};
-    rels.forEach((r) => {
-      (adj[r.from] = adj[r.from] || []).push(r.to);
-      (adj[r.to] = adj[r.to] || []).push(r.from);
-    });
-    const dist = { [center.id]: 0 };
-    const q = [center.id];
-    while (q.length) {
-      const cur = q.shift();
-      (adj[cur] || []).forEach((nb) => {
-        if (dist[nb] == null) { dist[nb] = dist[cur] + 1; q.push(nb); }
-      });
-    }
-    nodes.forEach((n) => { if (dist[n.id] == null) dist[n.id] = 99; }); // 孤立节点丢最外环
-
-    const pos = {};
-    pos[center.id] = { x: cx, y: cy };
-    // 按环层分组
-    const rings = {};
-    nodes.forEach((n) => { if (n.id === center.id) return; const d = Math.min(dist[n.id], 3); (rings[d] = rings[d] || []).push(n); });
-    const ringRadius = { 1: 95, 2: 140, 3: 150 };
-    Object.keys(rings).forEach((d) => {
-      const arr = rings[d];
-      const R = ringRadius[d] || 150;
-      arr.forEach((n, i) => {
-        const a = (i / arr.length) * Math.PI * 2 - Math.PI / 2;
-        pos[n.id] = { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
-      });
-    });
-
-    let s = '';
-    rels.forEach((r) => {
-      const a = pos[r.from], b = pos[r.to];
-      if (!a || !b) return;
-      const w = Number.isFinite(r.weight) ? r.weight : 2;
-      const isUserEdge = (r.from === center.id || r.to === center.id);
-      s += `<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}" stroke="var(--wm-jade)" stroke-width="${Math.min(w, 6)}" stroke-opacity="${isUserEdge ? 0.85 : 0.45}" class="wm-edge"/>`;
-    });
-    nodes.forEach((n) => {
-      const isCenter = n.id === center.id;
-      s += `<circle cx="${pos[n.id].x.toFixed(0)}" cy="${pos[n.id].y.toFixed(0)}" r="${isCenter ? 9 : 6}" fill="${isCenter ? 'var(--wm-rose)' : 'var(--wm-jade)'}" data-name="${escapeHtml(n.id)}" class="wm-node" style="cursor:grab"/>`;
-      const lbl = n.id.length > 6 ? n.id.slice(0, 6) + '…' : n.id;
-      s += `<text x="${(pos[n.id].x + (isCenter ? 11 : 8)).toFixed(0)}" y="${(pos[n.id].y + 4).toFixed(0)}" font-size="${isCenter ? 10 : 9}" fill="var(--wm-ink-soft)" ${isCenter ? 'font-weight="bold"' : ''}>${escapeHtml(lbl)}</text>`;
-    });
-    svg.innerHTML = s;
-    // 点击节点：显示该实体关系详情
-    svg.querySelectorAll('.wm-node').forEach((c) => {
-      c.addEventListener('click', () => {
-        const name = c.getAttribute('data-name');
-        const rels = WM.MemoryStore.getRelations().filter((r) => r.from === name || r.to === name);
-        const listEl = document.getElementById('rel-list');
-        if (!rels.length) { listEl.innerHTML = `<div class="wm-empty">「${escapeHtml(name)}」暂无关系</div>`; return; }
-        listEl.innerHTML = `<div class="wm-h">「${escapeHtml(name)}」的关系（${rels.length}）</div>` + rels.map((r) => {
-          const other = r.from === name ? r.to : r.from;
-          const dir = r.from === name ? '→' : '←';
-          return `<div class="wm-item">${escapeHtml(name)} <span class="wm-weight">${'●'.repeat(Math.max(0, r.weight || 1))}</span> ${r.label} ${dir} ${escapeHtml(other)}</div>`;
-        }).join('');
-      });
-    });
-    // 拖拽
-    svg.querySelectorAll('.wm-node').forEach((c) => {
-      c.addEventListener('mousedown', (ev) => {
-        ev.preventDefault();
-        const move = (e) => {
-          const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-          const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-          c.setAttribute('cx', loc.x); c.setAttribute('cy', loc.y);
-        };
-        const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
-        document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
-      });
-    });
   }
 
   // ── 通用弹窗：fields=[{key,label,type,value,placeholder,hint,options}] ──

@@ -22,6 +22,7 @@ import './config/summary.js';
 import './config/relations.js';
 import './config/injection.js';
 import './config/floor-hider.js';
+import './ui/rel-graph.js';
 import './ui/launcher.js';
 
 // ── 启动 ──
