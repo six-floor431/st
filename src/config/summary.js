@@ -13,72 +13,50 @@
     });
   }
 
-  // 禁止词汇表（覆盖 summary/plot/worldview 等所有提示词中明确禁止的元描述词汇）：
-  //   含这些词的行大概率是 LLM 回显指令或自我介绍，应删除。
-  var BANNED_WORDS_RE = /总结|梳理|概括|归纳|回顾|记录|时间线|时间顺序|按时间|状态标记|供后续参考|核心事件|关键信息|要点|摘要|概述|概要|简述|备注|注记|梳理如下|整理如下|汇总如下|分析如下|描述如下|说明如下|根据对话|用户让我|以下为|以上为|绝对禁止|最高级禁令|写作要求|判断标准|禁止事项|写作原则|文风要求|输出格式|系统要求|提示词/;
+  // ════════════════════════════════════════════════════════════
+  // v8 重写：统一垃圾检测 + 精简净化层
+  // 旧版叠了 BANNED_WORDS_RE / META_LINE_RE / RULE_VERB_RE / extractTagged /
+  //   _sanityCheck / _isJunkObject / _isDirtyValue 七层正则枚举，互相重叠仍漏。
+  // v8 只留一个 isJunkText 做单点判断，所有 parse 函数共用。
+  // ════════════════════════════════════════════════════════════
 
-  // 元说明/规则回显句式（LLM 把"我打算怎么写"当正文输出）：整行删除。
-  //   例："因此我们应该把最近对话提炼成一段叙事。" / "注意：系统要求只写已发生的事实。" / "我需要避免使用禁词。"
-  var META_LINE_RE = /^(因此|所以|那么|接下来|首先|注意|提醒|请注意|综上|总之)?[，,、：:\s]*((我|我们|你)(们)?(需要|应该|要|将|会|得|可以|打算|必须|不能|不应|应当|试图|尝试)|注意[:：]|根据(系统|上述|以上|提示|要求|指令)|按照(系统|要求|指令|提示)|系统要求|题目要求|用户要求|遵循(以上|上述|该)?(规则|要求)|不能(出现|使用|写)|避免(使用|出现|写))/;
+  // 统一垃圾检测：判断单个字段值是否是 LLM 前言/占位语/分析语/编号前缀/字段错位/纯标点。
+  // 返回 true = 垃圾，该字段应丢弃或清空。空串返回 false（由上层必填校验处理）。
+  function isJunkText(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (!s) return false;
+    // 1. 字段名错位：模型把 "desc：xxx" "name: xxx" 当成字段值
+    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s)) return true;
+    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s：:]/i.test(s)) return true;
+    // 2. LLM 分析前言 / 思考过程
+    if (/(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将)/.test(s)) return true;
+    // 3. 占位语 / 模板填充语
+    if (/(未提及|未填写|可能还需要|建议考虑|需进一步|有待补充|待补充|暂无|占位|示例|示例如下|不确定|不清楚|不知道)/.test(s)) return true;
+    // 4. 段落编号开头："第一段" "第二段"
+    if (/^第[一二三四五六七八九十百]+段/.test(s)) return true;
+    // 5. 数字编号开头："8. xxx" "7、xxx" "1) xxx"（但允许"第一天""第一次"这种时间词）
+    if (/^\d+\s*[\.、\)\）]/.test(s)) return true;
+    // 6. JSON 片段残留：值本身就是 {"time":""} 这种
+    if (/^\s*\{['"]?\w+['"]?\s*:/.test(s)) return true;
+    if (/^\d+\s*[\.、]\s*\{/.test(s)) return true;
+    // 7. 纯标点 / 纯数字 / 纯符号
+    if (/^[\d\s\{\}\[\]"'\.\,\;\:\|｜\-–—•·]+$/.test(s)) return true;
+    // 8. 元指令残留（短文本才拦，长文本可能是正常叙事碰巧含这些词）
+    if (/(只输出|不要任何|markdown|代码块|格式如下|输出格式|输出应该|注意：输出)/.test(s) && s.length < 60) return true;
+    return false;
+  }
 
-  // 规则性措辞（提示词红线里的祈使句）：出现在正文里 = 规则回显
-  var RULE_VERB_RE = /严禁|禁止|不得|不许|必须|应当|只写|只记录|只提取|不写|不要写|不能写|违反|即无效|判定无效/;
-
-  // 净化 LLM 原始输出：清理模型可能「回显」的提示词残留标记与寒暄前缀，
-  // 防止「把提示词里的示例/标签也写进结果」这种形式的跑题。只删明确属于噪声的行/前缀，不伤正文。
+  // 净化 LLM 原始输出（精简版 v8）：只去 markdown 围栏 + 寒暄前缀 + 合并空行。
+  //   旧版三层禁词正则已删除——禁词回显的根源在提示词（v8 不再列禁词），
+  //   字段级垃圾由 isJunkText 在 parse 阶段统一拦截。
   function sanitizeLLMText(raw) {
     if (!raw) return '';
     var t = String(raw);
-    t = t.split('\n').map(function (ln) {
-      var s = ln.trim();
-      if (!s) return ln; // 空行保留（由后续合并处理）
-      // 孤立的方括号标题行
-      if (/^【[^】]{1,20}】$/.test(s)) return '';
-      // 提示词结构标记行
-      if (/^(最高级禁令|正确示例|错误示例|写作要求|禁止事项|判断标准|说明|要求|说明：|绝对禁止)[:：]/.test(s)) return '';
-      // 提示词里的举例括号行
-      if (/^（(如|围绕|内容)[:：]/.test(s)) return '';
-      // 寒暄/声明前缀行（含"用户让我""根据对话""时间线梳理"等图2中实际出现的残留）
-      if (/^(以下是|好的，这是|这是为您|以上为|总结如下|以下是总结|时间线梳理|剧情事件如下|根据对话内容|用户让我|按照要求)[:：]/.test(s)) return '';
-      // 含禁止元词汇且以"如下/以下"结尾 → 指令回显引导行
-      if (/(如下|以下|为下)[:：]?\s*$/.test(s) && BANNED_WORDS_RE.test(s)) return '';
-      // 以"第X"/"首先"/"其次"开头且含禁止词 → 序号罗列式指令回显
-      if (/^(第[一二三四五六七八九十]|首先|其次|再次|最后|另外)[、，:：]/.test(s) && BANNED_WORDS_RE.test(s)) return '';
-      // 元说明/规则回显整行（"因此我们应该…""注意：系统要求…""我需要避免…"）
-      if (META_LINE_RE.test(s)) return '';
-      // 编号 + 规则措辞 的条目回显（"1. 只写已发生的事实""3、严禁使用以下词汇"）
-      if (/^\d+\s*[.、)）：:]\s*/.test(s) && (RULE_VERB_RE.test(s) || BANNED_WORDS_RE.test(s))) return '';
-      // 红线符号(🛑✗✓※等，含代理对，故用 u 标志)开头 + 规则措辞 的行
-      if (/^[\u{1F6D1}\u{2717}\u{2713}\u{203B}\u{2731}*\-–—•·]\s*/u.test(s) && RULE_VERB_RE.test(s)) return '';
-      // 行内以红线符号起头（无论后面接什么），若整行含规则措辞也删
-      if (/^(🛑|✗|✓|※|●|▲)/u.test(s) && RULE_VERB_RE.test(s)) return '';
-      return ln;
-    }).join('\n');
-    // 去掉开头的寒暄/声明前缀（一行内）
-    t = t.replace(/^(好的，?|当然，?|以下是|这是|为您|根据|按照)[^\n]{0,25}[:：]?\s*/i, '');
-    // 合并多余空行
-    t = t.replace(/\n{3,}/g, '\n\n').trim();
-    // 二次扫描：如果开头第一行仍含明显指令回显特征，逐行删除
-    var lines = t.split('\n');
-    while (lines.length && BANNED_WORDS_RE.test(lines[0]) && /[:：]/.test(lines[0])) lines.shift();
-    return lines.join('\n');
-  }
-
-  // 按「符号包裹」标记精确提取某任务输出（与提示词里的 <<<XXX_START>>> / <<<XXX_END>>> 对应）。
-  // 提取不到则回退到全文（兼容旧模型不输出标记的情况）。
-  function extractTagged(raw, startTag, endTag) {
-    if (!raw) return '';
-    const s = String(raw);
-    const re = new RegExp('<<<' + startTag + '_START>>>([\\s\\S]*?)<<<' + startTag + '_END>>>', 'i');
-    const m = s.match(re);
-    if (m && m[1] && m[1].trim()) return sanitizeLLMText(m[1]);
-    // 兼容：只出现 START 没 END，或反过来，截取 START 之后 / END 之前
-    const si = s.indexOf('<<<' + startTag + '_START>>>');
-    const ei = s.indexOf('<<<' + startTag + '_END>>>');
-    if (si >= 0 && ei > si) return sanitizeLLMText(s.slice(si + ('<<<' + startTag + '_START>>>').length, ei));
-    if (si >= 0) return sanitizeLLMText(s.slice(si + ('<<<' + startTag + '_START>>>').length));
-    if (ei >= 0) return sanitizeLLMText(s.slice(0, ei));
-    return sanitizeLLMText(s); // 无标记：回退全文
+    t = t.replace(/^```[a-zA-Z]*\s*$/gim, '').replace(/```\s*$/g, '').trim(); // 去 ```json 围栏
+    t = t.replace(/<<<\s*[A-Z_]+\s*>>>/g, ''); // 去残留标签
+    t = t.replace(/^(好的[，,。！!]?\s*|当然[，,]?\s*|明白[，,]?\s*|没问题[，,]?\s*|以下是[^\n]{0,20}[:：]?\s*|这是为您[^\n]{0,20}[:：]?\s*)/i, ''); // 去寒暄前缀
+    t = t.replace(/\n{3,}/g, '\n\n').trim(); // 合并空行
+    return t;
   }
   // ── 总结正文净化：只留叙事散文，剔除模型多输出的一切壳子 ──
   // 处理场景：markdown 标题、开场白、编号/项目符号列表、结尾的"以上"类收尾句、残留标签、加粗符号。
@@ -117,20 +95,7 @@
     return t;
   }
 
-  // ── 剧情线净化：只保留符合「时间｜标题｜事件」格式的有效行 ──
-  // 模型若回显指令/开场白/收尾句，一律视为噪声删除（从根源兜底，不依赖正则枚举关键词）。
-  function cleanPlotText(raw) {
-    if (!raw) return '';
-    let t = String(raw);
-    t = t.replace(/<<<\s*[A-Z_]+\s*>>>/g, ''); // 残留标签
-    let lines = t.split('\n').map((ln) => ln.trim()).filter(Boolean);
-    // 只保留：用 ｜ 或 | 分隔成 2~3 段、且每段非空的行；其余（开场白/收尾/分析句）全删
-    const kept = lines.filter((s) => {
-      const parts = s.split(/[｜|]/).map((x) => x.trim()).filter(Boolean);
-      return parts.length >= 2 && parts.length <= 3 && s.length <= 80;
-    });
-    return kept.join('\n').trim();
-  }
+  // cleanPlotText 已删除（v8：plot 走 JSON，不需要旧式「时间｜标题｜事件」文本净化）
 
   // ── 物品字段截断：强制每个字段不超过上限，防止模型把整段叙事塞进一个字段 ──
   function truncateItemFields(items) {
@@ -146,19 +111,14 @@
     }));
   }
 
-  // 便捷封装：每个阶段对应一个标签名
+  // v8：taggedSummary 只走 JSON，解析失败返回空串（宁缺毋滥，不回退到旧式标签文本）
   function taggedSummary(out) {
-    // 优先 JSON：{"text":"..."}
     const { ok, data } = parseJSON(out);
     if (ok && data && typeof data === 'object' && data.text != null) {
       const text = cleanSummaryText(String(data.text));
-      // summary 最终卫生检查：不能太短、不能含元指令
-      if (text.length >= 10 && !_isDirtyValue(text)) return text;
+      // summary 卫生检查：不能太短、不能是 LLM 前言/元指令
+      if (text.length >= 10 && !isJunkText(text)) return text;
     }
-    // 回退：旧式 <<<SUMMARY_START>>> 标签
-    const fallback = cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY'));
-    // 回退结果也必须通过卫生检查，否则返回空串（宁缺毋滥）
-    if (fallback.length >= 10 && !_isDirtyValue(fallback)) return fallback;
     return '';
   }
   // v6+：提示词已改为「原生 JSON 契约 + response_format=json_object」双重硬锁。
@@ -169,110 +129,32 @@
   function taggedItems(out)    { return out != null ? String(out) : ''; }
   function taggedWorld(out)    { return out != null ? String(out) : ''; }
 
-  // ── 通用 JSON 解析：容忍模型加的 ```json 围栏、前后噪声、截断 ──
-  // 返回 { ok, data }；解析失败 ok=false, data=null
-  //
-  // ⚠️ 关键防护（v5）：修复策略拼出的结果必须通过 sanity check，
-  //   拒绝「碰巧能 JSON.parse 但内容是垃圾」的情况（如截取到 {"time":""} 这种片段）。
+  // ── 通用 JSON 解析（v8 精简版）：容忍 ```json 围栏、前后噪声、尾部截断 ──
+  // 返回 { ok, data }；只做结构校验（能 JSON.parse 且非 null），内容质量交给 isJunkText 在 parse 阶段拦截。
+  // 旧的 _sanityCheck / _isJunkObject / _isDirtyValue 三层内容校验已删除——与 isJunkText 职责重叠，
+  //   且在 parseJSON 层做内容校验会导致"一个坏元素害死整个数组"。
   function parseJSON(raw) {
     if (raw == null) return { ok: false, data: null };
     let s = String(raw).trim();
-    // 去 ```json / ``` 围栏
-    s = s.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '').trim();
-    // 截取第一个 { 或 [ 到最后一个 } 或 ]
+    s = s.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '').trim(); // 去围栏
     const start = s.search(/[[{]/);
     const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
     if (start === -1) return { ok: false, data: null };
     s = end >= start ? s.slice(start, end + 1) : s.slice(start);
     try {
       const data = JSON.parse(s);
-      return _sanityCheck(data) ? { ok: true, data } : { ok: false, data: null };
+      return data == null ? { ok: false, data: null } : { ok: true, data };
     } catch (e) {
       // 尝试修复尾部残缺（模型常截断在字符串中途、缺闭合引号/括号）
-      const fixes = [
-        s + '"',
-        s + '"}',
-        s + ']',
-        s + '}]',
-        s.replace(/,\s*$/, '') + '}',
-        s.replace(/,\s*$/, '') + '"}',
-        s + '}',
-      ];
+      const fixes = [s + '"', s + '"}', s + ']', s + '}]', s.replace(/,\s*$/, '') + '}', s.replace(/,\s*$/, '') + '"}', s + '}'];
       for (const f of fixes) {
         try {
           const d = JSON.parse(f);
-          if (_sanityCheck(d)) return { ok: true, data: d };
+          if (d != null) return { ok: true, data: d };
         } catch (e2) {}
       }
       return { ok: false, data: null };
     }
-  }
-
-  // ── Sanity check：验证解析结果是否为"合理的数据结构"而非垃圾片段 ──
-  // 拒绝以下情况：
-  //   - 纯字符串值但长度 > 500（大概率是整段叙事/指令回显）
-  //   - 对象的所有 value 都是空串（如 {"time":"","title":"","summary":""}）
-  //   - 数组中每个元素的所有可枚举 value 都空（同上）
-  //   - 值包含明显的 JSON 片段残留（{"time":""} 这类字面量）
-  //   - 值包含元指令特征（"只输出"/"不要解释"/"JSON 格式"等）
-  function _sanityCheck(data) {
-    if (data == null) return false;
-    if (typeof data === 'string') {
-      // 字符串只在 summary 场景合法，且不能太长（>800 大概率是垃圾）
-      return data.length > 0 && data.length <= 800;
-    }
-    if (typeof data !== 'object') return false;
-    if (Array.isArray(data)) {
-      // 空数组 [] 是合法的（表示"无新事件/无关系"）
-      if (data.length === 0) return true;
-      // 非空数组：只要存在至少一个非 junk 元素就通过（不过滤，留给上层 parsePlots/parseItems 做逐条过滤）
-      // 这样避免"一个坏元素害死整个数组"的问题
-      return data.some((item) => item && typeof item === 'object' && Object.keys(item).length > 0 && !_isJunkObject(item));
-    }
-    // 普通对象
-    return Object.keys(data).length > 0 && !_isJunkObject(data);
-  }
-
-  // 检测一个对象是否为"垃圾对象"（所有字段值都空，或含明显非法内容）
-  function _isJunkObject(obj) {
-    if (!obj || typeof obj !== 'object') return true;
-    const vals = Object.values(obj).map((v) => String(v == null ? '' : v));
-    // 所有值都空 → 垃圾
-    if (vals.every((v) => v.trim() === '')) return true;
-    // 任一值含 JSON 片段残留或元指令 → 整个对象可疑
-    const junkPat = /^\s*\{["']?\w+["']?\s*:\s*["']?\s*["']?\}/;  // {"time":""} 这类
-    const numberedJsonPat = /^\d+\s*[\.\、]\s*\{/;  // "6. {\"time\":\"}" 这类
-    // 元指令/思考过程关键词（不设长度下限，短文本也要拦）
-    const metaPat = /只输出|不要任何|JSON|markdown|代码块|格式如下|输出格式|系统要求|请严格|注意[:：]|我们需要|让我们构造|时间点.*可以是|按顺序|分析物品|关联剧情标题|我们分析/;
-    for (const v of vals) {
-      if (junkPat.test(v.trim())) return true;
-      if (numberedJsonPat.test(v.trim())) return true;
-      if (metaPat.test(v)) return true;
-      // 字符串值超长（>800）→ 大概率是整段叙事/指令回显被塞进了单个字段
-      if (v.length > 800) return true;
-    }
-    return false;
-  }
-
-  // ── 字段值卫生检查：检测单个字段值是否含非法内容 ──
-  function _isDirtyValue(v) {
-    const s = String(v == null ? '' : v);
-    if (!s) return false;  // 空值不算脏，由上层必填校验处理
-    // 含字段名模式（模型把 "desc xxx；owner yyy" 当成 desc 的值）
-    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s]/i.test(s.trim())) return true;
-    if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s.trim())) return true;
-    // 含元指令/思考过程残留
-    if (/只输出|不要任何|markdown 代码块|JSON 格式|输出应该|我们需要压缩|注意：输出/.test(s) && s.length > 8) return true;
-    // 占位符/无意义填充
-    if (/^[\(（](未填写|无|未知|空)[^)）]*[\)）]$/.test(s.trim())) return true;
-    if (/^(未填写作用|（未填写作用）)$/.test(s.trim())) return true;
-    // 含 JSON 片段字面量（如 {"time":""} 被当成 title）
-    if (/^\s*\{".*"\s*\}/.test(s.trim())) return true;
-    // 思考过程/元语句前缀
-    if (/^(让我们构造|按顺序|时间点.*可以是|分析物品|关联剧情标题|我们分析|让我们)/.test(s.trim())) return true;
-    // 编号+JSON片段（如 "6. {\"time\":\"}" 这类）
-    if (/^\d+\s*[\.\、]\s*\{/.test(s.trim())) return true;
-    return false;
   }
 
   // 取得最近 N 条原始对话（用于总结）
@@ -417,80 +299,57 @@
     return { range, recent, total };
   }
 
-  // ── 关系解析：只认 JSON，强制 Schema 校验；含推测/分析/占位语的整条丢弃。
-  //   v5 文本回退路径已删除——"回退"反而会把 LLM 的分析前言当关系吞进结构化字段。
-  //   JSON 失败时 callLLM 会触发重试，三次重试拿不到就放弃本条，绝不拿垃圾填空。
+  // ── 关系解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
+  //   JSON 失败时 callLLM 重试三次，三次拿不到就放弃，绝不拿垃圾填空。
   function parseRelations(out) {
     const { ok, data } = parseJSON(out);
     if (!ok || !Array.isArray(data)) return [];
-    // label 必须是明确关系词（短词、名词性），不能是完整句子或分析语。
-    const BAD_LABEL_RE = /(可能|也许|或许|大概|似乎|好像|感觉|推测|推测是|应该是|可能是|也许是|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
-    // from/to 不能是占位语，不能是完整句子。
-    const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|让我们|按顺序|分析物品|关联剧情|以上|以下|如下|用户要求|系统要求|注意[:：]|时间点可以是)|[\.。,，；;！!？?]/;
+    // label 必须是明确关系词（2-6字短词），不能含推测/句子性词
+    const LABEL_BAD = /(可能|也许|或许|大概|似乎|好像|感觉|推测|应该|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
     return data
       .filter((r) => r && typeof r === 'object')
       .map((r) => ({
-        from: String(r.from || '').trim(),
-        to: String(r.to || '').trim(),
-        label: String(r.label || '').trim(),
+        from: String(r.from || '').trim().slice(0, 8),
+        to: String(r.to || '').trim().slice(0, 8),
+        label: String(r.label || '').trim().slice(0, 10),
       }))
       .filter((r) => {
         if (!r.from || !r.to || !r.label) return false;
-        if (r.from === r.to) return false; // 自环无意义
-        if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
-        // 长度硬限
-        if (r.label.length < 2 || r.label.length > 10) return false;
-        if (r.from.length < 2 || r.from.length > 8) return false;
-        if (r.to.length < 2 || r.to.length > 8) return false;
-        // 语义过滤：label 不能含推测词/句子性词
-        if (BAD_LABEL_RE.test(r.label)) return false;
-        if (BAD_NAME_RE.test(r.from) || BAD_NAME_RE.test(r.to)) return false;
-        // label 不能是 from/to 自己的名字（模型常见错位输出）
-        if (r.label === r.from || r.label === r.to) return false;
+        if (r.from === r.to) return false;            // 自环无意义
+        if (isJunkText(r.from) || isJunkText(r.to) || isJunkText(r.label)) return false;
+        if (r.label.length < 2 || r.from.length < 2) return false;
+        if (LABEL_BAD.test(r.label)) return false;     // label 含推测/句子性词
+        if (r.label === r.from || r.label === r.to) return false; // label 错位
         return true;
       });
   }
 
-  // ── 剧情线解析：只认 JSON，强制 Schema 校验；v5 文本回退已删除。
-  //   时间列（time）不是必填——对话没提时间就留空，不允许把"对话未提及具体""可能还需要考虑…"这类占位语写进去。
+  // ── 剧情线解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
+  //   time 不是必填——对话没提时间就留空，不允许把占位语写进去。
   function parsePlots(out) {
     const { ok, data } = parseJSON(out);
     if (!ok || !Array.isArray(data)) return [];
-    // 占位/分析前缀：任一字段含这些词，整条丢弃或该字段清空。
-    const BAD_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|需进一步|有待补充|暂无信息|待定|待补充|未填写|未标注|占位|示例|示例如下|时间点可以是|分析如下|解析如下|逐段解析|第一段|第二段|第三段|第四段|第五段)/;
-    // 编号开头："8. xxx""7、xxx"这类模型把行号塞进 title 的垃圾
-    const NUM_PREFIX_RE = /^\s*\d+\s*[\.、\)\)：:]/;
     return data
       .filter((p) => p && typeof p === 'object')
-      .map((p) => {
-        let time = String(p.time || '').slice(0, 20).trim();
-        let title = String(p.title || '').slice(0, 12).trim();
-        let summary = String(p.summary || '').slice(0, 80).trim();
-        if (BAD_RE.test(time)) time = '';
-        if (BAD_RE.test(summary)) summary = '';
-        // 去编号前缀
-        if (NUM_PREFIX_RE.test(title)) title = title.replace(NUM_PREFIX_RE, '').trim();
-        if (NUM_PREFIX_RE.test(summary)) summary = summary.replace(NUM_PREFIX_RE, '').trim();
-        return { time, title, summary };
-      })
+      .map((p) => ({
+        time: String(p.time || '').trim().slice(0, 20),
+        title: String(p.title || '').trim().slice(0, 12),
+        summary: String(p.summary || '').trim().slice(0, 80),
+      }))
       .filter((p) => {
-        // title 必须有实质内容（不能是空串、不能是 JSON 片段、不能是元指令、不能是占位语）
-        if (!p.title) return false;
-        if (_isDirtyValue(p.title)) return false;
-        if (BAD_RE.test(p.title)) return false;
-        if (NUM_PREFIX_RE.test(p.title)) return false;
-        if (_isDirtyValue(p.summary)) p.summary = '';  // summary 脏则清空，不整条丢弃
-        if (_isDirtyValue(p.time)) p.time = '';
-        // title 不能是纯标点/数字/单个字符（如 "." / "1" / "{"）
-        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
-        // title 长度至少 2 字符
+        if (!p.title) return false;                    // title 必填
+        if (isJunkText(p.title)) return false;        // title 是垃圾 → 整条丢
         if (p.title.length < 2) return false;
+        if (/[。！？!?\n]/.test(p.title)) return false; // title 是一句话不是标题
+        // time/summary 是选填，脏则清空，不整条丢
+        if (isJunkText(p.time)) p.time = '';
+        if (isJunkText(p.summary)) p.summary = '';
         return true;
       });
   }
 
-  // ── 物品解析：只认 JSON，强制 Schema 校验；v5 文本回退已删除。
-  //   plots: 可选，传入已有剧情线列表时，直接把关联剧情文本匹配成 relatedPlots(ID数组)，与存储层字段对齐。
+  // ── 物品解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
+  //   plots: 可选，传入已有剧情线时把 related 文本匹配成 relatedPlots(ID 数组)。
   function parseItems(out, plots) {
     const isBlankRel = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
     const matchPlotIds = (text) => {
@@ -504,12 +363,6 @@
     };
     const { ok, data } = parseJSON(out);
     if (!ok || !Array.isArray(data)) return [];
-    // 占位/分析前缀：任一字段含这些词则整条丢弃或对应字段清空。
-    //   ——这是修复你截图里"另外，对话中提到的掌门印信…""让我逐段解析…""第一段""第二段"
-    //     这些 LLM 分析前言被误认作物品名的核心过滤。
-    const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|另外[，,]|对话中提到|逐段解析|解析如下|分析如下|第一段|第二段|第三段|第四段|第五段|第六段|第七段|第八段|第九段|第十段|让我|我们来|接下来|总结一下|以上|以下|示例|示例如下|未填写|待补充|暂无|占位)/;
-    const BAD_DESC_RE = /(未填写作用|未填写|待补充|暂无作用|待明确|作用未明)/;
-    const BAD_OWNER_RE = /^持有者[:：]|未知$/;
     const items = data
       .filter((it) => it && typeof it === 'object')
       .map((it) => {
@@ -518,69 +371,43 @@
         let owner = String(it.owner || '').trim();
         let origin = String(it.origin || '').trim();
         let relText = String(it.related || it.relatedPlotText || '').trim();
-        // 字段级清洗：命中占位词则清空
-        if (BAD_DESC_RE.test(desc)) desc = '';
-        if (BAD_OWNER_RE.test(owner)) owner = '';
-        if (_isDirtyValue(desc)) desc = '';
-        if (_isDirtyValue(owner)) owner = '';
-        if (_isDirtyValue(origin)) origin = '';
-        if (_isDirtyValue(relText)) relText = '';
+        // 选填字段脏则清空，不整条丢
+        if (isJunkText(desc)) desc = '';
+        if (isJunkText(owner) || /^(未知|持有者[:：].*)$/.test(owner)) owner = '';
+        if (isJunkText(origin)) origin = '';
+        if (isJunkText(relText)) relText = '';
         const relIds = matchPlotIds(relText);
         const obj = { name, desc, owner, origin, relatedPlotText: relText };
         if (relIds.length) obj.relatedPlots = relIds;
         return obj;
       })
       .filter((it) => {
-        if (!it.name) return false;
-        if (_isDirtyValue(it.name)) return false;
-        // 最关键的一条：name 绝不能是 LLM 的分析前言。
-        if (BAD_NAME_RE.test(it.name)) return false;
-        // name 不能是句子（长度过长或含标点过多），也不能是纯标点/JSON 片段
-        if (it.name.length < 1 || it.name.length > 20) return false;
-        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name)) return false;
-        // name 含句号/问号/感叹号 —— 是一句话不是物品名，整条丢
-        if (/[。！？!?\n]/.test(it.name)) return false;
+        if (!it.name) return false;                   // name 必填
+        if (isJunkText(it.name)) return false;       // name 是垃圾 → 整条丢
+        if (it.name.length < 2 || it.name.length > 20) return false;
+        if (/[。！？!?\n]/.test(it.name)) return false; // name 是一句话不是物品名
         return true;
       });
     return truncateItemFields(items);
   }
 
-  // ── 世界观解析：优先 JSON，强制 Schema 校验 ──
+  // ── 世界观解析（v8）：只认 JSON，用 isJunkText 统一过滤。旧式 ■ 文本回退已删。
   function parseWorld(out) {
     const { ok, data } = parseJSON(out);
-    if (ok && data && typeof data === 'object') {
-      const rules = Array.isArray(data.rules) ? data.rules
-        .filter((r) => r && typeof r === 'object')
-        .map((r) => ({ title: String(r.title || '').slice(0, 20).trim(), content: String(r.content || '').slice(0, 60).trim() }))
-        .filter((r) => {
-          if (!r.title || !r.content) return false;
-          if (_isDirtyValue(r.title) || _isDirtyValue(r.content)) return false;
-          return true;
-        })
-        : [];
-      // name/type/desc 卫生检查
-      const name = _isDirtyValue(data.name) ? '' : String(data.name || '').slice(0, 30).trim();
-      const type = _isDirtyValue(data.type) ? '' : String(data.type || '').slice(0, 20).trim();
-      const desc = _isDirtyValue(data.desc) ? '' : String(data.desc || '').slice(0, 80).trim();
-      return { name, type, desc, rules: rules.slice(0, 6) };
-    }
-    // 回退：旧式「■标题｜内容」文本
-    const text = out.replace(/<<<\s*[A-Z_]+\s*>>>/g, '').trim();
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-    const meta = { name: '', type: '', desc: '' };
-    const rules = [];
-    for (const ln of lines) {
-      const m = ln.match(/^■\s*(.+?)\s*[｜|]\s*(.+)$/);
-      if (m) { rules.push({ title: m[1].trim().slice(0, 20), content: m[2].trim().slice(0, 60) }); continue; }
-      const kv = ln.match(/^(世界名|世界类型|简述|名称|类型|描述)[:：]\s*(.+)$/);
-      if (kv) {
-        const k = kv[1];
-        if (k.includes('名')) meta.name = kv[2].trim().slice(0, 30);
-        else if (k.includes('类型')) meta.type = kv[2].trim().slice(0, 20);
-        else if (k.includes('简述') || k.includes('描述')) meta.desc = kv[2].trim().slice(0, 80);
-      }
-    }
-    return { name: meta.name, type: meta.type, desc: meta.desc, rules: rules.slice(0, 6) };
+    if (!ok || !data || typeof data !== 'object') return { name: '', type: '', desc: '', rules: [] };
+    const rules = Array.isArray(data.rules) ? data.rules
+      .filter((r) => r && typeof r === 'object')
+      .map((r) => ({ title: String(r.title || '').trim().slice(0, 20), content: String(r.content || '').trim().slice(0, 60) }))
+      .filter((r) => {
+        if (!r.title || !r.content) return false;
+        if (isJunkText(r.title) || isJunkText(r.content)) return false;
+        return true;
+      })
+      .slice(0, 6) : [];
+    const name = isJunkText(data.name) ? '' : String(data.name || '').trim().slice(0, 30);
+    const type = isJunkText(data.type) ? '' : String(data.type || '').trim().slice(0, 20);
+    const desc = isJunkText(data.desc) ? '' : String(data.desc || '').trim().slice(0, 80);
+    return { name, type, desc, rules };
   }
 
   // 触发一次「纯记忆」总结（只跑 summary + 世界观 + 物品，不再顺带跑关系/剧情）
@@ -911,6 +738,6 @@
   }
 
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
-    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems, parseWorld, parseJSON,
-    sanitizeLLMText, cleanSummaryText, cleanPlotText, truncateItemFields };
+    taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems, parseWorld, parseJSON,
+  sanitizeLLMText, cleanSummaryText, truncateItemFields, isJunkText };
 })();
