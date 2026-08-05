@@ -117,10 +117,14 @@
   // v8：taggedSummary 只走 JSON，解析失败返回空串（宁缺毋滥，不回退到旧式标签文本）
   function taggedSummary(out) {
     const { ok, data } = parseJSON(out);
-    if (ok && data && typeof data === 'object' && data.text != null) {
-      const text = cleanSummaryText(String(data.text));
-      // summary 卫生检查：不能太短、不能是 LLM 前言/元指令
-      if (text.length >= 10 && !isJunkText(text)) return text;
+    if (ok && data && typeof data === 'object') {
+      // 兼容字段名差异：text / summary / content（json_object 模式下模型偶用别的键）
+      const raw = (data.text != null ? data.text : (data.summary != null ? data.summary : (data.content != null ? data.content : '')));
+      if (raw != null && String(raw).trim()) {
+        const text = cleanSummaryText(String(raw));
+        // summary 卫生检查：不能太短、不能是 LLM 前言/元指令
+        if (text.length >= 10 && !isJunkText(text)) return text;
+      }
     }
     return '';
   }
@@ -158,6 +162,19 @@
       }
       return { ok: false, data: null };
     }
+  }
+
+  // 从 LLM 输出中提取数组：兼容「顶层数组」与「对象包裹」两种形态。
+  //   根因：OpenAI/DeepSeek 的 response_format=json_object 强制顶层是对象，不允许裸数组。
+  //   而 relations/plot/items 提示词若要裸数组会与之冲突——LLM 只能把数组塞进字段，
+  //   输出成 {"relations":[...]}。这里先认顶层数组，再按候选键名取，最后兜底取第一个数组字段。
+  function extractArray(data, keys) {
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') {
+      for (const k of keys) if (Array.isArray(data[k])) return data[k];
+      for (const k of Object.keys(data)) if (Array.isArray(data[k])) return data[k];
+    }
+    return [];
   }
 
   // 取得最近 N 条原始对话（用于总结）
@@ -306,10 +323,12 @@
   //   JSON 失败时 callLLM 重试三次，三次拿不到就放弃，绝不拿垃圾填空。
   function parseRelations(out) {
     const { ok, data } = parseJSON(out);
-    if (!ok || !Array.isArray(data)) return [];
+    if (!ok) return [];
+    // 兼容 json_object 模式被迫输出 {"relations":[...]} 的情况
+    const list = extractArray(data, ['relations', 'relation', 'edges', 'links', 'data']);
     // label 必须是明确关系词（2-6字短词），不能含推测/句子性词
     const LABEL_BAD = /(可能|也许|或许|大概|似乎|好像|感觉|推测|应该|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
-    return data
+    return list
       .filter((r) => r && typeof r === 'object')
       .map((r) => ({
         from: String(r.from || '').trim().slice(0, 8),
@@ -331,8 +350,10 @@
   //   time 不是必填——对话没提时间就留空，不允许把占位语写进去。
   function parsePlots(out) {
     const { ok, data } = parseJSON(out);
-    if (!ok || !Array.isArray(data)) return [];
-    return data
+    if (!ok) return [];
+    // 兼容 json_object 模式被迫输出 {"plots":[...]} 的情况
+    const list = extractArray(data, ['plots', 'plot', 'events', 'story', 'data']);
+    return list
       .filter((p) => p && typeof p === 'object')
       .map((p) => ({
         time: String(p.time || '').trim().slice(0, 20),
@@ -366,8 +387,9 @@
       return ids;
     };
     const { ok, data } = parseJSON(out);
-    if (!ok || !Array.isArray(data)) return [];
-    const items = data
+    if (!ok) return [];
+    // 兼容 json_object 模式被迫输出 {"items":[...]} 的情况
+    const items = extractArray(data, ['items', 'item', 'objects', 'inventory', 'data'])
       .filter((it) => it && typeof it === 'object')
       .map((it) => {
         // 末尾的句号/感叹号/问号去掉再判断（LLM 常给标题加尾标点，整条丢太可惜）；
