@@ -104,7 +104,28 @@
     return t;
   }
 
-  // cleanPlotText 已删除（v8：plot 走 JSON，不需要旧式「时间｜标题｜事件」文本净化）
+  // ── 标签提取（v14）：从 LLM 输出中取出 <TagName>...</TagName> 之间的内容 ──
+  // 纯文本方案的核心：标签外的所有前言/后语天然被隔离丢弃，字符串内换行/中文标点都是合法内容，
+  //   不再需要 normalizeJSONString 那套状态机去修补 JSON 语法。
+  // 容错：标签名大小写不敏感；开标签可带属性（<Summary lang="zh">）；自闭合 <Tag/> 视为空；
+  //   闭标签缺失时取开标签之后全部内容（模型偶漏写闭合，宁取不丢）。
+  function extractTag(raw, tag) {
+    if (raw == null) return '';
+    const s = String(raw).replace(/^```[a-zA-Z]*\s*/gim, '').replace(/```\s*$/g, '').trim();
+    const lower = s.toLowerCase();
+    const start = lower.indexOf('<' + tag.toLowerCase());
+    if (start === -1) return '';
+    let i = start + tag.length + 1; // 跳过 "<tag"
+    while (i < s.length && s[i] !== '>' && s[i] !== '/' && s[i] !== '<') i++;
+    if (s[i] === '/') return ''; // 自闭合 <Tag/> → 空
+    if (s[i] !== '>') return ''; // 畸形，放弃
+    const contentStart = i + 1;
+    const end = lower.indexOf('</' + tag.toLowerCase(), contentStart);
+    if (end === -1) return s.slice(contentStart).trim(); // 闭标签缺失
+    return s.slice(contentStart, end).trim();
+  }
+
+  // cleanPlotText 已删除（v14：plot 走 <Plots> 标签 + | 分隔，不需要旧式文本净化）
 
   // ── 物品字段截断：强制每个字段不超过上限，防止模型把整段叙事塞进一个字段 ──
   function truncateItemFields(items) {
@@ -120,18 +141,13 @@
     }));
   }
 
-  // v8：taggedSummary 只走 JSON，解析失败返回空串（宁缺毋滥，不回退到旧式标签文本）
+  // v14：taggedSummary 走 <Summary> 标签提取。JSON 路径已删——提示词已硬锁标签格式。
+  //   阈值放到 4 字：合法短叙事（如「林晚入丹房。」）也要能过，漏比多更糟；元话语由 isJunkText 兜底。
   function taggedSummary(out) {
-    const { ok, data } = parseJSON(out);
-    if (ok && data && typeof data === 'object') {
-      // 兼容字段名差异：text / summary / content + 中文 正文/总结/叙事（json_object 模式下模型偶用别的键）
-      const raw = (data.text != null ? data.text : (data.summary != null ? data.summary : (data.content != null ? data.content : (data['正文'] != null ? data['正文'] : (data['总结'] != null ? data['总结'] : (data['叙事'] != null ? data['叙事'] : ''))))));
-      if (raw != null && String(raw).trim()) {
-        const text = cleanSummaryText(String(raw));
-        // summary 卫生检查：不能太短、不能是 LLM 前言/元指令
-        if (text.length >= 10 && !isJunkText(text)) return text;
-      }
-    }
+    const raw = extractTag(out, 'Summary');
+    if (!raw) return '';
+    const text = cleanSummaryText(raw);
+    if (text.length >= 4 && !isJunkText(text)) return text;
     return '';
   }
   // v6+：提示词已改为「原生 JSON 契约 + response_format=json_object」双重硬锁。
@@ -294,10 +310,12 @@
     else if (opts && opts.phase === 'plot') minLen = 15;
     else if (opts && opts.phase === 'items') minLen = 10;
     else if (opts && opts.phase === 'relations') minLen = 6;
-        // jsonMode 下合法 JSON（哪怕空值）放行——内容由 parse 层判断质量，不因 JSON 包装后字符数少而误判"过短"。
-        // 典型场景：{"text":""} 是合法的"无新内容"，{"text":"短叙事。"} 是合法短总结，都不应被 minLen 拦。
+        // 有合法标签（<Summary>/<Relations>/<Plots>/<Items>）就放行——标签包裹后字符数少不代表内容少，
+        //   真正的质量判断交给 parse 层。典型：<Summary></Summary> 是合法的"无新内容"，不应被 minLen 误拦。
+        //   旧 jsonMode 兼容：worldview 仍走 JSON，合法 JSON 也放行。
+        const hasTag = /<\/?(Summary|Relations|Plots|Items)\b/i.test(cleaned);
         const isLegalJson = opts.jsonMode === true && parseJSON(cleaned).ok;
-        if (!isLegalJson && cleaned.length < minLen) {
+        if (!hasTag && !isLegalJson && cleaned.length < minLen) {
           throw new Error('模型返回过短（仅 ' + cleaned.length + ' 字：' + cleaned.slice(0, 20) + '），疑似截断/抽风');
         }
         return cleaned;
@@ -367,26 +385,29 @@
     return { range, recent, total };
   }
 
-  // ── 关系解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
-  //   JSON 失败时 callLLM 重试三次，三次拿不到就放弃，绝不拿垃圾填空。
+  // ── 关系解析（v14）：走 <Relations> 标签 + 按行 + 按 | 分割。JSON 路径已删。
+  //   字段顺序固定 from|to|label，不再需要字段名容错——这正是不用 JSON 的好处。
+  //   模型若回显表头（from|to|label）由 FIELD_NAMES 拦掉。
   function parseRelations(out) {
-    const { ok, data } = parseJSON(out);
-    if (!ok) return [];
-    // 兼容 json_object 模式被迫输出 {"relations":[...]} 的情况
-    const list = extractArray(data, ['relations', 'relation', 'edges', 'links', 'data', '关系', '关系列表', '关系图']);
-    // label 必须是明确关系词（2-6字短词），不能含推测/句子性词
+    const body = extractTag(out, 'Relations');
+    if (!body) return [];
     const LABEL_BAD = /(可能|也许|或许|大概|似乎|好像|感觉|推测|应该|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
-    return list
-      .filter((r) => r && typeof r === 'object')
-      .map((r) => ({
-        // 字段名容错：LLM 偶用 source/target/relation 等英文别名，国产模型偶用中文键（从/到/关系）
-        from: String(r.from || r.source || r.subject || r.a || r['从'] || r['甲方'] || '').trim().slice(0, 8),
-        to: String(r.to || r.target || r.object || r.b || r['到'] || r['乙方'] || '').trim().slice(0, 8),
-        label: String(r.label || r.relation || r.rel || r.type || r['关系'] || r['关系类型'] || '').trim().slice(0, 10),
-      }))
+    const FIELD_NAMES = /^(from|to|label|relation|source|target|从|到|甲方|乙方|关系|关系类型)$/;
+    return body.split('\n')
+      .map((ln) => ln.trim())
+      .filter(Boolean)
+      .map((ln) => {
+        const parts = ln.split('|').map((p) => p.trim());
+        return {
+          from: (parts[0] || '').slice(0, 8),
+          to: (parts[1] || '').slice(0, 8),
+          label: (parts[2] || '').slice(0, 10),
+        };
+      })
       .filter((r) => {
         if (!r.from || !r.to || !r.label) return false;
         if (r.from === r.to) return false;            // 自环无意义
+        if (FIELD_NAMES.test(r.from) || FIELD_NAMES.test(r.to) || FIELD_NAMES.test(r.label)) return false; // 表头
         if (isJunkText(r.from) || isJunkText(r.to) || isJunkText(r.label)) return false;
         if (r.label.length < 2 || r.from.length < 2) return false;
         if (LABEL_BAD.test(r.label)) return false;     // label 含推测/句子性词
@@ -395,36 +416,38 @@
       });
   }
 
-  // ── 剧情线解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
-  //   time 不是必填——对话没提时间就留空，不允许把占位语写进去。
+  // ── 剧情线解析（v14）：走 <Plots> 标签 + 按行 + 按 | 分割。JSON 路径已删。
+  //   字段顺序固定 time|title|summary。time 为空时模型保留 | 占位，split 后 parts[0]='' 是正常的。
   function parsePlots(out) {
-    const { ok, data } = parseJSON(out);
-    if (!ok) return [];
-    // 兼容 json_object 模式被迫输出 {"plots":[...]} 的情况
-    const list = extractArray(data, ['plots', 'plot', 'events', 'story', 'data', '剧情', '剧情线', '事件']);
-    return list
-      .filter((p) => p && typeof p === 'object')
-      .map((p) => ({
-        // 字段名容错：英文别名 when/name/content + 中文键 时间/标题/摘要
-        time: String(p.time || p.when || p.time_point || p['时间'] || p['时间点'] || '').trim().slice(0, 20),
-        // 末尾断句符先去掉（LLM 常给标题加尾标点）；内部仍含则由 filter 判为句子丢弃
-        title: String(p.title || p.name || p.event || p['标题'] || p['名称'] || p['事件'] || '').trim().replace(/[。！？!?\n]+$/g, '').trim().slice(0, 12),
-        summary: String(p.summary || p.content || p.desc || p.description || p['摘要'] || p['内容'] || p['描述'] || '').trim().slice(0, 80),
-      }))
+    const body = extractTag(out, 'Plots');
+    if (!body) return [];
+    const FIELD_NAMES = /^(time|title|summary|when|name|content|时间|标题|摘要|内容|事件)$/;
+    return body.split('\n')
+      .map((ln) => ln.trim())
+      .filter(Boolean)
+      .map((ln) => {
+        const parts = ln.split('|').map((p) => p.trim());
+        return {
+          time: (parts[0] || '').slice(0, 20),
+          title: (parts[1] || '').replace(/[。！？!?\n]+$/g, '').trim().slice(0, 12),
+          summary: (parts[2] || '').slice(0, 80),
+        };
+      })
       .filter((p) => {
         if (!p.title) return false;                    // title 必填
+        if (FIELD_NAMES.test(p.title)) return false;   // 表头
         if (isJunkText(p.title)) return false;        // title 是垃圾 → 整条丢
         if (p.title.length < 2) return false;
         if (/[。！？!?\n]/.test(p.title)) return false; // title 是一句话不是标题
         // time/summary 是选填，脏则清空，不整条丢
-        if (isJunkText(p.time)) p.time = '';
+        if (FIELD_NAMES.test(p.time) || isJunkText(p.time)) p.time = '';
         if (isJunkText(p.summary)) p.summary = '';
         return true;
       });
   }
 
-  // ── 物品解析（v8）：只认 JSON，用 isJunkText 统一过滤。文本回退已删。
-  //   plots: 可选，传入已有剧情线时把 related 文本匹配成 relatedPlots(ID 数组)。
+  // ── 物品解析（v14）：走 <Items> 标签 + 按行 + 按 | 分割。JSON 路径已删。
+  //   字段顺序固定 name|desc|owner|origin|related。plots 传入时把 related 文本匹配成 relatedPlots(ID 数组)。
   function parseItems(out, plots) {
     const isBlankRel = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
     const matchPlotIds = (text) => {
@@ -436,19 +459,19 @@
       }
       return ids;
     };
-    const { ok, data } = parseJSON(out);
-    if (!ok) return [];
-    // 兼容 json_object 模式被迫输出 {"items":[...]} 的情况
-    const items = extractArray(data, ['items', 'item', 'objects', 'inventory', 'data', '物品', '物品列表', '道具'])
-      .filter((it) => it && typeof it === 'object')
-      .map((it) => {
-        // 字段名容错：英文别名 item/description/holder + 中文键 名字/描述/持有者/来历
-        // 末尾断句符先去掉（LLM 常给标题加尾标点）；内部仍含则由 filter 判为句子丢弃
-        let name = String(it.name || it.item || it.item_name || it['名字'] || it['名称'] || it['物品'] || '').trim().replace(/[。！？!?\n]+$/g, '').trim();
-        let desc = String(it.desc || it.description || it.effect || it['描述'] || it['作用'] || it['说明'] || '').trim();
-        let owner = String(it.owner || it.holder || it.belong || it.belong_to || it['持有者'] || it['归属'] || it['主人'] || '').trim();
-        let origin = String(it.origin || it.source || it.from || it['来历'] || it['来源'] || it['出处'] || '').trim();
-        let relText = String(it.related || it.relatedPlotText || it.related_plot || it.plot || it['关联'] || it['关联剧情'] || it['相关剧情'] || '').trim();
+    const body = extractTag(out, 'Items');
+    if (!body) return [];
+    const FIELD_NAMES = /^(name|desc|owner|origin|related|item|description|holder|名字|名称|描述|持有者|来历|来源|关联|物品)$/;
+    const items = body.split('\n')
+      .map((ln) => ln.trim())
+      .filter(Boolean)
+      .map((ln) => {
+        const parts = ln.split('|').map((p) => p.trim());
+        let name = (parts[0] || '').replace(/[。！？!?\n]+$/g, '').trim();
+        let desc = parts[1] || '';
+        let owner = parts[2] || '';
+        let origin = parts[3] || '';
+        let relText = parts[4] || '';
         // 选填字段脏则清空，不整条丢
         if (isJunkText(desc)) desc = '';
         if (isJunkText(owner) || /^(未知|持有者[:：].*)$/.test(owner)) owner = '';
@@ -461,6 +484,7 @@
       })
       .filter((it) => {
         if (!it.name) return false;                   // name 必填
+        if (FIELD_NAMES.test(it.name)) return false;  // 表头
         if (isJunkText(it.name)) return false;       // name 是垃圾 → 整条丢
         if (it.name.length < 2 || it.name.length > 20) return false;
         if (/[。！？!?\n]/.test(it.name)) return false; // name 是一句话不是物品名
@@ -512,7 +536,7 @@
       const summaryTpl = settings.prompts && settings.prompts.summary;
       const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       try {
-        const rawSummary = await callLLM(sys, '直接输出 JSON 对象 {"text":"..."}，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
+        const rawSummary = await callLLM(sys, '把叙事正文放在 <Summary> 和 </Summary> 之间。没有新内容就输出 <Summary></Summary>。标签之外不要写任何内容。', settings, { temperature: 0.3, phase: 'summary' });
         const summaryText = taggedSummary(rawSummary);
         await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
         await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -571,7 +595,7 @@
           const knownPlots = (WM.MemoryStore.getPlots() || [])
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
+          const out = await callLLM(s, '把所有物品放在 <Items> 和 </Items> 之间，每件一行，字段用 | 分隔（name|desc|owner|origin|related）。没有物品就输出 <Items></Items>。', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
           const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
@@ -678,7 +702,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.relations;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'relations', jsonMode: true });
+          const out = await callLLM(s, '把所有关系放在 <Relations> 和 </Relations> 之间，每条一行，字段用 | 分隔（from|to|label）。没有关系就输出 <Relations></Relations>。', settings, { temperature: 0.3, phase: 'relations' });
           const parsed = parseRelations(taggedRelations(out));
           const prev = WM.MemoryStore.getRelations() || [];
           const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
@@ -693,7 +717,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析；无新事件则输出 []。', settings, { temperature: 0.4, phase: 'plot', jsonMode: true });
+          const out = await callLLM(s, '把所有剧情放在 <Plots> 和 </Plots> 之间，每条一行，字段用 | 分隔（time|title|summary）。没有新事件就输出 <Plots></Plots>。', settings, { temperature: 0.4, phase: 'plot' });
           const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
           // 归一化 key：用于跨次去重，避免模型偶尔回显旧事件时产生重复条目
@@ -725,7 +749,7 @@
           const knownPlots = allPlots
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
+          const out = await callLLM(s, '把所有物品放在 <Items> 和 </Items> 之间，每件一行，字段用 | 分隔（name|desc|owner|origin|related）。没有物品就输出 <Items></Items>。', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
           // 传入 allPlots，让 parseItems 直接把关联剧情文本匹配成 relatedPlots(ID数组)
           const parsedItems = parseItems(itemRaw, allPlots);
@@ -806,7 +830,7 @@
       historySummary: '',
     });
     try {
-      const rawBig = await callLLM(sys, '直接输出 JSON 对象 {"text":"..."}，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
+      const rawBig = await callLLM(sys, '把整合后的长期记忆放在 <Summary> 和 </Summary> 之间。没有内容就输出 <Summary></Summary>。', settings, { temperature: 0.3, phase: 'summary' });
       const text = taggedSummary(rawBig);
       await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
       return { ok: true, count: recentSmalls.length };
