@@ -25,26 +25,27 @@
   function isJunkText(v) {
     const s = String(v == null ? '' : v).trim();
     if (!s) return false;
-    // 长文本（>60字）不可能是短字段垃圾（前言/编号/占位），直接放行——
-    //   这条保护 summary 正文和长 desc 不被误杀（如"师尊让我去丹房"里的"让我"）。
+    // 1. LLM 分析前言 / 寒暄 / 思考过程（不限长度——任何以这些词【开头】的都是元话语，不是内容）。
+    //    必须在 length 判断之前：哪怕后面接了长内容（"让我逐段分析。第一段..."），开头是元话语就整条废。
+    //    正常叙事不会以"让我""以下是""好的，"开头——"师尊让我去丹房"里的"让我"在句中不在开头，不受影响。
+    if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将|好的[，,。！]|当然[，,]|明白[，,]|没问题[，,]|以下是|下面是|这是为您|根据要求|综上|以上是)/.test(s)) return true;
+    // 2. 长文本（>60字）不再拦短字段垃圾——保护 summary 正文和长 desc 不被误杀
     if (s.length > 60) return false;
-    // 1. 字段名错位：模型把 "desc：xxx" "name: xxx" 当成字段值
+    // 3. 字段名错位：模型把 "desc：xxx" "name: xxx" 当成字段值
     if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s)) return true;
     if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s：:]/i.test(s)) return true;
-    // 2. LLM 分析前言 / 思考过程（只拦以这些词【开头】的短字段值，不拦正常叙事里含这些词的长文本）
-    if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将)/.test(s)) return true;
-    // 3. 占位语 / 模板填充语（短字段值才检查，长叙事里"未提及"可能是正常用语）
+    // 4. 占位语 / 模板填充语（短字段值才检查，长叙事里"未提及"可能是正常用语）
     if (s.length < 30 && /(未提及|未填写|可能还需要|建议考虑|需进一步|有待补充|待补充|暂无|占位|示例|示例如下|不确定|不清楚|不知道)/.test(s)) return true;
-    // 4. 段落编号开头："第一段" "第二段"
+    // 5. 段落编号开头："第一段" "第二段"
     if (/^第[一二三四五六七八九十百]+段/.test(s)) return true;
-    // 5. 数字编号开头："8. xxx" "7、xxx" "1) xxx"（但允许"第一天""第一次"这种时间词）
+    // 6. 数字编号开头："8. xxx" "7、xxx" "1) xxx"（但允许"第一天""第一次"这种时间词）
     if (/^\d+\s*[\.、\)\）]/.test(s)) return true;
-    // 6. JSON 片段残留：值本身就是 {"time":""} 这种
+    // 7. JSON 片段残留：值本身就是 {"time":""} 这种
     if (/^\s*\{['"]?\w+['"]?\s*:/.test(s)) return true;
     if (/^\d+\s*[\.、]\s*\{/.test(s)) return true;
-    // 7. 纯标点 / 纯数字 / 纯符号
+    // 8. 纯标点 / 纯数字 / 纯符号
     if (/^[\d\s\{\}\[\]"'\.\,\;\:\|｜\-–—•·]+$/.test(s)) return true;
-    // 8. 元指令残留
+    // 9. 元指令残留
     if (/(只输出|不要任何|markdown|代码块|格式如下|输出格式|输出应该|注意：输出)/.test(s)) return true;
     return false;
   }

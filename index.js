@@ -1831,10 +1831,10 @@ ${recent}
     function isJunkText(v) {
       const s = String(v == null ? "" : v).trim();
       if (!s) return false;
+      if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将|好的[，,。！]|当然[，,]|明白[，,]|没问题[，,]|以下是|下面是|这是为您|根据要求|综上|以上是)/.test(s)) return true;
       if (s.length > 60) return false;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s)) return true;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s：:]/i.test(s)) return true;
-      if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将)/.test(s)) return true;
       if (s.length < 30 && /(未提及|未填写|可能还需要|建议考虑|需进一步|有待补充|待补充|暂无|占位|示例|示例如下|不确定|不清楚|不知道)/.test(s)) return true;
       if (/^第[一二三四五六七八九十百]+段/.test(s)) return true;
       if (/^\d+\s*[\.、\)\）]/.test(s)) return true;
