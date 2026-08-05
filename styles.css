@@ -664,8 +664,8 @@
   max-height: none !important;
   min-height: 0 !important;
   transform: none !important;
-  /* 纯深色半透遮罩，刻意不要 backdrop-filter：毛玻璃会让弹窗文字在移动端发糊 */
-  background: rgba(15, 15, 13, 0.6);
+  /* 深色半透遮罩（降低不透明度，避免"暗化=糊"的观感） */
+  background: rgba(15, 15, 13, 0.4);
   z-index: 100001 !important;
   display: flex !important;
   align-items: center;
@@ -715,6 +715,9 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
   font-size: 14px;
+  font-family: var(--wm-font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 .wm-modal-body::-webkit-scrollbar { display: none; }
 .wm-modal-foot {
@@ -731,8 +734,8 @@
 .wm-field > label {
   display: block;
   font-family: var(--wm-font-ui);
-  font-size: 13px;
-  color: #4a4a44;
+  font-size: 14px;
+  color: #1a1a17;
   margin-bottom: 5px;
   font-weight: 600;
 }
