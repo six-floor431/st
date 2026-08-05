@@ -118,8 +118,8 @@
   function taggedSummary(out) {
     const { ok, data } = parseJSON(out);
     if (ok && data && typeof data === 'object') {
-      // 兼容字段名差异：text / summary / content（json_object 模式下模型偶用别的键）
-      const raw = (data.text != null ? data.text : (data.summary != null ? data.summary : (data.content != null ? data.content : '')));
+      // 兼容字段名差异：text / summary / content + 中文 正文/总结/叙事（json_object 模式下模型偶用别的键）
+      const raw = (data.text != null ? data.text : (data.summary != null ? data.summary : (data.content != null ? data.content : (data['正文'] != null ? data['正文'] : (data['总结'] != null ? data['总结'] : (data['叙事'] != null ? data['叙事'] : ''))))));
       if (raw != null && String(raw).trim()) {
         const text = cleanSummaryText(String(raw));
         // summary 卫生检查：不能太短、不能是 LLM 前言/元指令
@@ -136,23 +136,62 @@
   function taggedItems(out)    { return out != null ? String(out) : ''; }
   function taggedWorld(out)    { return out != null ? String(out) : ''; }
 
-  // ── 通用 JSON 解析（v8 精简版）：容忍 ```json 围栏、前后噪声、尾部截断 ──
+  // ── 通用 JSON 预处理（v11）：把 LLM 输出归一成 JSON.parse 能吃的标准形态 ──
+  // 专治 DeepSeek / 国产模型四类高频结构污染，且【只改字符串外的结构字符，不碰字符串值内部】，
+  //   所以 summary 正文里合法的中文逗号、中文引号、真实换行语义都不会丢（换行会被转义成 \n，语义保留）：
+  //   1. 字符串值内的真实换行/制表 → \\n / \\r / \\t（DeepSeek-chat 臭名昭著：JSON 字符串里直接回车，JSON.parse 立挂）
+  //   2. 结构位置的中文逗号 ， → ,、中文冒号 ： → :（不碰字符串内的中文标点）
+  //   3. 中文/日式引号 “ ” 「 」 → " （只作字符串边界，由标准解析接管）
+  //   4. 尾随逗号 ,]  ,} → 删
+  // 状态机扫描：inStr（是否在字符串内）、esc（上一字符是否为反斜杠）。
+  function normalizeJSONString(raw) {
+    if (raw == null) return '';
+    let s = String(raw);
+    s = s.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '').trim(); // 去围栏
+    let out = '';
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (esc) { out += ch; esc = false; continue; }
+        if (ch === '\\') { out += ch; esc = true; continue; }
+        // 字符串值内的真实换行/制表 → 转义序列（保留语义，不破坏 JSON 结构）
+        if (ch === '\n') { out += '\\n'; continue; }
+        if (ch === '\r') { out += '\\r'; continue; }
+        if (ch === '\t') { out += '\\t'; continue; }
+        // 字符串结束：标准双引号或中文闭引号 ” 」
+        if (ch === '"' || ch === '\u201D' || ch === '」') { out += '"'; inStr = false; continue; }
+        out += ch;
+      } else {
+        // 结构位置：字符串开始认 标准双引号 / 中文开引号 “ / 日式 「
+        if (ch === '"' || ch === '\u201C' || ch === '「') { out += '"'; inStr = true; continue; }
+        if (ch === '，') { out += ','; continue; }
+        if (ch === '：') { out += ':'; continue; }
+        out += ch;
+      }
+    }
+    // 尾随逗号清理：,]  ,}  , 空格]
+    out = out.replace(/,(\s*[}\]])/g, '$1');
+    return out;
+  }
+
+  // ── 通用 JSON 解析（v11）：normalizeJSONString 预处理 + 前后噪声截取 + 尾部残缺修复 ──
   // 返回 { ok, data }；只做结构校验（能 JSON.parse 且非 null），内容质量交给 isJunkText 在 parse 阶段拦截。
   // 旧的 _sanityCheck / _isJunkObject / _isDirtyValue 三层内容校验已删除——与 isJunkText 职责重叠，
   //   且在 parseJSON 层做内容校验会导致"一个坏元素害死整个数组"。
   function parseJSON(raw) {
     if (raw == null) return { ok: false, data: null };
-    let s = String(raw).trim();
-    s = s.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '').trim(); // 去围栏
-    const start = s.search(/[[{]/);
-    const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+    const normalized = normalizeJSONString(raw);
+    const start = normalized.search(/[[{]/);
+    const end = Math.max(normalized.lastIndexOf('}'), normalized.lastIndexOf(']'));
     if (start === -1) return { ok: false, data: null };
-    s = end >= start ? s.slice(start, end + 1) : s.slice(start);
+    let s = end >= start ? normalized.slice(start, end + 1) : normalized.slice(start);
     try {
       const data = JSON.parse(s);
       return data == null ? { ok: false, data: null } : { ok: true, data };
     } catch (e) {
-      // 尝试修复尾部残缺（模型常截断在字符串中途、缺闭合引号/括号）
+      // 尾部残缺修复（模型常截断在字符串中途、缺闭合引号/括号）
       const fixes = [s + '"', s + '"}', s + ']', s + '}]', s.replace(/,\s*$/, '') + '}', s.replace(/,\s*$/, '') + '"}', s + '}'];
       for (const f of fixes) {
         try {
@@ -325,15 +364,16 @@
     const { ok, data } = parseJSON(out);
     if (!ok) return [];
     // 兼容 json_object 模式被迫输出 {"relations":[...]} 的情况
-    const list = extractArray(data, ['relations', 'relation', 'edges', 'links', 'data']);
+    const list = extractArray(data, ['relations', 'relation', 'edges', 'links', 'data', '关系', '关系列表', '关系图']);
     // label 必须是明确关系词（2-6字短词），不能含推测/句子性词
     const LABEL_BAD = /(可能|也许|或许|大概|似乎|好像|感觉|推测|应该|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
     return list
       .filter((r) => r && typeof r === 'object')
       .map((r) => ({
-        from: String(r.from || '').trim().slice(0, 8),
-        to: String(r.to || '').trim().slice(0, 8),
-        label: String(r.label || '').trim().slice(0, 10),
+        // 字段名容错：LLM 偶用 source/target/relation 等英文别名，国产模型偶用中文键（从/到/关系）
+        from: String(r.from || r.source || r.subject || r.a || r['从'] || r['甲方'] || '').trim().slice(0, 8),
+        to: String(r.to || r.target || r.object || r.b || r['到'] || r['乙方'] || '').trim().slice(0, 8),
+        label: String(r.label || r.relation || r.rel || r.type || r['关系'] || r['关系类型'] || '').trim().slice(0, 10),
       }))
       .filter((r) => {
         if (!r.from || !r.to || !r.label) return false;
@@ -352,14 +392,15 @@
     const { ok, data } = parseJSON(out);
     if (!ok) return [];
     // 兼容 json_object 模式被迫输出 {"plots":[...]} 的情况
-    const list = extractArray(data, ['plots', 'plot', 'events', 'story', 'data']);
+    const list = extractArray(data, ['plots', 'plot', 'events', 'story', 'data', '剧情', '剧情线', '事件']);
     return list
       .filter((p) => p && typeof p === 'object')
       .map((p) => ({
-        time: String(p.time || '').trim().slice(0, 20),
+        // 字段名容错：英文别名 when/name/content + 中文键 时间/标题/摘要
+        time: String(p.time || p.when || p.time_point || p['时间'] || p['时间点'] || '').trim().slice(0, 20),
         // 末尾断句符先去掉（LLM 常给标题加尾标点）；内部仍含则由 filter 判为句子丢弃
-        title: String(p.title || '').trim().replace(/[。！？!?\n]+$/g, '').trim().slice(0, 12),
-        summary: String(p.summary || '').trim().slice(0, 80),
+        title: String(p.title || p.name || p.event || p['标题'] || p['名称'] || p['事件'] || '').trim().replace(/[。！？!?\n]+$/g, '').trim().slice(0, 12),
+        summary: String(p.summary || p.content || p.desc || p.description || p['摘要'] || p['内容'] || p['描述'] || '').trim().slice(0, 80),
       }))
       .filter((p) => {
         if (!p.title) return false;                    // title 必填
@@ -389,16 +430,16 @@
     const { ok, data } = parseJSON(out);
     if (!ok) return [];
     // 兼容 json_object 模式被迫输出 {"items":[...]} 的情况
-    const items = extractArray(data, ['items', 'item', 'objects', 'inventory', 'data'])
+    const items = extractArray(data, ['items', 'item', 'objects', 'inventory', 'data', '物品', '物品列表', '道具'])
       .filter((it) => it && typeof it === 'object')
       .map((it) => {
-        // 末尾的句号/感叹号/问号去掉再判断（LLM 常给标题加尾标点，整条丢太可惜）；
-        //   若去掉尾标点后内部仍含这些断句符，filter 阶段会判定为"是句子不是标题"再丢。
-        let name = String(it.name || '').trim().replace(/[。！？!?\n]+$/g, '').trim();
-        let desc = String(it.desc || '').trim();
-        let owner = String(it.owner || '').trim();
-        let origin = String(it.origin || '').trim();
-        let relText = String(it.related || it.relatedPlotText || '').trim();
+        // 字段名容错：英文别名 item/description/holder + 中文键 名字/描述/持有者/来历
+        // 末尾断句符先去掉（LLM 常给标题加尾标点）；内部仍含则由 filter 判为句子丢弃
+        let name = String(it.name || it.item || it.item_name || it['名字'] || it['名称'] || it['物品'] || '').trim().replace(/[。！？!?\n]+$/g, '').trim();
+        let desc = String(it.desc || it.description || it.effect || it['描述'] || it['作用'] || it['说明'] || '').trim();
+        let owner = String(it.owner || it.holder || it.belong || it.belong_to || it['持有者'] || it['归属'] || it['主人'] || '').trim();
+        let origin = String(it.origin || it.source || it.from || it['来历'] || it['来源'] || it['出处'] || '').trim();
+        let relText = String(it.related || it.relatedPlotText || it.related_plot || it.plot || it['关联'] || it['关联剧情'] || it['相关剧情'] || '').trim();
         // 选填字段脏则清空，不整条丢
         if (isJunkText(desc)) desc = '';
         if (isJunkText(owner) || /^(未知|持有者[:：].*)$/.test(owner)) owner = '';
@@ -423,18 +464,19 @@
   function parseWorld(out) {
     const { ok, data } = parseJSON(out);
     if (!ok || !data || typeof data !== 'object') return { name: '', type: '', desc: '', rules: [] };
-    const rules = Array.isArray(data.rules) ? data.rules
+    // rules 候选键加中文：设定 / 规则
+    const rules = extractArray(data, ['rules', '设定', '规则', 'world_rules'])
       .filter((r) => r && typeof r === 'object')
-      .map((r) => ({ title: String(r.title || '').trim().slice(0, 20), content: String(r.content || '').trim().slice(0, 60) }))
+      .map((r) => ({ title: String(r.title || r['标题'] || '').trim().slice(0, 20), content: String(r.content || r['内容'] || '').trim().slice(0, 60) }))
       .filter((r) => {
         if (!r.title || !r.content) return false;
         if (isJunkText(r.title) || isJunkText(r.content)) return false;
         return true;
       })
-      .slice(0, 6) : [];
-    const name = isJunkText(data.name) ? '' : String(data.name || '').trim().slice(0, 30);
-    const type = isJunkText(data.type) ? '' : String(data.type || '').trim().slice(0, 20);
-    const desc = isJunkText(data.desc) ? '' : String(data.desc || '').trim().slice(0, 80);
+      .slice(0, 6);
+    const name = isJunkText(data.name) ? '' : String(data.name || data['世界名'] || '').trim().slice(0, 30);
+    const type = isJunkText(data.type) ? '' : String(data.type || data['类型'] || '').trim().slice(0, 20);
+    const desc = isJunkText(data.desc) ? '' : String(data.desc || data['简述'] || data['描述'] || '').trim().slice(0, 80);
     return { name, type, desc, rules };
   }
 
