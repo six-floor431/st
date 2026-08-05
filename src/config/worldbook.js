@@ -294,9 +294,16 @@ ${recentText || recentRaw || '（无）'}
 ${known || prev || '（无）'}
 ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction + '\n' : ''}请按规定格式输出世界设定：`;
     if (!WM.Summary || !WM.Summary.callLLM) return prev;
-    const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
-    const extracted = WM.Summary.taggedWorld ? WM.Summary.taggedWorld(out) : out;
-    return extracted && extracted.trim() ? extracted.trim() : prev;
+    const out = await WM.Summary.callLLM(sys, userMsg + '\n只输出 JSON，不要任何解释。', settings, { temperature: 0.4 });
+    const parsed = WM.Summary.parseWorld ? WM.Summary.parseWorld(out) : null;
+    if (!parsed || (!parsed.name && !parsed.type && !parsed.desc && !parsed.rules.length)) return prev;
+    // 渲染成存储文本格式（与既有 worldbook 渲染器兼容）
+    const lines = [];
+    if (parsed.name) lines.push('世界名：' + parsed.name);
+    if (parsed.type) lines.push('世界类型：' + parsed.type);
+    if (parsed.desc) lines.push('简述：' + parsed.desc);
+    for (const r of parsed.rules) lines.push('■' + r.title + '｜' + r.content);
+    return lines.join('\n');
   }
 
   const DEFAULT_WORLDVIEW_PROMPT = `你是世界观提炼者。请基于【剧情线】【最近对话】，提炼这个世界本身的「底层规则设定」。

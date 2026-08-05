@@ -145,11 +145,52 @@
   }
 
   // 便捷封装：每个阶段对应一个标签名
-  function taggedSummary(out) { return cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY')); }
+  function taggedSummary(out) {
+    // 优先 JSON：{"text":"..."}
+    const { ok, data } = parseJSON(out);
+    if (ok && data && typeof data === 'object' && data.text != null) {
+      return cleanSummaryText(String(data.text));
+    }
+    // 回退：旧式 <<<SUMMARY_START>>> 标签
+    return cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY'));
+  }
   function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
-  function taggedPlot(out) { return cleanPlotText(extractTagged(out, 'PLOT', 'PLOT')); }
-  function taggedWorld(out) { return extractTagged(out, 'WORLD', 'WORLD'); }
-  function taggedItems(out) { return extractTagged(out, 'ITEMS', 'ITEMS'); }
+  function taggedPlot(out) { return out; } // plot 现为 JSON 数组，交由 parsePlots 解析
+  function taggedWorld(out) { return out; } // worldview 现为 JSON，交由 parseWorld 解析
+  function taggedItems(out) { return out; } // items 现为 JSON 数组，交由 parseItems 解析
+
+  // ── 通用 JSON 解析：容忍模型加的 ```json 围栏、前后噪声、截断 ──
+  // 返回 { ok, data }；解析失败 ok=false, data=null
+  function parseJSON(raw) {
+    if (raw == null) return { ok: false, data: null };
+    let s = String(raw).trim();
+    // 去 ```json / ``` 围栏
+    s = s.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '').trim();
+    // 截取第一个 { 或 [ 到最后一个 } 或 ]
+    const start = s.search(/[[{]/);
+    const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'));
+    if (start === -1) return { ok: false, data: null };
+    s = end >= start ? s.slice(start, end + 1) : s.slice(start); // 无闭合括号时取从 start 到末尾，后续尝试补闭合
+    try {
+      const data = JSON.parse(s);
+      return { ok: true, data };
+    } catch (e) {
+      // 尝试修复尾部残缺（模型常截断在字符串中途、缺闭合引号/括号）
+      const fixes = [
+        s + '"',                         // 补字符串闭合引号
+        s + '"}',                        // 补 引号+对象闭合
+        s + ']',                         // 补数组闭合
+        s + '}]',                        // 补对象+数组闭合
+        s.replace(/,\s*$/, '') + '}',    // 去尾逗号再补 }
+        s.replace(/,\s*$/, '') + '"}',
+        s + '}',                         // 补对象闭合
+      ];
+      for (const f of fixes) {
+        try { return { ok: true, data: JSON.parse(f) }; } catch (e2) {}
+      }
+      return { ok: false, data: null };
+    }
+  }
 
   // 取得最近 N 条原始对话（用于总结）
   function getRecentMessages(n) {
@@ -293,30 +334,47 @@
     return { range, recent, total };
   }
 
-  // ── 关系解析：把 LLM 输出的关系文本解析为三元组数组（带分析句过滤） ──
+  // ── 关系解析：优先 JSON，强制 Schema 校验（from/to/label 必填，长度上限） ──
   function parseRelations(out) {
-    let parsed = [];
-    try {
-      const arr = JSON.parse(out);
-      if (Array.isArray(arr)) parsed = arr;
-    } catch (e) {
-      const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
-      parsed = out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-        const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-        if (!m) return null;
-        const from = m[1].trim(), to = m[2].trim(), label = (m[3] || '').trim();
-        if (!from || !to || !label) return null;
-        if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
-        if (label.length > 10) return null;
-        if (from.length > 8 || to.length > 8) return null;
-        return { from, to, label };
-      }).filter(Boolean);
+    const { ok, data } = parseJSON(out);
+    if (ok && Array.isArray(data)) {
+      return data
+        .filter((r) => r && typeof r === 'object')
+        .map((r) => ({
+          from: String(r.from || '').trim(),
+          to: String(r.to || '').trim(),
+          label: String(r.label || '').trim(),
+        }))
+        .filter((r) => r.from && r.to && r.label && r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8);
     }
-    return parsed;
+    // 回退：旧式「A → B：关系」文本
+    const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
+    return out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+      const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+      if (!m) return null;
+      const from = m[1].trim(), to = m[2].trim(), label = (m[3] || '').trim();
+      if (!from || !to || !label) return null;
+      if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
+      if (label.length > 10) return null;
+      if (from.length > 8 || to.length > 8) return null;
+      return { from, to, label };
+    }).filter(Boolean);
   }
 
-  // ── 剧情线解析：把 LLM 输出的剧情文本解析为事件数组（无状态列） ──
+  // ── 剧情线解析：优先 JSON 数组，强制 Schema 校验（title 必填，字段长度上限） ──
   function parsePlots(out) {
+    const { ok, data } = parseJSON(out);
+    if (ok && Array.isArray(data)) {
+      return data
+        .filter((p) => p && typeof p === 'object')
+        .map((p) => ({
+          time: String(p.time || '').slice(0, 20).trim(),
+          title: String(p.title || '').slice(0, 12).trim(),
+          summary: String(p.summary || '').slice(0, 80).trim(),
+        }))
+        .filter((p) => p.title);
+    }
+    // 回退：旧式「时间｜标题｜事件」文本
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
       .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
     const result = [];
@@ -331,17 +389,28 @@
         title = parts[0]; summary = parts[1];
       } else { title = parts[0]; }
       if (!title) continue;
-      result.push({ time, title, summary });
+      result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
     }
     return result;
   }
 
-  // ── 物品解析：把 LLM 输出的物品文本解析为结构化数组 ──
-  // 鲁棒处理两类异常：
-  //   1) 正常：每行 "物品名｜作用｜持有者｜关联剧情｜来历"（单｜或多｜分隔）
-  //   2) 退化：模型没用｜分隔，而是 "物品名：作用说明……"（冒号连写）——此时取冒号前为纯名称，
-  //      冒号后整体塞进「作用」，避免整段描述被错误地塞进「名称」字段导致名称爆炸。
+  // ── 物品解析：优先 JSON 数组，强制 Schema 校验 + 字段截断 ──
   function parseItems(out) {
+    const { ok, data } = parseJSON(out);
+    if (ok && Array.isArray(data)) {
+      const items = data
+        .filter((it) => it && typeof it === 'object')
+        .map((it) => ({
+          name: String(it.name || '').trim(),
+          desc: String(it.desc || '').trim(),
+          owner: String(it.owner || '').trim(),
+          relatedPlotText: String(it.related || it.relatedPlotText || '').trim(),
+          origin: String(it.origin || '').trim(),
+        }))
+        .filter((it) => it.name);
+      return truncateItemFields(items);
+    }
+    // 回退：旧式「物品名｜作用｜持有者｜关联剧情｜来历」文本
     const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
       .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
     const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
@@ -351,19 +420,17 @@
       const parts = ln.split(/[｜|]/).map((x) => x.trim());
       let name = '', desc = '', owner = '', rel = '', origin = '';
       if (parts.length >= 2) {
-        // 正常分隔格式
         name = parts[0];
         desc = parts[1] || '';
         owner = parts[2] || '';
         rel = parts[3] || '';
         origin = parts[4] || '';
       } else {
-        // 退化格式：尝试用冒号拆 "名称：描述"
         const m = ln.match(/^([^：:]{1,20})[：:]\s*([\s\S]*)$/);
         if (m) { name = m[1].trim(); desc = m[2].trim(); }
-        else { name = ln; } // 实在无结构，至少名称=整行（避免空）
+        else { name = ln; }
       }
-      name = (name || '').replace(/\s*[：:].*$/, '').trim(); // 名称里若残留冒号说明，截断只留名字
+      name = (name || '').replace(/\s*[：:].*$/, '').trim();
       if (!name) continue;
       result.push({
         name,
@@ -373,7 +440,42 @@
         origin: blank(origin) ? '' : origin,
       });
     }
-    return truncateItemFields(result); // 强制字段长度上限，防止模型把整段叙事塞进字段
+    return truncateItemFields(result);
+  }
+
+  // ── 世界观解析：优先 JSON，强制 Schema 校验 ──
+  function parseWorld(out) {
+    const { ok, data } = parseJSON(out);
+    if (ok && data && typeof data === 'object') {
+      const rules = Array.isArray(data.rules) ? data.rules
+        .filter((r) => r && typeof r === 'object')
+        .map((r) => ({ title: String(r.title || '').slice(0, 20).trim(), content: String(r.content || '').slice(0, 60).trim() }))
+        .filter((r) => r.title && r.content)
+        : [];
+      return {
+        name: String(data.name || '').slice(0, 30).trim(),
+        type: String(data.type || '').slice(0, 20).trim(),
+        desc: String(data.desc || '').slice(0, 80).trim(),
+        rules: rules.slice(0, 6),
+      };
+    }
+    // 回退：旧式「■标题｜内容」文本
+    const text = out.replace(/<<<\s*[A-Z_]+\s*>>>/g, '').trim();
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const meta = { name: '', type: '', desc: '' };
+    const rules = [];
+    for (const ln of lines) {
+      const m = ln.match(/^■\s*(.+?)\s*[｜|]\s*(.+)$/);
+      if (m) { rules.push({ title: m[1].trim().slice(0, 20), content: m[2].trim().slice(0, 60) }); continue; }
+      const kv = ln.match(/^(世界名|世界类型|简述|名称|类型|描述)[:：]\s*(.+)$/);
+      if (kv) {
+        const k = kv[1];
+        if (k.includes('名')) meta.name = kv[2].trim().slice(0, 30);
+        else if (k.includes('类型')) meta.type = kv[2].trim().slice(0, 20);
+        else if (k.includes('简述') || k.includes('描述')) meta.desc = kv[2].trim().slice(0, 80);
+      }
+    }
+    return { name: meta.name, type: meta.type, desc: meta.desc, rules: rules.slice(0, 6) };
   }
 
   // 触发一次「纯记忆」总结（只跑 summary + 世界观 + 物品，不再顺带跑关系/剧情）
@@ -399,7 +501,7 @@
       const summaryTpl = settings.prompts && settings.prompts.summary;
       const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       try {
-        const rawSummary = await callLLM(sys, '直接按 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> 格式输出叙事正文，不要任何额外说明。', settings, { temperature: 0.3, phase: 'summary' });
+        const rawSummary = await callLLM(sys, '只输出 JSON 格式的 {"text":"..."}，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'summary' });
         const summaryText = taggedSummary(rawSummary);
         await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
         await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -458,7 +560,7 @@
           const knownPlots = (WM.MemoryStore.getPlots() || [])
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
+          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
           const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
@@ -565,7 +667,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.relations;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-          const out = await callLLM(s, '请输出角色之间的关系（每行 人物A → 人物B：关系）：', settings, { temperature: 0.3, phase: 'relations' });
+          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'relations' });
           const parsed = parseRelations(taggedRelations(out));
           const prev = WM.MemoryStore.getRelations() || [];
           const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
@@ -580,7 +682,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-          const out = await callLLM(s, '只输出【最近对话】里本段新发生、推动剧情的事件（每行 时间｜标题｜事件叙述）；没有新事件就只写 <<<PLOT_START>>> 和 <<<PLOT_END>>> 中间留空，严禁回显已有剧情线。', settings, { temperature: 0.4, phase: 'plot' });
+          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。没有新事件就输出空数组 []。', settings, { temperature: 0.4, phase: 'plot' });
           const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
           // 归一化 key：用于跨次去重，避免模型偶尔回显旧事件时产生重复条目
@@ -611,7 +713,7 @@
           const knownPlots = (WM.MemoryStore.getPlots() || [])
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
+          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
           const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
@@ -699,7 +801,7 @@
       historySummary: '',
     });
     try {
-      const rawBig = await callLLM(sys, '把以上多段内容整合成一段连贯叙事，直接按 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> 格式输出，不要任何额外说明。', settings, { temperature: 0.3, phase: 'summary' });
+      const rawBig = await callLLM(sys, '只输出 JSON 格式的 {"text":"..."}，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'summary' });
       const text = taggedSummary(rawBig);
       await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
       return { ok: true, count: recentSmalls.length };
@@ -710,6 +812,6 @@
   }
 
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
-    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems,
+    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems, parseWorld, parseJSON,
     sanitizeLLMText, cleanSummaryText, cleanPlotText, truncateItemFields };
 })();

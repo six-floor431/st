@@ -140,11 +140,11 @@
         //   只提取【已登场角色】直接相关、且对剧情/关系/设定/物品有实际作用的内容；
         //   丢弃与角色无关的闲笔、环境描写、心理分析、抽象气氛标签。
         //   严格只基于【对话原文】已发生的事实，禁止编造、禁止评价、禁止渲染。
-        summary: "\u628A\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u5199\u6210\u4E00\u6BB5\u53D9\u4E8B\uFF082-5\u4E2A\u81EA\u7136\u6BB5\u6563\u6587\uFF09\u3002\u53EA\u5199\u52A8\u4F5C\u548C\u4E8B\u4EF6\uFF0C\u5BF9\u8BDD\u6700\u591A\u7559\u4E00\u53E5\u5173\u952E\u53F0\u8BCD\u3002\u4E0D\u5206\u6790\u5FC3\u7406\u3001\u4E0D\u6E32\u67D3\u6C14\u6C1B\u3001\u4E0D\u94FA\u9648\u666F\u7269\u3002\n\n<<<SUMMARY_START>>>\n\u9EC4\u660F\u56FE\u4E66\u9986\uFF0C\u6797\u6E05\u7384\u7FFB\u5230\u501F\u4E66\u5361\u80CC\u9762\u7684\u540D\u5B57\uFF0C\u6307\u5C16\u505C\u4F4F\u3002\u6E29\u5982\u7389\u628A\u5976\u8336\u5F80\u684C\u4E0A\u4E00\u6401\uFF0C\u8BF4\u4E86\u4E00\u53E5\u4EC0\u4E48\uFF0C\u4E24\u4EBA\u4FBF\u518D\u6CA1\u5F00\u53E3\u3002\n<<<SUMMARY_END>>>\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        relations: "\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u4E24\u4E2A\u89D2\u8272\u4E4B\u95F4\u7684\u76F4\u63A5\u5173\u7CFB\uFF0C\u6BCF\u884C\u4E00\u6761\u3002\n\n<<<RELATIONS_START>>>\n\u5C0F\u660E \u2192 \u5C0F\u7EA2\uFF1A\u604B\u4EBA\n\u5C0F\u7EA2 \u2192 \u5C0F\u521A\uFF1A\u654C\u5BF9\n<<<RELATIONS_END>>>\n\n\u5173\u7CFB\u8BCD\u75282-6\u5B57\u5BA2\u89C2\u6807\u7B7E\uFF08\u604B\u4EBA/\u5E08\u5F92/\u654C\u5BF9/\u4E3B\u4EC6/\u540C\u4F34\uFF09\u3002\u65E0\u4E92\u52A8\u5219\u4E0D\u5199\u3002\u6700\u591A8\u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        plot: "\u4ECE\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\uFF0C\u6BCF\u884C\u4E00\u6761\u3002\u5DF2\u6709\u5267\u60C5\u7EBF\u4EC5\u4F9B\u53C2\u8003\u3001\u4E0D\u8981\u91CD\u590D\u5B83\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u7559\u7A7A\u6807\u7B7E\u3002\u6700\u591A8\u6761\u3002\n\n<<<PLOT_START>>>\n\u7B2C\u4E09\u65E5\u6E05\u6668\uFF5C\u96E8\u591C\u7684\u544A\u767D\uFF5C\u5C0F\u660E\u628A\u661F\u7A7A\u753B\u518C\u9012\u7ED9\u5C0F\u7EA2\uFF0C\u8BF4\u300C\u8FD9\u672C\u8BE5\u548C\u4F60\u4E00\u8D77\u770B\u300D\n<<<PLOT_END>>>\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        worldview: "\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u7684\u901A\u7528\u89C4\u5219\uFF0C\u6BCF\u884C\u4E00\u6761\u8BBE\u5B9A\u3002\n\n<<<WORLD_START>>>\n\u4E16\u754C\u540D\uFF1A\u9752\u4E91\u754C\n\u4E16\u754C\u7C7B\u578B\uFF1A\u4FEE\u4ED9\u4E16\u754C\n\u7B80\u8FF0\uFF1A\u4EE5\u7075\u6C14\u4FEE\u70BC\u4E3A\u6838\u5FC3\uFF0C\u5B97\u95E8\u6797\u7ACB\uFF0C\u5F31\u8089\u5F3A\u98DF\n\u25A0\u7075\u6C14\u8FD0\u884C\u6CD5\u5219\uFF5C\u7075\u6C14\u81EA\u5B50\u591C\u6700\u5145\u76C8\uFF0C\u4FEE\u8005\u9700\u6B64\u65F6\u5410\u7EB3\n\u25A0\u5B97\u95E8\u7B49\u7EA7\uFF5C\u5F1F\u5B50\u3001\u957F\u8001\u3001\u5B97\u4E3B\u4E09\u7EA7\uFF0C\u6309\u4FEE\u4E3A\u8BBA\u8D44\u6392\u8F88\n<<<WORLD_END>>>\n\n\u5199\u4E16\u754C\u672C\u8EAB\u7684\u89C4\u5F8B\uFF0C\u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\u30023-6\u6761\u3002\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}",
-        itemExtract: "\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\uFF0C\u6BCF\u884C\u4E00\u6761\u3002\n\n<<<ITEMS_START>>>\n\u6346\u4ED9\u7EF3\uFF5C\u675F\u7F1A\u7075\u529B\u3001\u9650\u5236\u884C\u52A8\uFF5C\u6843\u592D\uFF08\u7CFB\u5728\u8155\u4E0A\uFF09\uFF5C\u96E8\u591C\u7684\u544A\u767D\uFF5C\u5E08\u5C0A\u6240\u8D50\n\u5E08\u5C0A\u9752\u7389\u5370\u4FE1\uFF5C\u5B97\u95E8\u6743\u9650\u4FE1\u7269\uFF5C\u6797\u664F\uFF5C\u65E0\uFF5C\u4F20\u627F\u4FE1\u7269\n<<<ITEMS_END>>>\n\n\u4E94\u4E2A\u5B57\u6BB5\u7528\uFF5C\u5206\u9694\uFF1A\u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\u3002\u7269\u54C1\u540D\u53EA\u5199\u540D\u5B57\uFF0C\u4F5C\u7528\u4E00\u53E5\u8BDD\u3002\u6700\u591A8\u6761\u3002\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
+        summary: '\u628A\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u538B\u7F29\u6210\u4E00\u6BB5\u53D9\u4E8B\uFF0C\u53EA\u5199\u52A8\u4F5C\u548C\u4E8B\u4EF6\uFF0C\u5BF9\u8BDD\u6700\u591A\u7559\u4E00\u53E5\u5173\u952E\u53F0\u8BCD\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n{"text":"\uFF082-5\u4E2A\u81EA\u7136\u6BB5\u7684\u6563\u6587\u53D9\u4E8B\uFF0C\u7EAF\u52A8\u4F5C\u4E0E\u4E8B\u4EF6\uFF0C\u4E0D\u5206\u6790\u5FC3\u7406\u4E0D\u6E32\u67D3\u6C14\u6C1B\uFF09"}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        relations: '\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u4E24\u4E2A\u5DF2\u767B\u573A\u89D2\u8272\u4E4B\u95F4\u7684\u76F4\u63A5\u5173\u7CFB\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"from":"\u89D2\u8272A","to":"\u89D2\u8272B","label":"\u5173\u7CFB\u8BCD(2-6\u5B57)"}]\n\u65E0\u4E92\u52A8\u5219\u4E0D\u5199\u3002\u6700\u591A8\u6761\u3002\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        plot: '\u4ECE\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\u3002\u5DF2\u6709\u5267\u60C5\u7EBF\u4EC5\u4F9B\u53C2\u8003\u3001\u4E0D\u8981\u91CD\u590D\u5B83\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4\u3002\u6700\u591A8\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"time":"\u5267\u60C5\u65F6\u95F4\u70B9(\u672A\u63D0\u53CA\u5199\u7A7A\u4E32)","title":"\u4E0D\u8D85\u8FC712\u5B57\u7684\u77ED\u6807\u9898","summary":"1-2\u53E5\u5BA2\u89C2\u4E8B\u4EF6\u63CF\u8FF0(\u4EBA\u7269+\u52A8\u4F5C+\u573A\u666F)"}]\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        worldview: '\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u7684\u901A\u7528\u89C4\u5219\uFF08\u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\uFF09\u30023-6\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n{"name":"\u4E16\u754C\u540D","type":"\u4E16\u754C\u7C7B\u578B","desc":"1-2\u53E5\u7B80\u8FF0","rules":[{"title":"\u8BBE\u5B9A\u6807\u9898","content":"\u8BBE\u5B9A\u5185\u5BB9(\u4E00\u53E5\u8BDD)"}]}\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        itemExtract: '\u4ECE\u5BF9\u8BDD\u4E2D\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\u3002\u6700\u591A8\u6761\u3002\n\u53EA\u8F93\u51FA\u5982\u4E0B JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u6807\u8BB0\uFF1A\n[{"name":"\u7269\u54C1\u540D(\u53EA\u5199\u540D\u5B57)","desc":"\u4F5C\u7528(\u4E00\u53E5\u8BDD\u4E0D\u8D85\u8FC720\u5B57)","owner":"\u5F53\u524D\u6301\u6709\u8005","related":"\u5173\u8054\u5267\u60C5\u6807\u9898(\u65E0\u5219\u7A7A\u4E32)","origin":"\u6765\u5386(\u7B80\u77ED)"}]\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}'
       }
     };
     function load() {
@@ -1730,9 +1730,15 @@ ${recentText || recentRaw || "\uFF08\u65E0\uFF09"}
 ${known || prev || "\uFF08\u65E0\uFF09"}
 ${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.extraInstruction + "\n" : ""}\u8BF7\u6309\u89C4\u5B9A\u683C\u5F0F\u8F93\u51FA\u4E16\u754C\u8BBE\u5B9A\uFF1A`;
       if (!WM.Summary || !WM.Summary.callLLM) return prev;
-      const out = await WM.Summary.callLLM(sys, userMsg, settings, { temperature: 0.4 });
-      const extracted = WM.Summary.taggedWorld ? WM.Summary.taggedWorld(out) : out;
-      return extracted && extracted.trim() ? extracted.trim() : prev;
+      const out = await WM.Summary.callLLM(sys, userMsg + "\n\u53EA\u8F93\u51FA JSON\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3002", settings, { temperature: 0.4 });
+      const parsed = WM.Summary.parseWorld ? WM.Summary.parseWorld(out) : null;
+      if (!parsed || !parsed.name && !parsed.type && !parsed.desc && !parsed.rules.length) return prev;
+      const lines = [];
+      if (parsed.name) lines.push("\u4E16\u754C\u540D\uFF1A" + parsed.name);
+      if (parsed.type) lines.push("\u4E16\u754C\u7C7B\u578B\uFF1A" + parsed.type);
+      if (parsed.desc) lines.push("\u7B80\u8FF0\uFF1A" + parsed.desc);
+      for (const r of parsed.rules) lines.push("\u25A0" + r.title + "\uFF5C" + r.content);
+      return lines.join("\n");
     }
     const DEFAULT_WORLDVIEW_PROMPT = `\u4F60\u662F\u4E16\u754C\u89C2\u63D0\u70BC\u8005\u3002\u8BF7\u57FA\u4E8E\u3010\u5267\u60C5\u7EBF\u3011\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\uFF0C\u63D0\u70BC\u8FD9\u4E2A\u4E16\u754C\u672C\u8EAB\u7684\u300C\u5E95\u5C42\u89C4\u5219\u8BBE\u5B9A\u300D\u3002
 
@@ -1907,19 +1913,59 @@ ${recent}
       }));
     }
     function taggedSummary(out) {
+      const { ok, data } = parseJSON(out);
+      if (ok && data && typeof data === "object" && data.text != null) {
+        return cleanSummaryText(String(data.text));
+      }
       return cleanSummaryText(extractTagged(out, "SUMMARY", "SUMMARY"));
     }
     function taggedRelations(out) {
       return extractTagged(out, "RELATIONS", "RELATIONS");
     }
     function taggedPlot(out) {
-      return cleanPlotText(extractTagged(out, "PLOT", "PLOT"));
+      return out;
     }
     function taggedWorld(out) {
-      return extractTagged(out, "WORLD", "WORLD");
+      return out;
     }
     function taggedItems(out) {
-      return extractTagged(out, "ITEMS", "ITEMS");
+      return out;
+    }
+    function parseJSON(raw) {
+      if (raw == null) return { ok: false, data: null };
+      let s = String(raw).trim();
+      s = s.replace(/^```[a-zA-Z]*\s*/g, "").replace(/```\s*$/g, "").trim();
+      const start = s.search(/[[{]/);
+      const end = Math.max(s.lastIndexOf("}"), s.lastIndexOf("]"));
+      if (start === -1) return { ok: false, data: null };
+      s = end >= start ? s.slice(start, end + 1) : s.slice(start);
+      try {
+        const data = JSON.parse(s);
+        return { ok: true, data };
+      } catch (e) {
+        const fixes = [
+          s + '"',
+          // 补字符串闭合引号
+          s + '"}',
+          // 补 引号+对象闭合
+          s + "]",
+          // 补数组闭合
+          s + "}]",
+          // 补对象+数组闭合
+          s.replace(/,\s*$/, "") + "}",
+          // 去尾逗号再补 }
+          s.replace(/,\s*$/, "") + '"}',
+          s + "}"
+          // 补对象闭合
+        ];
+        for (const f of fixes) {
+          try {
+            return { ok: true, data: JSON.parse(f) };
+          } catch (e2) {
+          }
+        }
+        return { ok: false, data: null };
+      }
     }
     function getRecentMessages(n) {
       try {
@@ -2050,26 +2096,35 @@ ${recent}
       return { range, recent, total };
     }
     function parseRelations(out) {
-      let parsed = [];
-      try {
-        const arr = JSON.parse(out);
-        if (Array.isArray(arr)) parsed = arr;
-      } catch (e) {
-        const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
-        parsed = out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-          const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-          if (!m) return null;
-          const from = m[1].trim(), to = m[2].trim(), label = (m[3] || "").trim();
-          if (!from || !to || !label) return null;
-          if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
-          if (label.length > 10) return null;
-          if (from.length > 8 || to.length > 8) return null;
-          return { from, to, label };
-        }).filter(Boolean);
+      const { ok, data } = parseJSON(out);
+      if (ok && Array.isArray(data)) {
+        return data.filter((r) => r && typeof r === "object").map((r) => ({
+          from: String(r.from || "").trim(),
+          to: String(r.to || "").trim(),
+          label: String(r.label || "").trim()
+        })).filter((r) => r.from && r.to && r.label && r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8);
       }
-      return parsed;
+      const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
+      return out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+        const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
+        if (!m) return null;
+        const from = m[1].trim(), to = m[2].trim(), label = (m[3] || "").trim();
+        if (!from || !to || !label) return null;
+        if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
+        if (label.length > 10) return null;
+        if (from.length > 8 || to.length > 8) return null;
+        return { from, to, label };
+      }).filter(Boolean);
     }
     function parsePlots(out) {
+      const { ok, data } = parseJSON(out);
+      if (ok && Array.isArray(data)) {
+        return data.filter((p) => p && typeof p === "object").map((p) => ({
+          time: String(p.time || "").slice(0, 20).trim(),
+          title: String(p.title || "").slice(0, 12).trim(),
+          summary: String(p.summary || "").slice(0, 80).trim()
+        })).filter((p) => p.title);
+      }
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
       const result = [];
       for (const ln of lines) {
@@ -2087,11 +2142,22 @@ ${recent}
           title = parts[0];
         }
         if (!title) continue;
-        result.push({ time, title, summary });
+        result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
       }
       return result;
     }
     function parseItems(out) {
+      const { ok, data } = parseJSON(out);
+      if (ok && Array.isArray(data)) {
+        const items = data.filter((it) => it && typeof it === "object").map((it) => ({
+          name: String(it.name || "").trim(),
+          desc: String(it.desc || "").trim(),
+          owner: String(it.owner || "").trim(),
+          relatedPlotText: String(it.related || it.relatedPlotText || "").trim(),
+          origin: String(it.origin || "").trim()
+        })).filter((it) => it.name);
+        return truncateItemFields(items);
+      }
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
       const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
       const result = [];
@@ -2126,6 +2192,37 @@ ${recent}
       }
       return truncateItemFields(result);
     }
+    function parseWorld(out) {
+      const { ok, data } = parseJSON(out);
+      if (ok && data && typeof data === "object") {
+        const rules2 = Array.isArray(data.rules) ? data.rules.filter((r) => r && typeof r === "object").map((r) => ({ title: String(r.title || "").slice(0, 20).trim(), content: String(r.content || "").slice(0, 60).trim() })).filter((r) => r.title && r.content) : [];
+        return {
+          name: String(data.name || "").slice(0, 30).trim(),
+          type: String(data.type || "").slice(0, 20).trim(),
+          desc: String(data.desc || "").slice(0, 80).trim(),
+          rules: rules2.slice(0, 6)
+        };
+      }
+      const text = out.replace(/<<<\s*[A-Z_]+\s*>>>/g, "").trim();
+      const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      const meta = { name: "", type: "", desc: "" };
+      const rules = [];
+      for (const ln of lines) {
+        const m = ln.match(/^■\s*(.+?)\s*[｜|]\s*(.+)$/);
+        if (m) {
+          rules.push({ title: m[1].trim().slice(0, 20), content: m[2].trim().slice(0, 60) });
+          continue;
+        }
+        const kv = ln.match(/^(世界名|世界类型|简述|名称|类型|描述)[:：]\s*(.+)$/);
+        if (kv) {
+          const k = kv[1];
+          if (k.includes("\u540D")) meta.name = kv[2].trim().slice(0, 30);
+          else if (k.includes("\u7C7B\u578B")) meta.type = kv[2].trim().slice(0, 20);
+          else if (k.includes("\u7B80\u8FF0") || k.includes("\u63CF\u8FF0")) meta.desc = kv[2].trim().slice(0, 80);
+        }
+      }
+      return { name: meta.name, type: meta.type, desc: meta.desc, rules: rules.slice(0, 6) };
+    }
     async function triggerSummary(settings, opts) {
       opts = opts || {};
       settings = settings || {};
@@ -2150,7 +2247,7 @@ ${recent}
         const summaryTpl = settings.prompts && settings.prompts.summary;
         const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
         try {
-          const rawSummary = await callLLM(sys, "\u76F4\u63A5\u6309 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> \u683C\u5F0F\u8F93\u51FA\u53D9\u4E8B\u6B63\u6587\uFF0C\u4E0D\u8981\u4EFB\u4F55\u989D\u5916\u8BF4\u660E\u3002", settings, { temperature: 0.3, phase: "summary" });
+          const rawSummary = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary" });
           const summaryText = taggedSummary(rawSummary);
           await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
           await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -2201,7 +2298,7 @@ ${recent}
             if (!tpl) return { kind: "items", ok: true, skipped: true };
             const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items" });
             const itemRaw = taggedItems(out);
             const parsedItems = parseItems(itemRaw);
             const allPlots = WM.MemoryStore.getPlots() || [];
@@ -2303,7 +2400,7 @@ ${recent}
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.relations;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u89D2\u8272\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u6BCF\u884C \u4EBA\u7269A \u2192 \u4EBA\u7269B\uFF1A\u5173\u7CFB\uFF09\uFF1A", settings, { temperature: 0.3, phase: "relations" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "relations" });
             const parsed = parseRelations(taggedRelations(out));
             const prev = WM.MemoryStore.getRelations() || [];
             const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
@@ -2316,7 +2413,7 @@ ${recent}
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.plot;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-            const out = await callLLM(s, "\u53EA\u8F93\u51FA\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u91CC\u672C\u6BB5\u65B0\u53D1\u751F\u3001\u63A8\u52A8\u5267\u60C5\u7684\u4E8B\u4EF6\uFF08\u6BCF\u884C \u65F6\u95F4\uFF5C\u6807\u9898\uFF5C\u4E8B\u4EF6\u53D9\u8FF0\uFF09\uFF1B\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u53EA\u5199 <<<PLOT_START>>> \u548C <<<PLOT_END>>> \u4E2D\u95F4\u7559\u7A7A\uFF0C\u4E25\u7981\u56DE\u663E\u5DF2\u6709\u5267\u60C5\u7EBF\u3002", settings, { temperature: 0.4, phase: "plot" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002\u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002", settings, { temperature: 0.4, phase: "plot" });
             const parsed = parsePlots(taggedPlot(out));
             const existing = WM.MemoryStore.getPlots() || [];
             const normKey = (p) => `${(p.time || "").replace(/\s/g, "")}|${(p.title || "").replace(/\s/g, "")}|${(p.summary || "").replace(/\s/g, "")}`;
@@ -2343,7 +2440,7 @@ ${recent}
             if (!tpl) return { kind: "items", ok: true, skipped: true };
             const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-            const out = await callLLM(s, "\u8BF7\u8F93\u51FA\u672C\u6BB5\u51FA\u73B0\u7684\u7269\u54C1\uFF08\u6BCF\u884C \u7269\u54C1\u540D\uFF5C\u4F5C\u7528\uFF5C\u6301\u6709\u8005\uFF5C\u5173\u8054\u5267\u60C5\uFF5C\u6765\u5386\uFF09\uFF1A", settings, { temperature: 0.3, phase: "items" });
+            const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items" });
             const itemRaw = taggedItems(out);
             const parsedItems = parseItems(itemRaw);
             const allPlots = WM.MemoryStore.getPlots() || [];
@@ -2435,7 +2532,7 @@ ${s.text}`).join("\n\n");
         historySummary: ""
       });
       try {
-        const rawBig = await callLLM(sys, "\u628A\u4EE5\u4E0A\u591A\u6BB5\u5185\u5BB9\u6574\u5408\u6210\u4E00\u6BB5\u8FDE\u8D2F\u53D9\u4E8B\uFF0C\u76F4\u63A5\u6309 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> \u683C\u5F0F\u8F93\u51FA\uFF0C\u4E0D\u8981\u4EFB\u4F55\u989D\u5916\u8BF4\u660E\u3002", settings, { temperature: 0.3, phase: "summary" });
+        const rawBig = await callLLM(sys, '\u53EA\u8F93\u51FA JSON \u683C\u5F0F\u7684 {"text":"..."}\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002', settings, { temperature: 0.3, phase: "summary" });
         const text = taggedSummary(rawBig);
         await WM.MemoryStore.addSummary(text, "big", "\u5927\u603B\u7ED3\uFF08\u6574\u5408 " + recentSmalls.length + " \u6BB5\u5C0F\u603B\u7ED3\uFF09");
         return { ok: true, count: recentSmalls.length };
@@ -2464,6 +2561,8 @@ ${s.text}`).join("\n\n");
       parsePlots,
       parseRelations,
       parseItems,
+      parseWorld,
+      parseJSON,
       sanitizeLLMText,
       cleanSummaryText,
       cleanPlotText,
