@@ -80,8 +80,45 @@
     if (ei >= 0) return sanitizeLLMText(s.slice(0, ei));
     return sanitizeLLMText(s); // 无标记：回退全文
   }
+  // ── 总结正文净化：只留叙事散文，剔除模型多输出的一切壳子 ──
+  // 处理场景：markdown 标题、开场白、编号/项目符号列表、结尾的"以上"类收尾句、残留标签、加粗符号。
+  function cleanSummaryText(raw) {
+    if (!raw) return '';
+    let t = String(raw);
+    // 残留标签（含未配对的）
+    t = t.replace(/<<<\s*[A-Z_]+\s*>>>/g, '');
+    // 代码块围栏
+    t = t.replace(/^```[a-z]*\s*$/gim, '');
+    let lines = t.split('\n').map((ln) => {
+      let s = ln.trim();
+      if (!s) return '';
+      // markdown 标题行 / 分隔线
+      if (/^#{1,6}\s*/.test(s)) return '';
+      if (/^(-{3,}|={3,}|\*{3,})$/.test(s)) return '';
+      // 形如 「## 对话总结 ##」「【总结】」的装饰标题
+      if (/^[#＃*【\[]*\s*(总结|摘要|概述|梗概|正文|叙事|片段|记忆|内容)[^\n]{0,6}[#＃*】\]]*$/.test(s)) return '';
+      // 开场白 / 收尾句
+      if (/^(好的|当然|明白|收到|没问题)[，,。！!]?\s*(以下|下面|这是|我来)?/.test(s) && s.length < 40) return '';
+      if (/^(以下|下面)(是|为)[^\n]{0,20}[:：]?$/.test(s)) return '';
+      if (/^(以上|综上)[^\n]{0,30}$/.test(s)) return '';
+      // 编号 / 项目符号列表 → 去掉标记保留内容（保持散文感）
+      s = s.replace(/^\d+\s*[.、)）]\s*/, '');
+      s = s.replace(/^[-*•·]\s+/, '');
+      // 去掉行首的加粗/星号包裹（保留原文，不额外插空格）
+      s = s.replace(/^\*{1,2}([^*\n]+)\*{1,2}/, '$1');
+      return s;
+    });
+    // 去掉首尾空行
+    while (lines.length && !lines[0]) lines.shift();
+    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    t = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    // 去掉全文残留的 markdown 粗体标记（保留文字）
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, '$1');
+    return t;
+  }
+
   // 便捷封装：每个阶段对应一个标签名
-  function taggedSummary(out) { return extractTagged(out, 'SUMMARY', 'SUMMARY'); }
+  function taggedSummary(out) { return cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY')); }
   function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
   function taggedPlot(out) { return extractTagged(out, 'PLOT', 'PLOT'); }
   function taggedWorld(out) { return extractTagged(out, 'WORLD', 'WORLD'); }
@@ -335,7 +372,7 @@
       const summaryTpl = settings.prompts && settings.prompts.summary;
       const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       try {
-        const rawSummary = await callLLM(sys, '请输出这段对话的总结：', settings, { temperature: 0.3, phase: 'summary' });
+        const rawSummary = await callLLM(sys, '直接按 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> 格式输出叙事正文，不要任何额外说明。', settings, { temperature: 0.3, phase: 'summary' });
         const summaryText = taggedSummary(rawSummary);
         await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
         await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -626,7 +663,7 @@
       historySummary: '',
     });
     try {
-      const rawBig = await callLLM(sys, '请将以上多段小总结整合为一份连贯的长期记忆：', settings, { temperature: 0.3, phase: 'summary' });
+      const rawBig = await callLLM(sys, '把以上多段内容整合成一段连贯叙事，直接按 <<<SUMMARY_START>>> / <<<SUMMARY_END>>> 格式输出，不要任何额外说明。', settings, { temperature: 0.3, phase: 'summary' });
       const text = taggedSummary(rawBig);
       await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
       return { ok: true, count: recentSmalls.length };
@@ -638,5 +675,5 @@
 
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
     extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations,
-    sanitizeLLMText };
+    sanitizeLLMText, cleanSummaryText };
 })();
