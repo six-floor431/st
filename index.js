@@ -122,8 +122,8 @@
       // 扩展自带提示词（均可编辑）。保留 {{变量}} 占位符，运行时被真实数据替换：
       //   {{recent}} 最近对话   {{historySummary}} 历史总结   {{relations}} 关系   {{plot}} 剧情线
       // 注：世界观走独立推断函数（inferWorldview），不通过模板占位符注入。
-      promptsVersion: 6,
-      // v6：重构全部提示词——正向契约式输出，移除「禁止XX」反模式与禁词清单（v5 头号污染源），字段长度与解析层逐一校准。低于此版本自动覆盖用户旧提示词。
+      promptsVersion: 7,
+      // v7：强化 JSON 契约（不加前言/不加代码围栏/不加收尾）。低于此版本自动覆盖用户旧提示词。
       prompts: {
         // ═══════════════════════════════════════════
         // 输出契约（v6 统一约定）：
@@ -132,11 +132,11 @@
         //   把禁词明文写进提示词，模型会把禁词本身当输出回显（v5 的主要污染源）。
         //   字段名与长度上限均与 summary.js 的解析层逐一对齐。
         // ═══════════════════════════════════════════
-        summary: '\u4F60\u662F\u8BB0\u5FC6\u8BB0\u5F55\u5668\u3002\u628A\u4E0B\u9762\u8FD9\u6BB5\u6700\u8FD1\u5BF9\u8BDD\u538B\u7F29\u6210\u4E00\u6BB5\u7B2C\u4E09\u4EBA\u79F0\u5BA2\u89C2\u53D9\u4E8B\uFF0C\u4F9B\u540E\u7EED\u5267\u60C5\u53C2\u8003\u3002\n\n\u5199\u6CD5\uFF1A\n- \u53EA\u5199\u5DF2\u53D1\u751F\u7684\u52A8\u4F5C\u3001\u4E8B\u4EF6\u3001\u5BF9\u8BDD\u7ED3\u679C\uFF0C\u4E0D\u5199\u5FC3\u7406\u3001\u4E0D\u6E32\u67D3\u6C14\u6C1B\u3001\u4E0D\u8BC4\u8BBA\u3002\n- \u5BF9\u8BDD\u6700\u591A\u4FDD\u7559\u4E00\u53E5\u6700\u5173\u952E\u7684\u53F0\u8BCD\uFF0C\u5176\u4F59\u7528\u300C\u8C01\u5BF9\u8C01\u8BF4\u4E86\u4EC0\u4E48\u300D\u8F6C\u8FF0\u3002\n- \u4E24\u5230\u4E94\u4E2A\u81EA\u7136\u6BB5\uFF0C\u6BCF\u6BB5\u4E00\u81F3\u56DB\u53E5\uFF0C\u6309\u4E8B\u4EF6\u5148\u540E\u7EC4\u7EC7\u3002\n- \u4E0E\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011\u91CD\u590D\u7684\u5185\u5BB9\u7B80\u7565\u5E26\u8FC7\uFF0C\u7740\u91CD\u5199\u65B0\u8FDB\u5C55\u3002\n- \u6B63\u6587\u53EA\u542B\u53D9\u4E8B\u672C\u8EAB\uFF0C\u4E0D\u542B\u4EFB\u4F55\u5BF9\u53D9\u4E8B\u7684\u8BF4\u660E\u3002\n\n\u4F60\u7684\u5168\u90E8\u8F93\u51FA\u5FC5\u987B\u662F\u4E00\u4E2A\u5408\u6CD5 JSON \u5BF9\u8C61\uFF0C\u4F1A\u88AB\u7A0B\u5E8F\u76F4\u63A5\u89E3\u6790\uFF1B\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u8BB0\u5F55\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n{"text":"\u53D9\u4E8B\u6B63\u6587"}\n\n\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        relations: '\u4F60\u662F\u5173\u7CFB\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u91CC\uFF0C\u63D0\u53D6\u5DF2\u767B\u573A\u89D2\u8272\u4E4B\u95F4\u660E\u786E\u51FA\u73B0\u7684\u5173\u7CFB\u3002\n\n\u63D0\u53D6\u8981\u6C42\uFF1A\n- \u53EA\u8BB0\u5F55\u6709\u5BF9\u8BDD\u6216\u884C\u52A8\u4F9D\u636E\u7684\u5173\u7CFB\uFF0C\u6CA1\u6709\u4F9D\u636E\u5219\u4E0D\u63D0\u53D6\u3002\n- from \u4E0E to \u7528\u5BF9\u8BDD\u4E2D\u5B9E\u9645\u51FA\u73B0\u7684\u89D2\u8272\u540D\u6216\u79F0\u547C\uFF0C\u4E0D\u8D85\u8FC7 8 \u5B57\u3002\n- label \u662F\u5173\u7CFB\u8BCD\uFF0C\u4E8C\u5230\u516D\u5B57\uFF0C\u5982\u300C\u5E08\u5F92\u300D\u300C\u604B\u4EBA\u300D\u300C\u654C\u5BF9\u300D\u300C\u4E3B\u4EC6\u300D\u300C\u540C\u95E8\u300D\u3002\n- \u540C\u4E00\u5BF9\u89D2\u8272\u53EA\u8F93\u51FA\u4E00\u6761\u5173\u7CFB\u3002\n- \u6CA1\u6709\u4EFB\u4F55\u53EF\u63D0\u53D6\u7684\u5173\u7CFB\u65F6\uFF0C\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002\n\n\u4F60\u7684\u5168\u90E8\u8F93\u51FA\u5FC5\u987B\u662F\u4E00\u4E2A\u5408\u6CD5 JSON \u6570\u7EC4\uFF0C\u4F1A\u88AB\u7A0B\u5E8F\u76F4\u63A5\u89E3\u6790\uFF1B\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"from":"\u89D2\u8272A","to":"\u89D2\u8272B","label":"\u5173\u7CFB\u8BCD"}]\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        plot: '\u4F60\u662F\u5267\u60C5\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u6700\u8FD1\u5BF9\u8BDD\u91CC\uFF0C\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\uFF0C\u8BB0\u6210\u5267\u60C5\u7EBF\u6761\u76EE\u3002\n\n\u8BB0\u5F55\u8981\u6C42\uFF1A\n- \u53EA\u8BB0\u5F55\u672C\u6BB5\u5BF9\u8BDD\u91CC\u65B0\u53D1\u751F\u7684\u4E8B\uFF1B\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\u4EC5\u4F9B\u4F60\u907F\u514D\u91CD\u590D\uFF0C\u4E0D\u8981\u4ECE\u4E2D\u590D\u5236\u65E7\u6761\u76EE\u3002\n- \u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\uFF0C\u4E0D\u8981\u7F16\u9020\u3002\n- time \u662F\u5267\u60C5\u5185\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E00\u5929\u300D\u300C\u5348\u540E\u300D\uFF09\uFF0C\u5BF9\u8BDD\u672A\u63D0\u53CA\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 20 \u5B57\u3002\n- title \u662F\u4E0D\u8D85\u8FC7 12 \u5B57\u7684\u77ED\u6807\u9898\uFF0C\u540D\u8BCD\u52A0\u52A8\u8BCD\uFF0C\u5982\u300C\u4E39\u623F\u521D\u9047\u300D\u300C\u7A81\u7834\u5883\u754C\u300D\u3002\n- summary \u662F\u4E00\u81F3\u4E24\u53E5\u5BA2\u89C2\u63CF\u8FF0\uFF0C\u5199\u6E05\u4EBA\u7269\u3001\u52A8\u4F5C\u3001\u7ED3\u679C\uFF0C\u4E0D\u542B\u5FC3\u7406\uFF0C\u4E0D\u8D85\u8FC7 80 \u5B57\u3002\n\n\u4F60\u7684\u5168\u90E8\u8F93\u51FA\u5FC5\u987B\u662F\u4E00\u4E2A\u5408\u6CD5 JSON \u6570\u7EC4\uFF0C\u4F1A\u88AB\u7A0B\u5E8F\u76F4\u63A5\u89E3\u6790\uFF1B\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"time":"\u65F6\u95F4\u70B9\u6216\u7A7A\u4E32","title":"\u77ED\u6807\u9898","summary":"\u5BA2\u89C2\u4E8B\u4EF6\u63CF\u8FF0"}]\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        summary: '\u4F60\u662F\u8BB0\u5FC6\u8BB0\u5F55\u5668\u3002\u628A\u4E0B\u9762\u8FD9\u6BB5\u6700\u8FD1\u5BF9\u8BDD\u538B\u7F29\u6210\u4E00\u6BB5\u7B2C\u4E09\u4EBA\u79F0\u5BA2\u89C2\u53D9\u4E8B\uFF0C\u4F9B\u540E\u7EED\u5267\u60C5\u53C2\u8003\u3002\n\n\u5199\u6CD5\uFF1A\n- \u53EA\u5199\u5DF2\u53D1\u751F\u7684\u52A8\u4F5C\u3001\u4E8B\u4EF6\u3001\u5BF9\u8BDD\u7ED3\u679C\uFF0C\u4E0D\u5199\u5FC3\u7406\u3001\u4E0D\u6E32\u67D3\u6C14\u6C1B\u3001\u4E0D\u8BC4\u8BBA\u3002\n- \u5BF9\u8BDD\u6700\u591A\u4FDD\u7559\u4E00\u53E5\u6700\u5173\u952E\u7684\u53F0\u8BCD\uFF0C\u5176\u4F59\u7528\u300C\u8C01\u5BF9\u8C01\u8BF4\u4E86\u4EC0\u4E48\u300D\u8F6C\u8FF0\u3002\n- \u4E24\u5230\u4E94\u4E2A\u81EA\u7136\u6BB5\uFF0C\u6BCF\u6BB5\u4E00\u81F3\u56DB\u53E5\uFF0C\u6309\u4E8B\u4EF6\u5148\u540E\u7EC4\u7EC7\u3002\n- \u4E0E\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011\u91CD\u590D\u7684\u5185\u5BB9\u7B80\u7565\u5E26\u8FC7\uFF0C\u7740\u91CD\u5199\u65B0\u8FDB\u5C55\u3002\n- \u6B63\u6587\u53EA\u542B\u53D9\u4E8B\u672C\u8EAB\uFF0C\u4E0D\u542B\u4EFB\u4F55\u5BF9\u53D9\u4E8B\u7684\u8BF4\u660E\u3002\n\n\u4F60\u7684\u5168\u90E8\u56DE\u590D\u5FC5\u987B\u662F\u5408\u6CD5 JSON \u672C\u8EAB\u2014\u2014\u524D\u9762\u4E0D\u52A0"\u597D\u7684"\u3001\u4E0D\u52A0\u4EFB\u4F55\u8BF4\u660E\u3001\u4E0D\u52A0 ``` \u4EE3\u7801\u56F4\u680F\uFF0C\u540E\u9762\u4E0D\u52A0\u4EFB\u4F55\u6536\u5C3E\u8BED\u3002\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u8BB0\u5F55\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n{"text":"\u53D9\u4E8B\u6B63\u6587"}\n\n\u3010\u5DF2\u6709\u8BB0\u5FC6\u3011\n{{historySummary}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        relations: '\u4F60\u662F\u5173\u7CFB\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u91CC\uFF0C\u63D0\u53D6\u5DF2\u767B\u573A\u89D2\u8272\u4E4B\u95F4\u660E\u786E\u51FA\u73B0\u7684\u5173\u7CFB\u3002\n\n\u63D0\u53D6\u8981\u6C42\uFF1A\n- \u53EA\u8BB0\u5F55\u6709\u5BF9\u8BDD\u6216\u884C\u52A8\u4F9D\u636E\u7684\u5173\u7CFB\uFF0C\u6CA1\u6709\u4F9D\u636E\u5219\u4E0D\u63D0\u53D6\u3002\n- from \u4E0E to \u7528\u5BF9\u8BDD\u4E2D\u5B9E\u9645\u51FA\u73B0\u7684\u89D2\u8272\u540D\u6216\u79F0\u547C\uFF0C\u4E0D\u8D85\u8FC7 8 \u5B57\u3002\n- label \u662F\u5173\u7CFB\u8BCD\uFF0C\u4E8C\u5230\u516D\u5B57\uFF0C\u5982\u300C\u5E08\u5F92\u300D\u300C\u604B\u4EBA\u300D\u300C\u654C\u5BF9\u300D\u300C\u4E3B\u4EC6\u300D\u300C\u540C\u95E8\u300D\u3002\n- \u540C\u4E00\u5BF9\u89D2\u8272\u53EA\u8F93\u51FA\u4E00\u6761\u5173\u7CFB\u3002\n- \u6CA1\u6709\u4EFB\u4F55\u53EF\u63D0\u53D6\u7684\u5173\u7CFB\u65F6\uFF0C\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002\n\n\u4F60\u7684\u5168\u90E8\u56DE\u590D\u5FC5\u987B\u662F\u5408\u6CD5 JSON \u672C\u8EAB\u2014\u2014\u524D\u9762\u4E0D\u52A0"\u597D\u7684"\u3001\u4E0D\u52A0\u4EFB\u4F55\u8BF4\u660E\u3001\u4E0D\u52A0 ``` \u4EE3\u7801\u56F4\u680F\uFF0C\u540E\u9762\u4E0D\u52A0\u4EFB\u4F55\u6536\u5C3E\u8BED\u3002\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"from":"\u89D2\u8272A","to":"\u89D2\u8272B","label":"\u5173\u7CFB\u8BCD"}]\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
+        plot: '\u4F60\u662F\u5267\u60C5\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u6700\u8FD1\u5BF9\u8BDD\u91CC\uFF0C\u6311\u51FA\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\uFF0C\u8BB0\u6210\u5267\u60C5\u7EBF\u6761\u76EE\u3002\n\n\u8BB0\u5F55\u8981\u6C42\uFF1A\n- \u53EA\u8BB0\u5F55\u672C\u6BB5\u5BF9\u8BDD\u91CC\u65B0\u53D1\u751F\u7684\u4E8B\uFF1B\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\u4EC5\u4F9B\u4F60\u907F\u514D\u91CD\u590D\uFF0C\u4E0D\u8981\u4ECE\u4E2D\u590D\u5236\u65E7\u6761\u76EE\u3002\n- \u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\uFF0C\u4E0D\u8981\u7F16\u9020\u3002\n- time \u662F\u5267\u60C5\u5185\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E00\u5929\u300D\u300C\u5348\u540E\u300D\uFF09\uFF0C\u5BF9\u8BDD\u672A\u63D0\u53CA\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 20 \u5B57\u3002\n- title \u662F\u4E0D\u8D85\u8FC7 12 \u5B57\u7684\u77ED\u6807\u9898\uFF0C\u540D\u8BCD\u52A0\u52A8\u8BCD\uFF0C\u5982\u300C\u4E39\u623F\u521D\u9047\u300D\u300C\u7A81\u7834\u5883\u754C\u300D\u3002\n- summary \u662F\u4E00\u81F3\u4E24\u53E5\u5BA2\u89C2\u63CF\u8FF0\uFF0C\u5199\u6E05\u4EBA\u7269\u3001\u52A8\u4F5C\u3001\u7ED3\u679C\uFF0C\u4E0D\u542B\u5FC3\u7406\uFF0C\u4E0D\u8D85\u8FC7 80 \u5B57\u3002\n\n\u4F60\u7684\u5168\u90E8\u56DE\u590D\u5FC5\u987B\u662F\u5408\u6CD5 JSON \u672C\u8EAB\u2014\u2014\u524D\u9762\u4E0D\u52A0"\u597D\u7684"\u3001\u4E0D\u52A0\u4EFB\u4F55\u8BF4\u660E\u3001\u4E0D\u52A0 ``` \u4EE3\u7801\u56F4\u680F\uFF0C\u540E\u9762\u4E0D\u52A0\u4EFB\u4F55\u6536\u5C3E\u8BED\u3002\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"time":"\u65F6\u95F4\u70B9\u6216\u7A7A\u4E32","title":"\u77ED\u6807\u9898","summary":"\u5BA2\u89C2\u4E8B\u4EF6\u63CF\u8FF0"}]\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         worldview: '\u3010\u4EFB\u52A1\u3011\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u901A\u7528\u89C4\u5219\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\u540D\u79F0\n2. \u5199\u8BE5\u4E16\u754C\u7684\u901A\u7528\u8BBE\u5B9A\uFF08\u4FEE\u70BC\u4F53\u7CFB/\u793E\u4F1A\u89C4\u5219/\u81EA\u7136\u6CD5\u5219\u7B49\uFF09\n3. 3-6\u6761\u89C4\u5219\n4. title \u8BBE\u5B9A\u6807\u9898(\u226410\u5B57)\uFF0Ccontent \u4E00\u53E5\u8BDD\u8BF4\u660E(\u226440\u5B57)\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u5BF9\u8C61\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n{"name":"\u4E16\u754C\u540D","type":"\u4E16\u754C\u7C7B\u578B","desc":"1-2\u53E5\u7B80\u8FF0","rules":[{"title":"\u8BBE\u5B9A\u6807\u9898","content":"\u8BBE\u5B9A\u5185\u5BB9"}]}\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
-        itemExtract: '\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u91CC\uFF0C\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\u3002\n\n\u8BB0\u5F55\u8981\u6C42\uFF1A\n- name \u53EA\u5199\u7269\u54C1\u540D\u5B57\uFF0C\u4E0D\u52A0\u4FEE\u9970\u8BED\uFF0C\u4E0D\u8D85\u8FC7 20 \u5B57\u3002\n- desc \u4E00\u53E5\u8BDD\u8BF4\u660E\u4F5C\u7528\uFF0C\u4E0D\u8D85\u8FC7 40 \u5B57\u3002\n- owner \u662F\u5F53\u524D\u6301\u6709\u8005\u59D3\u540D\uFF0C\u672A\u77E5\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- origin \u662F\u6765\u5386\u7B80\u8FF0\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- related \u662F\u5173\u8054\u7684\u5267\u60C5\u6807\u9898\uFF0C\u4ECE\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u91CC\u53D6\uFF0C\u65E0\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- \u6CA1\u6709\u7269\u54C1\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002\n\n\u4F60\u7684\u5168\u90E8\u8F93\u51FA\u5FC5\u987B\u662F\u4E00\u4E2A\u5408\u6CD5 JSON \u6570\u7EC4\uFF0C\u4F1A\u88AB\u7A0B\u5E8F\u76F4\u63A5\u89E3\u6790\uFF1B\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"name":"\u7269\u54C1\u540D","desc":"\u4E00\u53E5\u8BDD\u4F5C\u7528","owner":"\u6301\u6709\u8005\u6216\u7A7A\u4E32","related":"\u5173\u8054\u5267\u60C5\u6216\u7A7A\u4E32","origin":"\u6765\u5386\u7B80\u77ED"}]\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}'
+        itemExtract: '\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5668\u3002\u4ECE\u4E0B\u9762\u8FD9\u6BB5\u5BF9\u8BDD\u91CC\uFF0C\u63D0\u53D6\u51FA\u73B0\u7684\u7269\u54C1\u3002\n\n\u8BB0\u5F55\u8981\u6C42\uFF1A\n- name \u53EA\u5199\u7269\u54C1\u540D\u5B57\uFF0C\u4E0D\u52A0\u4FEE\u9970\u8BED\uFF0C\u4E0D\u8D85\u8FC7 20 \u5B57\u3002\n- desc \u4E00\u53E5\u8BDD\u8BF4\u660E\u4F5C\u7528\uFF0C\u4E0D\u8D85\u8FC7 40 \u5B57\u3002\n- owner \u662F\u5F53\u524D\u6301\u6709\u8005\u59D3\u540D\uFF0C\u672A\u77E5\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- origin \u662F\u6765\u5386\u7B80\u8FF0\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- related \u662F\u5173\u8054\u7684\u5267\u60C5\u6807\u9898\uFF0C\u4ECE\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u91CC\u53D6\uFF0C\u65E0\u5219\u7559\u7A7A\u4E32 ""\uFF0C\u4E0D\u8D85\u8FC7 30 \u5B57\u3002\n- \u6CA1\u6709\u7269\u54C1\u5C31\u8F93\u51FA\u7A7A\u6570\u7EC4 []\u3002\n\n\u4F60\u7684\u5168\u90E8\u56DE\u590D\u5FC5\u987B\u662F\u5408\u6CD5 JSON \u672C\u8EAB\u2014\u2014\u524D\u9762\u4E0D\u52A0"\u597D\u7684"\u3001\u4E0D\u52A0\u4EFB\u4F55\u8BF4\u660E\u3001\u4E0D\u52A0 ``` \u4EE3\u7801\u56F4\u680F\uFF0C\u540E\u9762\u4E0D\u52A0\u4EFB\u4F55\u6536\u5C3E\u8BED\u3002\u4EFB\u4F55 JSON \u4E4B\u5916\u7684\u5B57\u90FD\u4F1A\u4F7F\u672C\u6B21\u63D0\u53D6\u5931\u8D25\u3002\u683C\u5F0F\uFF1A\n[{"name":"\u7269\u54C1\u540D","desc":"\u4E00\u53E5\u8BDD\u4F5C\u7528","owner":"\u6301\u6709\u8005\u6216\u7A7A\u4E32","related":"\u5173\u8054\u5267\u60C5\u6216\u7A7A\u4E32","origin":"\u6765\u5386\u7B80\u77ED"}]\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}'
       }
     };
     function load() {
@@ -1927,16 +1927,16 @@ ${recent}
       return "";
     }
     function taggedRelations(out) {
-      return extractTagged(out, "RELATIONS", "RELATIONS");
+      return out != null ? String(out) : "";
     }
     function taggedPlot(out) {
-      return out;
-    }
-    function taggedWorld(out) {
-      return out;
+      return out != null ? String(out) : "";
     }
     function taggedItems(out) {
-      return out;
+      return out != null ? String(out) : "";
+    }
+    function taggedWorld(out) {
+      return out != null ? String(out) : "";
     }
     function parseJSON(raw) {
       if (raw == null) return { ok: false, data: null };
@@ -2139,73 +2139,51 @@ ${recent}
     }
     function parseRelations(out) {
       const { ok, data } = parseJSON(out);
-      if (ok && Array.isArray(data)) {
-        return data.filter((r) => r && typeof r === "object").map((r) => ({
-          from: String(r.from || "").trim(),
-          to: String(r.to || "").trim(),
-          label: String(r.label || "").trim()
-        })).filter((r) => {
-          if (!r.from || !r.to || !r.label) return false;
-          if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
-          return r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8;
-        });
-      }
-      const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
-      return out.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-        const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-        if (!m) return null;
-        const from = m[1].trim(), to = m[2].trim(), label = (m[3] || "").trim();
-        if (!from || !to || !label) return null;
-        if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
-        if (label.length > 10) return null;
-        if (from.length > 8 || to.length > 8) return null;
-        return { from, to, label };
-      }).filter(Boolean);
+      if (!ok || !Array.isArray(data)) return [];
+      const BAD_LABEL_RE = /(可能|也许|或许|大概|似乎|好像|感觉|推测|推测是|应该是|可能是|也许是|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
+      const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|让我们|按顺序|分析物品|关联剧情|以上|以下|如下|用户要求|系统要求|注意[:：]|时间点可以是)|[\.。,，；;！!？?]/;
+      return data.filter((r) => r && typeof r === "object").map((r) => ({
+        from: String(r.from || "").trim(),
+        to: String(r.to || "").trim(),
+        label: String(r.label || "").trim()
+      })).filter((r) => {
+        if (!r.from || !r.to || !r.label) return false;
+        if (r.from === r.to) return false;
+        if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
+        if (r.label.length < 2 || r.label.length > 10) return false;
+        if (r.from.length < 2 || r.from.length > 8) return false;
+        if (r.to.length < 2 || r.to.length > 8) return false;
+        if (BAD_LABEL_RE.test(r.label)) return false;
+        if (BAD_NAME_RE.test(r.from) || BAD_NAME_RE.test(r.to)) return false;
+        if (r.label === r.from || r.label === r.to) return false;
+        return true;
+      });
     }
     function parsePlots(out) {
       const { ok, data } = parseJSON(out);
-      if (ok && Array.isArray(data)) {
-        return data.filter((p) => p && typeof p === "object").map((p) => ({
-          time: String(p.time || "").slice(0, 20).trim(),
-          title: String(p.title || "").slice(0, 12).trim(),
-          summary: String(p.summary || "").slice(0, 80).trim()
-        })).filter((p) => {
-          if (!p.title) return false;
-          if (_isDirtyValue(p.title)) return false;
-          if (_isDirtyValue(p.summary)) {
-            p.summary = "";
-          }
-          if (_isDirtyValue(p.time)) {
-            p.time = "";
-          }
-          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
-          if (p.title.length < 2) return false;
-          return true;
-        });
-      }
-      const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
-      const result = [];
-      for (const ln of lines) {
-        const parts = ln.replace(/^[\s\-*·]+/, "").split(/[｜|]/).map((x) => x.trim());
-        if (!parts.length) continue;
-        let time = "", title = "", summary = "";
-        if (parts.length >= 3) {
-          time = /^(未标注|无|未知|-)$/.test(parts[0]) ? "" : parts[0];
-          title = parts[1] || "";
-          summary = parts[2] || "";
-        } else if (parts.length === 2) {
-          title = parts[0];
-          summary = parts[1];
-        } else {
-          title = parts[0];
-        }
-        if (!title) continue;
-        if (_isDirtyValue(title)) continue;
-        if (_isDirtyValue(summary)) continue;
-        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(title) || title.length < 2) continue;
-        result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
-      }
-      return result;
+      if (!ok || !Array.isArray(data)) return [];
+      const BAD_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|需进一步|有待补充|暂无信息|待定|待补充|未填写|未标注|占位|示例|示例如下|时间点可以是|分析如下|解析如下|逐段解析|第一段|第二段|第三段|第四段|第五段)/;
+      const NUM_PREFIX_RE = /^\s*\d+\s*[\.、\)\)：:]/;
+      return data.filter((p) => p && typeof p === "object").map((p) => {
+        let time = String(p.time || "").slice(0, 20).trim();
+        let title = String(p.title || "").slice(0, 12).trim();
+        let summary = String(p.summary || "").slice(0, 80).trim();
+        if (BAD_RE.test(time)) time = "";
+        if (BAD_RE.test(summary)) summary = "";
+        if (NUM_PREFIX_RE.test(title)) title = title.replace(NUM_PREFIX_RE, "").trim();
+        if (NUM_PREFIX_RE.test(summary)) summary = summary.replace(NUM_PREFIX_RE, "").trim();
+        return { time, title, summary };
+      }).filter((p) => {
+        if (!p.title) return false;
+        if (_isDirtyValue(p.title)) return false;
+        if (BAD_RE.test(p.title)) return false;
+        if (NUM_PREFIX_RE.test(p.title)) return false;
+        if (_isDirtyValue(p.summary)) p.summary = "";
+        if (_isDirtyValue(p.time)) p.time = "";
+        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
+        if (p.title.length < 2) return false;
+        return true;
+      });
     }
     function parseItems(out, plots) {
       const isBlankRel = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
@@ -2219,64 +2197,36 @@ ${recent}
         return ids;
       };
       const { ok, data } = parseJSON(out);
-      if (ok && Array.isArray(data)) {
-        const items = data.filter((it) => it && typeof it === "object").map((it) => {
-          const relText = String(it.related || it.relatedPlotText || "").trim();
-          const obj = {
-            name: String(it.name || "").trim(),
-            desc: String(it.desc || "").trim(),
-            owner: String(it.owner || "").trim(),
-            origin: String(it.origin || "").trim(),
-            relatedPlotText: relText
-          };
-          if (_isDirtyValue(obj.desc)) obj.desc = "";
-          if (_isDirtyValue(obj.owner)) obj.owner = "";
-          if (_isDirtyValue(obj.origin)) obj.origin = "";
-          if (_isDirtyValue(obj.relatedPlotText)) obj.relatedPlotText = "";
-          const relIds = matchPlotIds(relText);
-          if (relIds.length) obj.relatedPlots = relIds;
-          return obj;
-        }).filter((it) => {
-          if (!it.name) return false;
-          if (_isDirtyValue(it.name)) return false;
-          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name) || it.name.length < 1) return false;
-          return true;
-        });
-        return truncateItemFields(items);
-      }
-      const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
-      const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-      const result = [];
-      for (const raw of lines) {
-        const ln = raw.replace(/^[\s\-*·]+/, "");
-        const parts = ln.split(/[｜|]/).map((x) => x.trim());
-        let name = "", desc = "", owner = "", rel = "", origin = "";
-        if (parts.length >= 2) {
-          name = parts[0];
-          desc = parts[1] || "";
-          owner = parts[2] || "";
-          rel = parts[3] || "";
-          origin = parts[4] || "";
-        } else {
-          const m = ln.match(/^([^：:]{1,20})[：:]\s*([\s\S]*)$/);
-          if (m) {
-            name = m[1].trim();
-            desc = m[2].trim();
-          } else {
-            name = ln;
-          }
-        }
-        name = (name || "").replace(/\s*[：:].*$/, "").trim();
-        if (!name) continue;
-        result.push({
-          name,
-          desc: blank(desc) ? "" : desc,
-          owner: blank(owner) ? "" : owner,
-          relatedPlotText: blank(rel) ? "" : rel,
-          origin: blank(origin) ? "" : origin
-        });
-      }
-      return truncateItemFields(result);
+      if (!ok || !Array.isArray(data)) return [];
+      const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|另外[，,]|对话中提到|逐段解析|解析如下|分析如下|第一段|第二段|第三段|第四段|第五段|第六段|第七段|第八段|第九段|第十段|让我|我们来|接下来|总结一下|以上|以下|示例|示例如下|未填写|待补充|暂无|占位)/;
+      const BAD_DESC_RE = /(未填写作用|未填写|待补充|暂无作用|待明确|作用未明)/;
+      const BAD_OWNER_RE = /^持有者[:：]|未知$/;
+      const items = data.filter((it) => it && typeof it === "object").map((it) => {
+        let name = String(it.name || "").trim();
+        let desc = String(it.desc || "").trim();
+        let owner = String(it.owner || "").trim();
+        let origin = String(it.origin || "").trim();
+        let relText = String(it.related || it.relatedPlotText || "").trim();
+        if (BAD_DESC_RE.test(desc)) desc = "";
+        if (BAD_OWNER_RE.test(owner)) owner = "";
+        if (_isDirtyValue(desc)) desc = "";
+        if (_isDirtyValue(owner)) owner = "";
+        if (_isDirtyValue(origin)) origin = "";
+        if (_isDirtyValue(relText)) relText = "";
+        const relIds = matchPlotIds(relText);
+        const obj = { name, desc, owner, origin, relatedPlotText: relText };
+        if (relIds.length) obj.relatedPlots = relIds;
+        return obj;
+      }).filter((it) => {
+        if (!it.name) return false;
+        if (_isDirtyValue(it.name)) return false;
+        if (BAD_NAME_RE.test(it.name)) return false;
+        if (it.name.length < 1 || it.name.length > 20) return false;
+        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name)) return false;
+        if (/[。！？!?\n]/.test(it.name)) return false;
+        return true;
+      });
+      return truncateItemFields(items);
     }
     function parseWorld(out) {
       const { ok, data } = parseJSON(out);

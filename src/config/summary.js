@@ -161,10 +161,13 @@
     if (fallback.length >= 10 && !_isDirtyValue(fallback)) return fallback;
     return '';
   }
-  function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
-  function taggedPlot(out) { return out; } // plot 现为 JSON 数组，交由 parsePlots 解析
-  function taggedWorld(out) { return out; } // worldview 现为 JSON，交由 parseWorld 解析
-  function taggedItems(out) { return out; } // items 现为 JSON 数组，交由 parseItems 解析
+  // v6+：提示词已改为「原生 JSON 契约 + response_format=json_object」双重硬锁。
+  //   旧的 <<<RELATIONS_START>>> 标签提取会在"LLM 在 JSON 前多吐一两句前言"时截空，
+  //   故这里统一透传原文，由 parseJSON 截取第一个合法 JSON 块。
+  function taggedRelations(out) { return out != null ? String(out) : ''; }
+  function taggedPlot(out)     { return out != null ? String(out) : ''; }
+  function taggedItems(out)    { return out != null ? String(out) : ''; }
+  function taggedWorld(out)    { return out != null ? String(out) : ''; }
 
   // ── 通用 JSON 解析：容忍模型加的 ```json 围栏、前后噪声、截断 ──
   // 返回 { ok, data }；解析失败 ok=false, data=null
@@ -414,87 +417,80 @@
     return { range, recent, total };
   }
 
-  // ── 关系解析：优先 JSON，强制 Schema 校验（from/to/label 必填，长度上限） ──
+  // ── 关系解析：只认 JSON，强制 Schema 校验；含推测/分析/占位语的整条丢弃。
+  //   v5 文本回退路径已删除——"回退"反而会把 LLM 的分析前言当关系吞进结构化字段。
+  //   JSON 失败时 callLLM 会触发重试，三次重试拿不到就放弃本条，绝不拿垃圾填空。
   function parseRelations(out) {
     const { ok, data } = parseJSON(out);
-    if (ok && Array.isArray(data)) {
-      return data
-        .filter((r) => r && typeof r === 'object')
-        .map((r) => ({
-          from: String(r.from || '').trim(),
-          to: String(r.to || '').trim(),
-          label: String(r.label || '').trim(),
-        }))
-        .filter((r) => {
-          if (!r.from || !r.to || !r.label) return false;
-          if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
-          return r.label.length <= 10 && r.from.length <= 8 && r.to.length <= 8;
-        });
-    }
-    // 回退：旧式「A → B：关系」文本
-    const ANALYSIS_RE = /(对.*有|存在|潜在|感受|情感|纠葛|复杂|某种|表明|显示|意味|似乎|看起来)/;
-    return out.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-      const m = l.match(/^(.*?)\s*[→\-–>]\s*(.*?)[:：]\s*(.*)$/);
-      if (!m) return null;
-      const from = m[1].trim(), to = m[2].trim(), label = (m[3] || '').trim();
-      if (!from || !to || !label) return null;
-      if (ANALYSIS_RE.test(from) || ANALYSIS_RE.test(to)) return null;
-      if (label.length > 10) return null;
-      if (from.length > 8 || to.length > 8) return null;
-      return { from, to, label };
-    }).filter(Boolean);
+    if (!ok || !Array.isArray(data)) return [];
+    // label 必须是明确关系词（短词、名词性），不能是完整句子或分析语。
+    const BAD_LABEL_RE = /(可能|也许|或许|大概|似乎|好像|感觉|推测|推测是|应该是|可能是|也许是|未提及|未出现|暂无|未知|不确定|不清楚|不知道|不明|有待|关系|互动|联系|关联|对话|交流|接触|见过|认识|提到|讨论|提及|涉及|关于)/;
+    // from/to 不能是占位语，不能是完整句子。
+    const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|让我们|按顺序|分析物品|关联剧情|以上|以下|如下|用户要求|系统要求|注意[:：]|时间点可以是)|[\.。,，；;！!？?]/;
+    return data
+      .filter((r) => r && typeof r === 'object')
+      .map((r) => ({
+        from: String(r.from || '').trim(),
+        to: String(r.to || '').trim(),
+        label: String(r.label || '').trim(),
+      }))
+      .filter((r) => {
+        if (!r.from || !r.to || !r.label) return false;
+        if (r.from === r.to) return false; // 自环无意义
+        if (_isDirtyValue(r.from) || _isDirtyValue(r.to) || _isDirtyValue(r.label)) return false;
+        // 长度硬限
+        if (r.label.length < 2 || r.label.length > 10) return false;
+        if (r.from.length < 2 || r.from.length > 8) return false;
+        if (r.to.length < 2 || r.to.length > 8) return false;
+        // 语义过滤：label 不能含推测词/句子性词
+        if (BAD_LABEL_RE.test(r.label)) return false;
+        if (BAD_NAME_RE.test(r.from) || BAD_NAME_RE.test(r.to)) return false;
+        // label 不能是 from/to 自己的名字（模型常见错位输出）
+        if (r.label === r.from || r.label === r.to) return false;
+        return true;
+      });
   }
 
-  // ── 剧情线解析：优先 JSON 数组，强制 Schema 校验（title 必填，字段长度上限） ──
+  // ── 剧情线解析：只认 JSON，强制 Schema 校验；v5 文本回退已删除。
+  //   时间列（time）不是必填——对话没提时间就留空，不允许把"对话未提及具体""可能还需要考虑…"这类占位语写进去。
   function parsePlots(out) {
     const { ok, data } = parseJSON(out);
-    if (ok && Array.isArray(data)) {
-      return data
-        .filter((p) => p && typeof p === 'object')
-        .map((p) => ({
-          time: String(p.time || '').slice(0, 20).trim(),
-          title: String(p.title || '').slice(0, 12).trim(),
-          summary: String(p.summary || '').slice(0, 80).trim(),
-        }))
-        .filter((p) => {
-          // title 必须有实质内容（不能是空串、不能是 JSON 片段、不能是元指令）
-          if (!p.title) return false;
-          if (_isDirtyValue(p.title)) return false;
-          if (_isDirtyValue(p.summary)) { p.summary = ''; }  // summary 脏则清空，不整条丢弃
-          if (_isDirtyValue(p.time)) { p.time = ''; }
-          // title 不能是纯标点/数字/单个字符（如 "." / "1" / "{"）
-          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
-          // title 长度至少 2 字符
-          if (p.title.length < 2) return false;
-          return true;
-        });
-    }
-    // 回退：旧式「时间｜标题｜事件」文本
-    const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
-      .filter((l) => !/^(时间\s*[｜|]\s*标题|[-=]{3,})/.test(l));
-    const result = [];
-    for (const ln of lines) {
-      const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
-      if (!parts.length) continue;
-      let time = '', title = '', summary = '';
-      if (parts.length >= 3) {
-        time = /^(未标注|无|未知|-)$/.test(parts[0]) ? '' : parts[0];
-        title = parts[1] || ''; summary = parts[2] || '';
-      } else if (parts.length === 2) {
-        title = parts[0]; summary = parts[1];
-      } else { title = parts[0]; }
-      if (!title) continue;
-      // 回退路径也做卫生检查
-      if (_isDirtyValue(title)) continue;
-      if (_isDirtyValue(summary)) continue;
-      if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(title) || title.length < 2) continue;
-      result.push({ time: time.slice(0, 20), title: title.slice(0, 12), summary: summary.slice(0, 80) });
-    }
-    return result;
+    if (!ok || !Array.isArray(data)) return [];
+    // 占位/分析前缀：任一字段含这些词，整条丢弃或该字段清空。
+    const BAD_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|需进一步|有待补充|暂无信息|待定|待补充|未填写|未标注|占位|示例|示例如下|时间点可以是|分析如下|解析如下|逐段解析|第一段|第二段|第三段|第四段|第五段)/;
+    // 编号开头："8. xxx""7、xxx"这类模型把行号塞进 title 的垃圾
+    const NUM_PREFIX_RE = /^\s*\d+\s*[\.、\)\)：:]/;
+    return data
+      .filter((p) => p && typeof p === 'object')
+      .map((p) => {
+        let time = String(p.time || '').slice(0, 20).trim();
+        let title = String(p.title || '').slice(0, 12).trim();
+        let summary = String(p.summary || '').slice(0, 80).trim();
+        if (BAD_RE.test(time)) time = '';
+        if (BAD_RE.test(summary)) summary = '';
+        // 去编号前缀
+        if (NUM_PREFIX_RE.test(title)) title = title.replace(NUM_PREFIX_RE, '').trim();
+        if (NUM_PREFIX_RE.test(summary)) summary = summary.replace(NUM_PREFIX_RE, '').trim();
+        return { time, title, summary };
+      })
+      .filter((p) => {
+        // title 必须有实质内容（不能是空串、不能是 JSON 片段、不能是元指令、不能是占位语）
+        if (!p.title) return false;
+        if (_isDirtyValue(p.title)) return false;
+        if (BAD_RE.test(p.title)) return false;
+        if (NUM_PREFIX_RE.test(p.title)) return false;
+        if (_isDirtyValue(p.summary)) p.summary = '';  // summary 脏则清空，不整条丢弃
+        if (_isDirtyValue(p.time)) p.time = '';
+        // title 不能是纯标点/数字/单个字符（如 "." / "1" / "{"）
+        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(p.title)) return false;
+        // title 长度至少 2 字符
+        if (p.title.length < 2) return false;
+        return true;
+      });
   }
 
-  // ── 物品解析：优先 JSON 数组，强制 Schema 校验 + 字段截断 ──
-  // plots: 可选，传入已有剧情线列表时，直接把关联剧情文本匹配成 relatedPlots(ID数组)，与存储层字段对齐
+  // ── 物品解析：只认 JSON，强制 Schema 校验；v5 文本回退已删除。
+  //   plots: 可选，传入已有剧情线列表时，直接把关联剧情文本匹配成 relatedPlots(ID数组)，与存储层字段对齐。
   function parseItems(out, plots) {
     const isBlankRel = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
     const matchPlotIds = (text) => {
@@ -507,67 +503,46 @@
       return ids;
     };
     const { ok, data } = parseJSON(out);
-    if (ok && Array.isArray(data)) {
-      const items = data
-        .filter((it) => it && typeof it === 'object')
-        .map((it) => {
-          const relText = String(it.related || it.relatedPlotText || '').trim();
-          const obj = {
-            name: String(it.name || '').trim(),
-            desc: String(it.desc || '').trim(),
-            owner: String(it.owner || '').trim(),
-            origin: String(it.origin || '').trim(),
-            relatedPlotText: relText,
-          };
-          // 卫生检查：脏值清空而非存入
-          if (_isDirtyValue(obj.desc)) obj.desc = '';
-          if (_isDirtyValue(obj.owner)) obj.owner = '';
-          if (_isDirtyValue(obj.origin)) obj.origin = '';
-          if (_isDirtyValue(obj.relatedPlotText)) obj.relatedPlotText = '';
-          const relIds = matchPlotIds(relText);
-          if (relIds.length) obj.relatedPlots = relIds; // 匹配到则直接给 ID 数组，与存储层对齐
-          return obj;
-        })
-        .filter((it) => {
-          if (!it.name) return false;
-          if (_isDirtyValue(it.name)) return false;
-          // name 不能是纯标点/JSON 片段/元指令
-          if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name) || it.name.length < 1) return false;
-          return true;
-        });
-      return truncateItemFields(items);
-    }
-    // 回退：旧式「物品名｜作用｜持有者｜关联剧情｜来历」文本
-    const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
-      .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
-    const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-    const result = [];
-    for (const raw of lines) {
-      const ln = raw.replace(/^[\s\-*·]+/, '');
-      const parts = ln.split(/[｜|]/).map((x) => x.trim());
-      let name = '', desc = '', owner = '', rel = '', origin = '';
-      if (parts.length >= 2) {
-        name = parts[0];
-        desc = parts[1] || '';
-        owner = parts[2] || '';
-        rel = parts[3] || '';
-        origin = parts[4] || '';
-      } else {
-        const m = ln.match(/^([^：:]{1,20})[：:]\s*([\s\S]*)$/);
-        if (m) { name = m[1].trim(); desc = m[2].trim(); }
-        else { name = ln; }
-      }
-      name = (name || '').replace(/\s*[：:].*$/, '').trim();
-      if (!name) continue;
-      result.push({
-        name,
-        desc: blank(desc) ? '' : desc,
-        owner: blank(owner) ? '' : owner,
-        relatedPlotText: blank(rel) ? '' : rel,
-        origin: blank(origin) ? '' : origin,
+    if (!ok || !Array.isArray(data)) return [];
+    // 占位/分析前缀：任一字段含这些词则整条丢弃或对应字段清空。
+    //   ——这是修复你截图里"另外，对话中提到的掌门印信…""让我逐段解析…""第一段""第二段"
+    //     这些 LLM 分析前言被误认作物品名的核心过滤。
+    const BAD_NAME_RE = /(对话未提及|未提及具体|可能还需要|建议考虑|另外[，,]|对话中提到|逐段解析|解析如下|分析如下|第一段|第二段|第三段|第四段|第五段|第六段|第七段|第八段|第九段|第十段|让我|我们来|接下来|总结一下|以上|以下|示例|示例如下|未填写|待补充|暂无|占位)/;
+    const BAD_DESC_RE = /(未填写作用|未填写|待补充|暂无作用|待明确|作用未明)/;
+    const BAD_OWNER_RE = /^持有者[:：]|未知$/;
+    const items = data
+      .filter((it) => it && typeof it === 'object')
+      .map((it) => {
+        let name = String(it.name || '').trim();
+        let desc = String(it.desc || '').trim();
+        let owner = String(it.owner || '').trim();
+        let origin = String(it.origin || '').trim();
+        let relText = String(it.related || it.relatedPlotText || '').trim();
+        // 字段级清洗：命中占位词则清空
+        if (BAD_DESC_RE.test(desc)) desc = '';
+        if (BAD_OWNER_RE.test(owner)) owner = '';
+        if (_isDirtyValue(desc)) desc = '';
+        if (_isDirtyValue(owner)) owner = '';
+        if (_isDirtyValue(origin)) origin = '';
+        if (_isDirtyValue(relText)) relText = '';
+        const relIds = matchPlotIds(relText);
+        const obj = { name, desc, owner, origin, relatedPlotText: relText };
+        if (relIds.length) obj.relatedPlots = relIds;
+        return obj;
+      })
+      .filter((it) => {
+        if (!it.name) return false;
+        if (_isDirtyValue(it.name)) return false;
+        // 最关键的一条：name 绝不能是 LLM 的分析前言。
+        if (BAD_NAME_RE.test(it.name)) return false;
+        // name 不能是句子（长度过长或含标点过多），也不能是纯标点/JSON 片段
+        if (it.name.length < 1 || it.name.length > 20) return false;
+        if (/^[\d\{\}\[\]\"\'\.\,\;\:\|｜]+$/.test(it.name)) return false;
+        // name 含句号/问号/感叹号 —— 是一句话不是物品名，整条丢
+        if (/[。！？!?\n]/.test(it.name)) return false;
+        return true;
       });
-    }
-    return truncateItemFields(result);
+    return truncateItemFields(items);
   }
 
   // ── 世界观解析：优先 JSON，强制 Schema 校验 ──
