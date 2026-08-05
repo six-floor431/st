@@ -1831,7 +1831,7 @@ ${recent}
     function isJunkText(v) {
       const s = String(v == null ? "" : v).trim();
       if (!s) return false;
-      if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将|好的[，,。！]|当然[，,]|明白[，,]|没问题[，,]|以下是|下面是|这是为您|根据要求|综上|以上是)/.test(s)) return true;
+      if (/^(让我|我们来|接下来我|另外[，,]|逐段|解析如下|分析如下|总结一下|根据对话|按照要求|用户要求|系统要求|我们需要|我打算|我将|根据要求)/.test(s)) return true;
       if (s.length > 60) return false;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s*[：:]/i.test(s)) return true;
       if (/^(desc|name|title|summary|owner|origin|related|label|from|to|time|type|rules?|content)\s+[^\s：:]/i.test(s)) return true;
@@ -1864,7 +1864,8 @@ ${recent}
         if (/^#{1,6}\s*/.test(s)) return "";
         if (/^(-{3,}|={3,}|\*{3,})$/.test(s)) return "";
         if (/^[#＃*【\[]*\s*(总结|摘要|概述|梗概|正文|叙事|片段|记忆|内容)[^\n]{0,6}[#＃*】\]]*$/.test(s)) return "";
-        if (/^(好的|当然|明白|收到|没问题)[，,。！!]?\s*(以下|下面|这是|我来)?/.test(s) && s.length < 40) return "";
+        s = s.replace(/^(好的|当然|明白|收到|没问题)[，,。！!]?\s*(以下|下面|这是|我来)?[：:]?\s*/, "");
+        s = s.replace(/^(总结|分析|解析|概述|梗概|正文|叙事|片段|记忆|内容|回复|答案|结果)[：:]\s*/, "");
         if (/^(以下|下面)(是|为)[^\n]{0,20}[:：]?$/.test(s)) return "";
         if (/^(以上|综上)[^\n]{0,30}$/.test(s)) return "";
         s = s.replace(/^\d+\s*[.、)）]\s*/, "");
@@ -2062,7 +2063,8 @@ ${recent}
           else if (opts && opts.phase === "plot") minLen = 15;
           else if (opts && opts.phase === "items") minLen = 10;
           else if (opts && opts.phase === "relations") minLen = 6;
-          if (cleaned.length < minLen) {
+          const isLegalJson = opts.jsonMode === true && parseJSON(cleaned).ok;
+          if (!isLegalJson && cleaned.length < minLen) {
             throw new Error("\u6A21\u578B\u8FD4\u56DE\u8FC7\u77ED\uFF08\u4EC5 " + cleaned.length + " \u5B57\uFF1A" + cleaned.slice(0, 20) + "\uFF09\uFF0C\u7591\u4F3C\u622A\u65AD/\u62BD\u98CE");
           }
           return cleaned;
