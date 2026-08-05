@@ -272,6 +272,46 @@
     return result;
   }
 
+  // ── 物品解析：把 LLM 输出的物品文本解析为结构化数组 ──
+  // 鲁棒处理两类异常：
+  //   1) 正常：每行 "物品名｜作用｜持有者｜关联剧情｜来历"（单｜或多｜分隔）
+  //   2) 退化：模型没用｜分隔，而是 "物品名：作用说明……"（冒号连写）——此时取冒号前为纯名称，
+  //      冒号后整体塞进「作用」，避免整段描述被错误地塞进「名称」字段导致名称爆炸。
+  function parseItems(out) {
+    const lines = out.split('\n').map((l) => l.trim()).filter(Boolean)
+      .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+    const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
+    const result = [];
+    for (const raw of lines) {
+      const ln = raw.replace(/^[\s\-*·]+/, '');
+      const parts = ln.split(/[｜|]/).map((x) => x.trim());
+      let name = '', desc = '', owner = '', rel = '', origin = '';
+      if (parts.length >= 2) {
+        // 正常分隔格式
+        name = parts[0];
+        desc = parts[1] || '';
+        owner = parts[2] || '';
+        rel = parts[3] || '';
+        origin = parts[4] || '';
+      } else {
+        // 退化格式：尝试用冒号拆 "名称：描述"
+        const m = ln.match(/^([^：:]{1,20})[：:]\s*([\s\S]*)$/);
+        if (m) { name = m[1].trim(); desc = m[2].trim(); }
+        else { name = ln; } // 实在无结构，至少名称=整行（避免空）
+      }
+      name = (name || '').replace(/\s*[：:].*$/, '').trim(); // 名称里若残留冒号说明，截断只留名字
+      if (!name) continue;
+      result.push({
+        name,
+        desc: blank(desc) ? '' : desc,
+        owner: blank(owner) ? '' : owner,
+        relatedPlotText: blank(rel) ? '' : rel,
+        origin: blank(origin) ? '' : origin,
+      });
+    }
+    return result;
+  }
+
   // 触发一次「纯记忆」总结（只跑 summary + 世界观 + 物品，不再顺带跑关系/剧情）
   async function triggerSummary(settings, opts) {
     opts = opts || {};
@@ -356,17 +396,15 @@
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
           const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
-          const lines = itemRaw.split('\n').map((l) => l.trim()).filter(Boolean)
-            .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+          const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
           const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-          for (const ln of lines) {
-            const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
-            const name = parts[0];
+          for (const it of parsedItems) {
+            const name = it.name;
             if (!name) continue;
             const relIds = [];
-            if (!blank(parts[3])) {
-              for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+            if (!blank(it.relatedPlotText)) {
+              for (const t of it.relatedPlotText.split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
                 const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
                 if (hit) relIds.push(hit.id);
               }
@@ -374,9 +412,9 @@
             const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
             const data = {
               name,
-              desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
-              owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
-              origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
+              desc: blank(it.desc) ? (exist ? exist.desc : '') : it.desc,
+              owner: blank(it.owner) ? (exist ? exist.owner : '') : it.owner,
+              origin: blank(it.origin) ? (exist ? exist.origin : '') : it.origin,
               relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
             };
             if (exist) await WM.MemoryStore.updateItem(exist.id, data);
@@ -502,17 +540,15 @@
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
           const out = await callLLM(s, '请输出本段出现的物品（每行 物品名｜作用｜持有者｜关联剧情｜来历）：', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
-          const lines = itemRaw.split('\n').map((l) => l.trim()).filter(Boolean)
-            .filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
+          const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
           const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
-          for (const ln of lines) {
-            const parts = ln.replace(/^[\s\-*·]+/, '').split(/[｜|]/).map((x) => x.trim());
-            const name = parts[0];
+          for (const it of parsedItems) {
+            const name = it.name;
             if (!name) continue;
             const relIds = [];
-            if (!blank(parts[3])) {
-              for (const t of parts[3].split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+            if (!blank(it.relatedPlotText)) {
+              for (const t of it.relatedPlotText.split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
                 const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
                 if (hit) relIds.push(hit.id);
               }
@@ -520,9 +556,9 @@
             const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
             const data = {
               name,
-              desc: blank(parts[1]) ? (exist ? exist.desc : '') : parts[1],
-              owner: blank(parts[2]) ? (exist ? exist.owner : '') : parts[2],
-              origin: blank(parts[4]) ? (exist ? exist.origin : '') : parts[4],
+              desc: blank(it.desc) ? (exist ? exist.desc : '') : it.desc,
+              owner: blank(it.owner) ? (exist ? exist.owner : '') : it.owner,
+              origin: blank(it.origin) ? (exist ? exist.origin : '') : it.origin,
               relatedPlots: relIds.length ? relIds : (exist ? exist.relatedPlots : []),
             };
             if (exist) await WM.MemoryStore.updateItem(exist.id, data);
