@@ -294,7 +294,7 @@ ${recentText || recentRaw || '（无）'}
 ${known || prev || '（无）'}
 ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction + '\n' : ''}请按规定格式输出世界设定：`;
     if (!WM.Summary || !WM.Summary.callLLM) return prev;
-    const out = await WM.Summary.callLLM(sys, userMsg + '\n只输出 JSON，不要任何解释。', settings, { temperature: 0.4, jsonMode: true });
+    const out = await WM.Summary.callLLM(sys, userMsg + '\n直接输出 JSON，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.4, jsonMode: true });
     const parsed = WM.Summary.parseWorld ? WM.Summary.parseWorld(out) : null;
     if (!parsed || (!parsed.name && !parsed.type && !parsed.desc && !parsed.rules.length)) return prev;
     // 渲染成存储文本格式（与既有 worldbook 渲染器兼容）

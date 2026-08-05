@@ -631,7 +631,7 @@
       const summaryTpl = settings.prompts && settings.prompts.summary;
       const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
       try {
-        const rawSummary = await callLLM(sys, '只输出 JSON 格式的 {"text":"..."}，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
+        const rawSummary = await callLLM(sys, '直接输出 JSON 对象 {"text":"..."}，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
         const summaryText = taggedSummary(rawSummary);
         await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
         await WM.MemoryStore.setSummaryPointer(range[1]);
@@ -690,7 +690,7 @@
           const knownPlots = (WM.MemoryStore.getPlots() || [])
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
+          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
           const itemRaw = taggedItems(out);
           const parsedItems = parseItems(itemRaw);
           const allPlots = WM.MemoryStore.getPlots() || [];
@@ -797,7 +797,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.relations;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'relations', jsonMode: true });
+          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'relations', jsonMode: true });
           const parsed = parseRelations(taggedRelations(out));
           const prev = WM.MemoryStore.getRelations() || [];
           const merged = WM.Relations && WM.Relations.mergeRelations ? WM.Relations.mergeRelations(prev, parsed) : parsed;
@@ -812,7 +812,7 @@
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
-          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。没有新事件就输出空数组 []。', settings, { temperature: 0.4, phase: 'plot', jsonMode: true });
+          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析；无新事件则输出 []。', settings, { temperature: 0.4, phase: 'plot', jsonMode: true });
           const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
           // 归一化 key：用于跨次去重，避免模型偶尔回显旧事件时产生重复条目
@@ -844,7 +844,7 @@
           const knownPlots = allPlots
             .map((p) => `· ${p.title || p.time || p.id}`).join('\n') || '（无）';
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
-          const out = await callLLM(s, '只输出 JSON 数组，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
+          const out = await callLLM(s, '直接输出 JSON 数组，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'items', jsonMode: true });
           const itemRaw = taggedItems(out);
           // 传入 allPlots，让 parseItems 直接把关联剧情文本匹配成 relatedPlots(ID数组)
           const parsedItems = parseItems(itemRaw, allPlots);
@@ -925,7 +925,7 @@
       historySummary: '',
     });
     try {
-      const rawBig = await callLLM(sys, '只输出 JSON 格式的 {"text":"..."}，不要任何解释、不要 markdown 代码块。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
+      const rawBig = await callLLM(sys, '直接输出 JSON 对象 {"text":"..."}，整段回复须可被 JSON.parse 解析。', settings, { temperature: 0.3, phase: 'summary', jsonMode: true });
       const text = taggedSummary(rawBig);
       await WM.MemoryStore.addSummary(text, 'big', '大总结（整合 ' + recentSmalls.length + ' 段小总结）');
       return { ok: true, count: recentSmalls.length };
