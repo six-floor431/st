@@ -117,10 +117,52 @@
     return t;
   }
 
+  // ── 剧情线净化：剔除模型把提示词规则当正文输出的段落 ──
+  // 处理场景：指令回显段落（"如果我们从第一个开始…"）、分析句、编号列表、markdown 装饰。
+  function cleanPlotText(raw) {
+    if (!raw) return '';
+    let t = String(raw);
+    // 残留标签
+    t = t.replace(/<<<\s*[A-Z_]+\s*>>>/g, '');
+    let lines = t.split('\n').map((ln) => {
+      let s = ln.trim();
+      if (!s) return '';
+      // markdown 标题 / 分隔线 / 装饰标题
+      if (/^#{1,6}\s*/.test(s)) return '';
+      if (/^(-{3,}|={3,}|\*{3,})$/.test(s)) return '';
+      if (/^[#＃*【\[]*\s*(剧情|事件|时间线|梳理|整理|汇总)[^\n]{0,10}[#＃*】\]]*$/.test(s)) return '';
+      // 指令回显特征：含「我们可以」「需要压缩」「应该提取」「系统说」「用户让」等元叙述
+      if (/(我们可以|需要(压缩|提炼|提取)|应该(写|提取)|系统(说|要求|粘贴)|用户(让|说)|因此我们|注意：|最多\d+条事件|所有事件都是)/.test(s) && s.length > 30) return '';
+      // 编号/项目符号 → 去标记留内容（保持结构）
+      s = s.replace(/^\d+\s*[.、)）]\s*/, '');
+      s = s.replace(/^[-*•·]\s+/, '');
+      // 加粗剥离
+      s = s.replace(/^\*{1,2}([^*\n]+)\*{1,2}/, '$1');
+      return s;
+    });
+    while (lines.length && !lines[0]) lines.shift();
+    while (lines.length && !lines[lines.length - 1]) lines.pop();
+    t = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, '$1');
+    return t;
+  }
+
+  // ── 物品字段截断：强制每个字段不超过上限，防止模型把整段叙事塞进一个字段 ──
+  function truncateItemFields(items) {
+    const MAX = { name: 20, desc: 40, owner: 30, rel: 30, origin: 30 };
+    return items.map((it) => ({
+      name: (it.name || '').slice(0, MAX.name).trim(),
+      desc: (it.desc || '').slice(0, MAX.desc).trim(),
+      owner: (it.owner || '').slice(0, MAX.owner).trim(),
+      relatedPlotText: (it.relatedPlotText || '').slice(0, MAX.rel).trim(),
+      origin: (it.origin || '').slice(0, MAX.origin).trim(),
+    }));
+  }
+
   // 便捷封装：每个阶段对应一个标签名
   function taggedSummary(out) { return cleanSummaryText(extractTagged(out, 'SUMMARY', 'SUMMARY')); }
   function taggedRelations(out) { return extractTagged(out, 'RELATIONS', 'RELATIONS'); }
-  function taggedPlot(out) { return extractTagged(out, 'PLOT', 'PLOT'); }
+  function taggedPlot(out) { return cleanPlotText(extractTagged(out, 'PLOT', 'PLOT')); }
   function taggedWorld(out) { return extractTagged(out, 'WORLD', 'WORLD'); }
   function taggedItems(out) { return extractTagged(out, 'ITEMS', 'ITEMS'); }
 
@@ -346,7 +388,7 @@
         origin: blank(origin) ? '' : origin,
       });
     }
-    return result;
+    return truncateItemFields(result); // 强制字段长度上限，防止模型把整段叙事塞进字段
   }
 
   // 触发一次「纯记忆」总结（只跑 summary + 世界观 + 物品，不再顺带跑关系/剧情）
@@ -683,6 +725,6 @@
   }
 
   WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
-    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations,
-    sanitizeLLMText, cleanSummaryText };
+    extractTagged, taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems,
+    sanitizeLLMText, cleanSummaryText, cleanPlotText, truncateItemFields };
 })();
