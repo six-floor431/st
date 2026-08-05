@@ -1919,7 +1919,9 @@ ${recent}
         desc: (it.desc || "").slice(0, MAX.desc).trim(),
         owner: (it.owner || "").slice(0, MAX.owner).trim(),
         relatedPlotText: (it.relatedPlotText || "").slice(0, MAX.rel).trim(),
-        origin: (it.origin || "").slice(0, MAX.origin).trim()
+        origin: (it.origin || "").slice(0, MAX.origin).trim(),
+        // 保留关联剧情 ID 数组（若 parseItems 已匹配出），与存储层 normItem 字段对齐
+        ...Array.isArray(it.relatedPlots) ? { relatedPlots: it.relatedPlots.filter(Boolean).map(String) } : {}
       }));
     }
     function taggedSummary(out) {
@@ -2156,16 +2158,32 @@ ${recent}
       }
       return result;
     }
-    function parseItems(out) {
+    function parseItems(out, plots) {
+      const isBlankRel = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
+      const matchPlotIds = (text) => {
+        if (!text || isBlankRel(text) || !Array.isArray(plots)) return [];
+        const ids = [];
+        for (const t of String(text).split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
+          const hit = plots.find((p) => p.title === t) || plots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
+          if (hit) ids.push(hit.id);
+        }
+        return ids;
+      };
       const { ok, data } = parseJSON(out);
       if (ok && Array.isArray(data)) {
-        const items = data.filter((it) => it && typeof it === "object").map((it) => ({
-          name: String(it.name || "").trim(),
-          desc: String(it.desc || "").trim(),
-          owner: String(it.owner || "").trim(),
-          relatedPlotText: String(it.related || it.relatedPlotText || "").trim(),
-          origin: String(it.origin || "").trim()
-        })).filter((it) => it.name);
+        const items = data.filter((it) => it && typeof it === "object").map((it) => {
+          const relText = String(it.related || it.relatedPlotText || "").trim();
+          const obj = {
+            name: String(it.name || "").trim(),
+            desc: String(it.desc || "").trim(),
+            owner: String(it.owner || "").trim(),
+            origin: String(it.origin || "").trim(),
+            relatedPlotText: relText
+          };
+          const relIds = matchPlotIds(relText);
+          if (relIds.length) obj.relatedPlots = relIds;
+          return obj;
+        }).filter((it) => it.name);
         return truncateItemFields(items);
       }
       const lines = out.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/^(物品名\s*[｜|]|[-=]{3,})/.test(l));
@@ -2448,30 +2466,23 @@ ${recent}
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.itemExtract;
             if (!tpl) return { kind: "items", ok: true, skipped: true };
-            const knownPlots = (WM.MemoryStore.getPlots() || []).map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
+            const allPlots = WM.MemoryStore.getPlots() || [];
+            const knownPlots = allPlots.map((p) => `\xB7 ${p.title || p.time || p.id}`).join("\n") || "\uFF08\u65E0\uFF09";
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
             const out = await callLLM(s, "\u53EA\u8F93\u51FA JSON \u6570\u7EC4\uFF0C\u4E0D\u8981\u4EFB\u4F55\u89E3\u91CA\u3001\u4E0D\u8981 markdown \u4EE3\u7801\u5757\u3002", settings, { temperature: 0.3, phase: "items", jsonMode: true });
             const itemRaw = taggedItems(out);
-            const parsedItems = parseItems(itemRaw);
-            const allPlots = WM.MemoryStore.getPlots() || [];
+            const parsedItems = parseItems(itemRaw, allPlots);
             const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
             for (const it of parsedItems) {
               const name = it.name;
               if (!name) continue;
-              const relIds = [];
-              if (!blank(it.relatedPlotText)) {
-                for (const t of it.relatedPlotText.split(/[、,，/]/).map((x) => x.trim()).filter(Boolean)) {
-                  const hit = allPlots.find((p) => p.title === t) || allPlots.find((p) => p.title && (p.title.includes(t) || t.includes(p.title)));
-                  if (hit) relIds.push(hit.id);
-                }
-              }
               const exist = (WM.MemoryStore.getItems() || []).find((x) => x.name === name);
               const data = {
                 name,
                 desc: blank(it.desc) ? exist ? exist.desc : "" : it.desc,
                 owner: blank(it.owner) ? exist ? exist.owner : "" : it.owner,
                 origin: blank(it.origin) ? exist ? exist.origin : "" : it.origin,
-                relatedPlots: relIds.length ? relIds : exist ? exist.relatedPlots : []
+                relatedPlots: Array.isArray(it.relatedPlots) && it.relatedPlots.length ? it.relatedPlots : exist ? exist.relatedPlots : []
               };
               if (exist) await WM.MemoryStore.updateItem(exist.id, data);
               else await WM.MemoryStore.addItem(data);
