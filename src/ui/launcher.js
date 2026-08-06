@@ -1326,11 +1326,18 @@
 
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
-    if (saveBtn) saveBtn.onclick = () => {
+    if (saveBtn) saveBtn.onclick = async () => {
       const scope = WM._cfgTab || 'llm';
+      // 记下保存前的接管状态，保存后若发生变化，需批量同步已有温记条目的 enabled
+      const oldTakeover = WM.Worldbook && WM.Worldbook.isTakeoverOn ? WM.Worldbook.isTakeoverOn() : false;
       syncPaneToSettings(body, s, scope);
       WM.Settings.save(s);
       if (scope === 'lore' && WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+      // 接管开关变化 → 同步温记条目 enabled（takeover 开则禁用酒馆原生激活，关则恢复）
+      const newTakeover = WM.Worldbook && WM.Worldbook.isTakeoverOn ? WM.Worldbook.isTakeoverOn() : false;
+      if (oldTakeover !== newTakeover && WM.Worldbook && WM.Worldbook.syncEntryEnabled) {
+        try { await WM.Worldbook.syncEntryEnabled(); } catch (e) {}
+      }
       const labelMap = { llm: 'LLM 调用', mem: '记忆与注入', vec: '向量(Embedding)', rerank: '重排序(Rerank)', lore: '世界书', err: '错误报告' };
       toast('🌿 已保存「' + (labelMap[scope] || scope) + '」设置');
     };

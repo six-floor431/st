@@ -82,9 +82,11 @@
       if (typeof ctx.saveMetadata === 'function') await ctx.saveMetadata();
       else if (typeof ctx.saveChat === 'function') await ctx.saveChat();
       // 存档成功后，异步把结构化数据拆分同步到世界书条目（不阻塞存档）
-      // 注意：开启「向量接管」时，内容改由温记自家 embedding+rerank 召回注入，不再拆写酒馆世界书，避免双重注入。
+      // 注意：开启「向量接管」时，世界书条目仍要写（enabled=false，供用户查看/编辑，酒馆原生不激活），
+      //   召回由温记 embedding+rerank 走 memory-store 负责。条目 enabled 状态由 buildEntry 根据 takeover 自动设定。
+      //   不再因 takeover 跳过世界书写入 —— 那样会导致「接管后世界书看不到数据」的断链。
       const st = WM.Settings && WM.Settings.load();
-      if (WM.Worldbook && st && st.worldToLorebook !== false && !(st.takeoverEmbedding && st.vectorEnabled)) {
+      if (WM.Worldbook && st && st.worldToLorebook !== false) {
         dispatchLorebook().catch((e) => console.warn('[WarmMemo] 世界书同步失败', e));
       }
       return true;
@@ -160,9 +162,11 @@
     const s = load();
     const settings = WM.Settings.load();
     if (settings.worldToLorebook === false) return; // 用户关闭了世界书写入
-    // 注意：接管向量(takeoverEmbedding)不再阻断世界书同步。
-    // 世界书 = 用户可查看/编辑的「持久化数据载体」；向量接管 = 注入阶段的召回策略。
-    // 两者解耦：无论怎么接管，数据都要出现在世界书上（满足「同步到自己新建的世界书」的诉求）。
+    // 注意：接管向量(takeoverEmbedding)不阻断世界书同步。
+    //   takeover 开启时，buildEntry 会把温记条目 enabled 设为 false —— 酒馆原生不激活、不注入、不向量化，
+    //   召回全由温记 embedding+rerank 走 memory-store 负责（见 injection.js 情况 A）。
+    //   关闭 takeover 时 enabled=true，条目按 constant/selective 走酒馆原生激活。
+    //   世界书始终是「用户可查看/编辑的持久化数据载体」，与召回策略解耦。
     //
     // 条目内容统一加「状态标签」：让模型看到世界书时明确知道这是「过去发生的事」还是「世界设定」，
     // 避免把历史总结当成正在发生的当前对话叙事。标签放在开头，用【】包裹，和正文换行分隔。

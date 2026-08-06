@@ -437,7 +437,7 @@ ${it.message}`;
         if (typeof ctx.saveMetadata === "function") await ctx.saveMetadata();
         else if (typeof ctx.saveChat === "function") await ctx.saveChat();
         const st = WM.Settings && WM.Settings.load();
-        if (WM.Worldbook && st && st.worldToLorebook !== false && !(st.takeoverEmbedding && st.vectorEnabled)) {
+        if (WM.Worldbook && st && st.worldToLorebook !== false) {
           dispatchLorebook().catch((e) => console.warn("[WarmMemo] \u4E16\u754C\u4E66\u540C\u6B65\u5931\u8D25", e));
         }
         return true;
@@ -1535,9 +1535,10 @@ ${body}`,
     }
     function buildEntry(opts) {
       const isSelective = opts.strategy === "selective";
+      const takeover = isTakeoverOn();
       return {
         name: opts.title || "",
-        enabled: true,
+        enabled: !takeover,
         content: opts.content,
         // 激活策略（真实结构：type / keys / keys_secondary / scan_depth）
         strategy: {
@@ -1559,6 +1560,33 @@ ${body}`,
         effect: { sticky: null, cooldown: null, delay: null },
         extra: extraOf(opts.sourceId)
       };
+    }
+    function isTakeoverOn() {
+      try {
+        const s = WM.Settings && WM.Settings.load ? WM.Settings.load() : {};
+        return !!(s.takeoverEmbedding && s.vectorEnabled);
+      } catch (e) {
+        return false;
+      }
+    }
+    async function syncEntryEnabled() {
+      if (!available()) return false;
+      const name = targetName();
+      const takeover = isTakeoverOn();
+      try {
+        await helper().updateWorldbookWith(name, (wb) => {
+          return wb.map((e) => {
+            if (e && e.extra && e.extra.warmMemo) {
+              return Object.assign({}, e, { enabled: !takeover });
+            }
+            return e;
+          });
+        });
+        return true;
+      } catch (e) {
+        console.warn("[WarmMemo] syncEntryEnabled \u5931\u8D25:", e);
+        return false;
+      }
     }
     async function writeEntry(opts) {
       if (!opts || !opts.content || !opts.content.trim()) return null;
@@ -1790,7 +1818,9 @@ ${opts && opts.extraInstruction ? "\u3010\u989D\u5916\u8981\u6C42\u3011" + opts.
       getUserCard,
       inferWorldview,
       parseWorldview,
-      DEFAULT_WORLDVIEW_PROMPT
+      DEFAULT_WORLDVIEW_PROMPT,
+      isTakeoverOn,
+      syncEntryEnabled
     };
   })();
 
@@ -4550,11 +4580,19 @@ ${p.summary || ""}`.trim() });
         if (WM.UI && WM.UI.toast) WM.UI.toast("\u2713 \u5DF2\u5F3A\u5236\u6062\u590D\u9ED8\u8BA4\u63D0\u793A\u8BCD\uFF08\u65B0\u7248\u5DF2\u9876\u66FF\u65E7\u7248\uFF09\uFF0C\u53EF\u76F4\u63A5\u4F7F\u7528");
       };
       const saveBtn = body.querySelector("#c-save");
-      if (saveBtn) saveBtn.onclick = () => {
+      if (saveBtn) saveBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
+        const oldTakeover = WM.Worldbook && WM.Worldbook.isTakeoverOn ? WM.Worldbook.isTakeoverOn() : false;
         syncPaneToSettings(body, s, scope);
         WM.Settings.save(s);
         if (scope === "lore" && WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook();
+        const newTakeover = WM.Worldbook && WM.Worldbook.isTakeoverOn ? WM.Worldbook.isTakeoverOn() : false;
+        if (oldTakeover !== newTakeover && WM.Worldbook && WM.Worldbook.syncEntryEnabled) {
+          try {
+            await WM.Worldbook.syncEntryEnabled();
+          } catch (e) {
+          }
+        }
         const labelMap = { llm: "LLM \u8C03\u7528", mem: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165", vec: "\u5411\u91CF(Embedding)", rerank: "\u91CD\u6392\u5E8F(Rerank)", lore: "\u4E16\u754C\u4E66", err: "\u9519\u8BEF\u62A5\u544A" };
         toast("\u{1F33F} \u5DF2\u4FDD\u5B58\u300C" + (labelMap[scope] || scope) + "\u300D\u8BBE\u7F6E");
       };

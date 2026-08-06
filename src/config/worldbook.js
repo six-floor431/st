@@ -75,9 +75,14 @@
   // 构造一个符合真实 WorldbookEntry 结构的条目对象
   function buildEntry(opts) {
     const isSelective = opts.strategy === 'selective';
+    // 关键：takeover（向量接管）开启时，温记自己写的条目一律 enabled=false，
+    //   让酒馆原生完全不激活它们（不注入、不向量化），召回全由温记 embedding+rerank 负责（走 memory-store）。
+    //   关闭 takeover 时 enabled=true，条目按 constant/selective 走酒馆原生激活 —— 这是默认形态。
+    //   只作用于温记自己的条目（extra.warmMemo），用户手动加的条目不受影响。
+    const takeover = isTakeoverOn();
     return {
       name: opts.title || '',
-      enabled: true,
+      enabled: !takeover,
       content: opts.content,
       // 激活策略（真实结构：type / keys / keys_secondary / scan_depth）
       strategy: {
@@ -98,6 +103,38 @@
       effect: { sticky: null, cooldown: null, delay: null },
       extra: extraOf(opts.sourceId),
     };
+  }
+
+  // 判定当前是否处于「向量接管」模式（与 injection.js / save() 的判定完全一致）
+  function isTakeoverOn() {
+    try {
+      const s = (WM.Settings && WM.Settings.load) ? WM.Settings.load() : {};
+      return !!(s.takeoverEmbedding && s.vectorEnabled);
+    } catch (e) { return false; }
+  }
+
+  // 切换 takeover 开关后，批量同步已有温记条目的 enabled 状态。
+  //   takeover=true  → 温记条目 enabled=false（酒馆原生不激活，召回交温记）
+  //   takeover=false → 温记条目 enabled=true（恢复酒馆原生激活）
+  //   只改 extra.warmMemo 标记的条目，不碰用户手动加的条目；只改当前 targetName() 这本世界书。
+  async function syncEntryEnabled() {
+    if (!available()) return false;
+    const name = targetName();
+    const takeover = isTakeoverOn();
+    try {
+      await helper().updateWorldbookWith(name, (wb) => {
+        return wb.map((e) => {
+          if (e && e.extra && e.extra.warmMemo) {
+            return Object.assign({}, e, { enabled: !takeover });
+          }
+          return e;
+        });
+      });
+      return true;
+    } catch (e) {
+      console.warn('[WarmMemo] syncEntryEnabled 失败:', e);
+      return false;
+    }
   }
 
   // 写入/更新一个条目。sourceId 相同则更新，否则新建。实现「每条独立条目」。
@@ -346,5 +383,6 @@ ${opts && opts.extraInstruction ? '【额外要求】' + opts.extraInstruction +
     available, ensureLorebook, writeEntry, removeEntry, clearAll, pruneByPrefix, listEntries, getLorebookEntries,
     writeSummary, writeItem, writeRelation, writeWorld, targetName,
     getCharacterCard, getUserCard, inferWorldview, parseWorldview, DEFAULT_WORLDVIEW_PROMPT,
+    isTakeoverOn, syncEntryEnabled,
   };
 })();
