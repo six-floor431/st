@@ -535,20 +535,21 @@ ${it.message}`;
           strategy: "selective"
         });
       }
-      for (const p of s.plots) {
+      const plotsSorted = (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      const topPlots = plotsSorted.slice(0, 3);
+      for (const p of topPlots) {
         if (!p.title && !p.summary) continue;
         const lines = [];
         if (p.time) lines.push(`\u65F6\u95F4\uFF1A${p.time}`);
         if (p.summary) lines.push(p.summary);
-        const stat = p.status === "done" ? "\u5DF2\u5B8C\u7ED3" : p.status === "abandon" ? "\u5DF2\u5E9F\u5F03" : "\u8FDB\u884C\u4E2D";
-        lines.push(`\u72B6\u6001\uFF1A${stat}`);
         await WM.Worldbook.writeEntry({
           kind: "plot",
           sourceId: "plot::" + p.id,
           title: "\u5267\u60C5\xB7" + (p.title || p.time || p.id),
           content: lines.join("\n"),
           keys: [p.title].filter(Boolean),
-          strategy: p.status === "active" ? "constant" : "selective"
+          strategy: "constant"
+          // 最新剧情线常驻蓝灯，确保当前进展始终注入上下文
         });
       }
       const groups = WM.Relations && WM.Relations.groupByPerson ? WM.Relations.groupByPerson({ pairs: s.relations }) : [];
@@ -590,7 +591,7 @@ ${it.message}`;
       }
       if (WM.Worldbook.pruneByPrefix) {
         await WM.Worldbook.pruneByPrefix("item::", s.items.map((x) => "item::" + x.id));
-        await WM.Worldbook.pruneByPrefix("plot::", s.plots.map((x) => "plot::" + x.id));
+        await WM.Worldbook.pruneByPrefix("plot::", topPlots.map((x) => "plot::" + x.id));
         await WM.Worldbook.pruneByPrefix("worldsec::", (s.worldSections || []).map((x) => "worldsec::" + x.id));
         await WM.Worldbook.pruneByPrefix("summary::", s.summaries.map((x) => "summary::" + x.id));
       }
@@ -766,24 +767,14 @@ ${it.message}`;
     async function clearAll() {
       await save(emptyStore());
       try {
-        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
-        const chat = ctx && ctx.chat;
-        if (chat && Array.isArray(chat)) {
-          let changed = false;
-          for (const m of chat) {
-            if (m && m.is_wm_hidden) {
-              m.is_wm_hidden = false;
-              if (!m.is_user && !m.is_original_system) m.is_system = false;
-              changed = true;
-            }
-          }
-          if (changed) {
-            if (typeof ctx.saveChat === "function") await ctx.saveChat();
-            if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
-          }
-        }
+        if (WM.FloorHider && WM.FloorHider.unhideAll) await WM.FloorHider.unhideAll();
       } catch (e) {
         console.warn("[WarmMemo] \u6E05\u7A7A\u65F6\u6062\u590D\u9690\u85CF\u697C\u5C42\u5931\u8D25", e);
+      }
+      try {
+        if (WM.Worldbook && WM.Worldbook.clearAll) await WM.Worldbook.clearAll();
+      } catch (e) {
+        console.warn("[WarmMemo] \u6E05\u7A7A\u4E16\u754C\u4E66\u6761\u76EE\u5931\u8D25", e);
       }
       return true;
     }
@@ -1496,22 +1487,31 @@ ${it.message}`;
       const name = targetName();
       try {
         const names = await helper().getWorldbookNames();
-        if (!names.includes(name)) {
+        if (!Array.isArray(names) || !names.includes(name)) {
           await helper().createWorldbook(name, []);
         }
-        if (typeof helper().rebindCharWorldbooks === "function") {
-          const cur = await helper().getCharWorldbookNames("current");
-          const additional = Array.isArray(cur.additional) ? cur.additional.slice() : [];
-          if (!additional.includes(name)) {
-            additional.push(name);
-            await helper().rebindCharWorldbooks("current", { primary: cur.primary || null, additional });
-          }
-        }
-        return true;
       } catch (e) {
-        console.warn("[WarmMemo] ensureLorebook \u5931\u8D25:", e);
+        console.warn("[WarmMemo] \u521B\u5EFA/\u83B7\u53D6\u4E16\u754C\u4E66\u5931\u8D25:", e);
         return false;
       }
+      try {
+        if (typeof helper().rebindCharWorldbooks === "function") {
+          let cur = null;
+          try {
+            cur = await helper().getCharWorldbookNames("current");
+          } catch (e) {
+            cur = null;
+          }
+          const additional = Array.isArray(cur && cur.additional) ? cur.additional.slice() : [];
+          if (!additional.includes(name)) {
+            additional.push(name);
+            await helper().rebindCharWorldbooks("current", { primary: cur && cur.primary || null, additional });
+          }
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] \u7ED1\u5B9A\u4E16\u754C\u4E66\u5230\u89D2\u8272\u5361\u5931\u8D25\uFF08\u5199\u5165\u4ECD\u7EE7\u7EED\uFF09:", e);
+      }
+      return true;
     }
     function extraOf(sourceId) {
       return { warmMemo: true, sourceId: sourceId || "" };
@@ -1710,7 +1710,8 @@ ${it.message}`;
       const prevSecs = store && store.getWorldSections ? store.getWorldSections() : [];
       const prev = store ? store.getWorld() : "";
       const plots = (store && store.getPlots ? store.getPlots() : []).map((p) => `\xB7 ${p.time ? "[" + p.time + "] " : ""}${p.title}\uFF1A${p.summary}`).join("\n");
-      const recent = Array.isArray(opts.recent) ? opts.recent : [];
+      const recentFull = Array.isArray(opts.recent) ? opts.recent : [];
+      const recent = recentFull.filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system)));
       const recentText = recent.length ? recent.map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + (m.content || "")).join("\n") : "";
       const tpl = settings && settings.prompts && settings.prompts.worldview || DEFAULT_WORLDVIEW_PROMPT;
       const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: recentText });
@@ -1721,7 +1722,7 @@ ${it.message}`;
         ...prevSecs.map((w) => `\u25A0${w.title}\uFF5C${w.body}`)
       ].filter(Boolean).join("\n");
       const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
-      const recentRaw = ctx && ctx.chat ? ctx.chat.slice(-30).map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + (m.mes || "")).join("\n") : recentText || "\uFF08\u65E0\uFF09";
+      const recentRaw = ctx && ctx.chat ? ctx.chat.slice(-30).filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system))).map((m) => (m.name ? "\u3010" + m.name + "\u3011" : "") + (m.mes || "")).join("\n") : recentText || "\uFF08\u65E0\uFF09";
       const userMsg = `\u3010\u89D2\u8272\u8BBE\u5B9A\u3011${char.name || "\u672A\u77E5"}\uFF1A${char.description || ""}
 \u3010\u7528\u6237\u8BBE\u5B9A\u3011${user.name || "\u672A\u77E5"}\uFF1A${user.description || ""}
 \u3010\u5267\u60C5\u7EBF\u3011
@@ -2022,7 +2023,10 @@ ${recent}
         return sliced.map((m) => ({
           role: m.is_user ? "user" : "assistant",
           content: m.mes || "",
-          name: m.name || ""
+          name: m.name || "",
+          is_wm_hidden: !!m.is_wm_hidden,
+          is_hidden: !!m.is_hidden,
+          is_system: !!m.is_system
         }));
       } catch (e) {
         return [];
@@ -2036,7 +2040,7 @@ ${recent}
     }
     function buildDialogue(msgs, settings) {
       const rules = settings && settings.tagStripRules || [];
-      return msgs.map((m) => {
+      return msgs.filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system))).map((m) => {
         const raw = (m.name ? "\u3010" + m.name + "\u3011" : "") + (m.content || "");
         return WM.TagFilter && WM.TagFilter.strip ? WM.TagFilter.strip(raw, rules) : raw;
       }).join("\n");
@@ -2381,6 +2385,10 @@ ${recent}
             }
           }
         }
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
+        }
         if (WM.UI && WM.UI.refresh) WM.UI.refresh();
         return { ok: true, range, count: recent.length, partial: failures.length > 0, successes, failures: failures.map((f) => f.scope) };
       } finally {
@@ -2500,6 +2508,10 @@ ${recent}
           if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25"), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
           });
           WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25 \u2192 " + failures.map((f) => f.scope).join("\u3001"), "warn");
+        }
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
         }
         if (WM.UI && WM.UI.refresh) WM.UI.refresh();
         return {
@@ -2781,31 +2793,106 @@ ${p.summary || ""}`.trim() });
   (function() {
     "use strict";
     const WM = window.WarmMemo || (window.WarmMemo = {});
+    function helper() {
+      return window.TavernHelper;
+    }
     async function applySummaryPointerHiding(summaryPointer, settings) {
       if (!summaryPointer || summaryPointer <= 0) return "no_pointer";
       const ctx = window.SillyTavern ? window.SillyTavern.getContext() : null;
       if (!ctx || !ctx.chat) return "no_context";
       const chat = ctx.chat;
       if (summaryPointer > chat.length) return "stale_pointer";
-      let hidden = 0;
+      const toHide = [];
       for (let i = 0; i < summaryPointer; i++) {
         const m = chat[i];
-        if (m && !m.is_user && !m.is_system && !m.is_wm_hidden) {
-          m.is_original_system = false;
+        if (m && !m.is_system && !m.is_wm_hidden) toHide.push(i);
+      }
+      if (!toHide.length) return "already";
+      let apiOk = false;
+      try {
+        const h = helper();
+        if (h && typeof h.setChatMessages === "function") {
+          await h.setChatMessages(
+            toHide.map((id) => ({ message_id: id, is_hidden: true })),
+            { refresh: "affected" }
+          );
+          apiOk = true;
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] setChatMessages \u9690\u85CF\u5931\u8D25\uFF0C\u56DE\u9000\u76F4\u63A5\u6539 chat:", e);
+      }
+      for (const i of toHide) {
+        const m = chat[i];
+        m.is_original_system = false;
+        if (!apiOk) {
           m.is_system = true;
-          m.is_wm_hidden = true;
-          hidden++;
+          m.is_hidden = true;
+        }
+        m.is_wm_hidden = true;
+      }
+      if (typeof ctx.saveChat === "function") {
+        try {
+          await ctx.saveChat();
+        } catch (e) {
+          console.warn("[WarmMemo] saveChat \u5931\u8D25:", e);
         }
       }
-      if (hidden > 0 && ctx.saveChat && typeof ctx.saveChat === "function") ctx.saveChat();
+      try {
+        const showChat = ctx && typeof ctx.showChat === "function" ? ctx.showChat : window.SillyTavern && typeof window.SillyTavern.showChat === "function" ? window.SillyTavern.showChat : null;
+        if (showChat) showChat();
+      } catch (e) {
+      }
       if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
-      return hidden > 0 ? "hidden" : "already";
+      return "hidden";
     }
     async function hideUntil(lastIndex, settings) {
       if (lastIndex == null || lastIndex < 0) return "invalid";
       return applySummaryPointerHiding(lastIndex, settings);
     }
-    WM.FloorHider = { applySummaryPointerHiding, hideUntil };
+    async function unhideAll() {
+      const ctx = window.SillyTavern ? window.SillyTavern.getContext() : null;
+      if (!ctx || !ctx.chat) return false;
+      const chat = ctx.chat;
+      const toRestore = [];
+      for (let i = 0; i < chat.length; i++) {
+        const m = chat[i];
+        if (m && m.is_wm_hidden) toRestore.push(i);
+      }
+      if (!toRestore.length) return false;
+      try {
+        const h = helper();
+        if (h && typeof h.setChatMessages === "function") {
+          await h.setChatMessages(
+            toRestore.map((id) => ({ message_id: id, is_hidden: false })),
+            { refresh: "affected" }
+          );
+        }
+      } catch (e) {
+        console.warn("[WarmMemo] setChatMessages \u53CD\u9690\u85CF\u5931\u8D25:", e);
+      }
+      for (const i of toRestore) {
+        const m = chat[i];
+        m.is_wm_hidden = false;
+        if (!m.is_original_system) {
+          m.is_system = false;
+          m.is_hidden = false;
+        }
+      }
+      if (typeof ctx.saveChat === "function") {
+        try {
+          await ctx.saveChat();
+        } catch (e) {
+        }
+      }
+      try {
+        const showChat = ctx && typeof ctx.showChat === "function" ? ctx.showChat : window.SillyTavern && typeof window.SillyTavern.showChat === "function" ? window.SillyTavern.showChat : null;
+        if (showChat) showChat();
+      } catch (e) {
+      }
+      if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
+      return true;
+    }
+    WM.FloorHider = { applySummaryPointerHiding, hideUntil, unhideAll };
   })();
 
   // src/ui/rel-graph.js
@@ -3465,7 +3552,8 @@ ${p.summary || ""}`.trim() });
           const r = await WM.Summary.runSummary(fresh, { forceAll: true });
           let msg = "";
           if (r && r.ok) {
-            msg += `\u2713 \u8BB0\u5FC6 ${r.count} \u6761\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF0C\u4E16\u754C${r.results.world ? "\u2713" : "\xD7"} \u7269\u54C1${r.results.items}
+            const succ = (r.successes || []).join("\u3001") || "\u65E0";
+            msg += `\u2713 \u8BB0\u5FC6 ${r.count} \u6761\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF0C\u63D0\u70BC\uFF1A${succ}\uFF09
 `;
           } else {
             msg += "\u2717 \u8BB0\u5FC6\uFF1A" + (r && r.reason ? r.reason : "\u5931\u8D25") + "\n";
@@ -3475,6 +3563,10 @@ ${p.summary || ""}`.trim() });
             msg += `\u2713 \u5267\u60C5\u7EBF\u63A8\u8FDB ${rp.count} \u6761\uFF08\u5173\u7CFB${rp.results.relations} \u5267\u60C5${rp.results.plots}\uFF09`;
           } else {
             msg += "\u2717 \u5267\u60C5\u7EBF\uFF1A" + (rp && rp.reason ? rp.reason : "\u5931\u8D25");
+          }
+          if (fresh.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+            const end = (rp && rp.range ? rp.range[1] : 0) || (r && r.range ? r.range[1] : 0);
+            if (end > 0) await WM.FloorHider.hideUntil(end);
           }
           st.textContent = msg;
         } catch (e) {
@@ -3745,7 +3837,11 @@ ${p.summary || ""}`.trim() });
       if (plotRun) plotRun.onclick = async () => {
         const st = body.querySelector(".wm-status");
         if (st) st.textContent = "\u5F52\u7EB3\u4E2D\u2026";
-        const r = await WM.Summary.triggerPlot(WM.Settings.load());
+        const psettings = WM.Settings.load();
+        const r = await WM.Summary.triggerPlot(psettings);
+        if (r && r.ok && psettings.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+          await WM.FloorHider.hideUntil(r.range[1]);
+        }
         if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
         renderPlot(body);
       };
@@ -4617,6 +4713,9 @@ ${p.summary || ""}`.trim() });
               const ptr = WM.MemoryStore.getPlotPointer();
               if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
             }
+            if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+              await WM.FloorHider.hideUntil(rp.range[1]);
+            }
             if (rp && rp.ok) {
               const extra = rp.partial ? "\uFF08\u90E8\u5206\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
               toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB ${rp.count} \u6761\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09${extra}`);
@@ -4648,7 +4747,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "summary-wenxue-style-v4";
+  window.WarmMemo.version = "summary-wenxue-style-v6";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

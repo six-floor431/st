@@ -344,7 +344,9 @@
         const r = await WM.Summary.runSummary(fresh, { forceAll: true });
         let msg = '';
         if (r && r.ok) {
-          msg += `✓ 记忆 ${r.count} 条（楼层 ${r.range[0]}-${r.range[1]}），世界${r.results.world ? '✓' : '×'} 物品${r.results.items}` + '\n';
+          // triggerSummary 返回 successes（数组），用它显示子任务结果，避免读不存在的 r.results
+          const succ = (r.successes || []).join('、') || '无';
+          msg += `✓ 记忆 ${r.count} 条（楼层 ${r.range[0]}-${r.range[1]}，提炼：${succ}）` + '\n';
         } else {
           msg += '✗ 记忆：' + (r && r.reason ? r.reason : '失败') + '\n';
         }
@@ -353,6 +355,11 @@
           msg += `✓ 剧情线推进 ${rp.count} 条（关系${rp.results.relations} 剧情${rp.results.plots}）`;
         } else {
           msg += '✗ 剧情线：' + (rp && rp.reason ? rp.reason : '失败');
+        }
+        // 手动「立即处理」后隐藏已处理楼层（与自动流程一致）
+        if (fresh.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+          const end = (rp && rp.range ? rp.range[1] : 0) || (r && r.range ? r.range[1] : 0);
+          if (end > 0) await WM.FloorHider.hideUntil(end);
         }
         st.textContent = msg;
       } catch (e) {
@@ -624,7 +631,12 @@
     if (plotRun) plotRun.onclick = async () => {
       const st = body.querySelector('.wm-status');
       if (st) st.textContent = '归纳中…';
-      const r = await WM.Summary.triggerPlot(WM.Settings.load());
+      const psettings = WM.Settings.load();
+      const r = await WM.Summary.triggerPlot(psettings);
+      // 推进后隐藏已处理楼层（与自动流程一致）
+      if (r && r.ok && psettings.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
+        await WM.FloorHider.hideUntil(r.range[1]);
+      }
       if (st) st.textContent = r && r.ok ? '✓ 剧情线已推进' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
       renderPlot(body);
     };
@@ -1516,6 +1528,10 @@
             const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
             const ptr = WM.MemoryStore.getPlotPointer();
             if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
+          }
+          // 剧情线推进后同样隐藏已处理楼层（与总结流程一致，避免已处理楼层仍进上下文）
+          if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+            await WM.FloorHider.hideUntil(rp.range[1]);
           }
           if (rp && rp.ok) {
             const extra = rp.partial ? '（部分失败，见错误报告）' : '';

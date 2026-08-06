@@ -23,29 +23,40 @@
   }
 
   // 确保世界书存在，并绑定到当前角色卡（实现按角色卡数据隔离）
+  // 容错策略：
+  //   1) 「确保世界书存在」失败 → 阻断（写不进去）；
+  //   2) 「绑定到角色卡」失败 → 不阻断写入（世界书仍可写入，只是不绑定到当前角色卡）。
+  //   旧实现把两步放在同一个 try 里，getCharWorldbookNames 在没打开角色卡/某些酒馆版本下抛错，
+  //   会把整个 ensureLorebook 否决，导致 writeEntry 全部静默失败 —— 这是「世界书没更新」的隐性根因。
   async function ensureLorebook() {
     if (!available()) return false;
     const name = targetName();
+    // 1) 确保世界书存在
     try {
       const names = await helper().getWorldbookNames();
-      if (!names.includes(name)) {
+      if (!Array.isArray(names) || !names.includes(name)) {
         await helper().createWorldbook(name, []);
       }
-      // 绑定到当前角色卡的世界书列表，做到每角色卡独立。
-      // 真实签名：rebindCharWorldbooks('current', { primary, additional })
-      if (typeof helper().rebindCharWorldbooks === 'function') {
-        const cur = await helper().getCharWorldbookNames('current'); // { primary, additional }
-        const additional = Array.isArray(cur.additional) ? cur.additional.slice() : [];
-        if (!additional.includes(name)) {
-          additional.push(name);
-          await helper().rebindCharWorldbooks('current', { primary: cur.primary || null, additional });
-        }
-      }
-      return true;
     } catch (e) {
-      console.warn('[WarmMemo] ensureLorebook 失败:', e);
+      console.warn('[WarmMemo] 创建/获取世界书失败:', e);
       return false;
     }
+    // 2) 绑定到当前角色卡（失败不阻断写入）
+    try {
+      if (typeof helper().rebindCharWorldbooks === 'function') {
+        let cur = null;
+        try { cur = await helper().getCharWorldbookNames('current'); }
+        catch (e) { cur = null; } // 某些酒馆版本/未打开角色卡时抛错，降级为空
+        const additional = Array.isArray(cur && cur.additional) ? cur.additional.slice() : [];
+        if (!additional.includes(name)) {
+          additional.push(name);
+          await helper().rebindCharWorldbooks('current', { primary: (cur && cur.primary) || null, additional });
+        }
+      }
+    } catch (e) {
+      console.warn('[WarmMemo] 绑定世界书到角色卡失败（写入仍继续）:', e);
+    }
+    return true;
   }
 
   // 在条目 extra 中标记来源，便于按 sourceId 精确更新/删除
@@ -272,7 +283,9 @@
     const plots = (store && store.getPlots ? store.getPlots() : [])
       .map((p) => `· ${p.time ? '[' + p.time + '] ' : ''}${p.title}：${p.summary}`).join('\n');
     // 注意：世界观只提炼「世界本身的规则/法则」，不注入物品/角色具体内容，避免污染世界设定。
-    const recent = Array.isArray(opts.recent) ? opts.recent : [];
+    // 过滤已隐藏楼层，避免用已总结内容重复推断世界观（与 buildDialogue 行为一致）
+    const recentFull = Array.isArray(opts.recent) ? opts.recent : [];
+    const recent = recentFull.filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system)));
     const recentText = recent.length ? recent.map((m) => (m.name ? '【' + m.name + '】' : '') + (m.content || '')).join('\n') : '';
     const tpl = (settings && settings.prompts && settings.prompts.worldview) || DEFAULT_WORLDVIEW_PROMPT;
     const sys = WM.Summary.fillTemplate(tpl, { plot: plots, recent: recentText });
@@ -283,7 +296,7 @@
       ...prevSecs.map((w) => `■${w.title}｜${w.body}`),
     ].filter(Boolean).join('\n');
     const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
-    const recentRaw = (ctx && ctx.chat) ? ctx.chat.slice(-30).map((m) => (m.name ? '【' + m.name + '】' : '') + (m.mes || '')).join('\n') : (recentText || '（无）');
+    const recentRaw = (ctx && ctx.chat) ? ctx.chat.slice(-30).filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system))).map((m) => (m.name ? '【' + m.name + '】' : '') + (m.mes || '')).join('\n') : (recentText || '（无）');
     const userMsg = `【角色设定】${char.name || '未知'}：${char.description || ''}
 【用户设定】${user.name || '未知'}：${user.description || ''}
 【剧情线】

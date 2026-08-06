@@ -194,21 +194,23 @@
         strategy: 'selective',
       });
     }
-    // 2.5) 每条剧情线 → 独立条目（最新在上由 UI 负责，世界书按条写）
-    for (const p of s.plots) {
+    // 2.5) 剧情线 → 只写「最新 3 条」到世界书（用户需求：世界书只保留最新 3 条剧情线）。
+    //   按 ts 倒序取最新 3 条；旧剧情线条目由下方 pruneByPrefix 同步删除，确保世界书始终是当前进展。
+    //   剧情线为纯事件列表，不再带状态标签，条目内容只含时间+正文。
+    const plotsSorted = (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const topPlots = plotsSorted.slice(0, 3);
+    for (const p of topPlots) {
       if (!p.title && !p.summary) continue;
       const lines = [];
       if (p.time) lines.push(`时间：${p.time}`);
       if (p.summary) lines.push(p.summary);
-      const stat = p.status === 'done' ? '已完结' : (p.status === 'abandon' ? '已废弃' : '进行中');
-      lines.push(`状态：${stat}`);
       await WM.Worldbook.writeEntry({
         kind: 'plot',
         sourceId: 'plot::' + p.id,
         title: '剧情·' + (p.title || p.time || p.id),
         content: lines.join('\n'),
         keys: [p.title].filter(Boolean),
-        strategy: p.status === 'active' ? 'constant' : 'selective',
+        strategy: 'constant', // 最新剧情线常驻蓝灯，确保当前进展始终注入上下文
       });
     }
     // 3) 关系 → 按主体人物分组，同一人挤一起、不同人分开
@@ -255,7 +257,8 @@
     // 6) 清理残留：已在面板中删除的条目，同步从世界书移除
     if (WM.Worldbook.pruneByPrefix) {
       await WM.Worldbook.pruneByPrefix('item::', s.items.map((x) => 'item::' + x.id));
-      await WM.Worldbook.pruneByPrefix('plot::', s.plots.map((x) => 'plot::' + x.id));
+      // plot 只保留最新 3 条的 id，其余从世界书删除（与 2.5 写入策略对齐）
+      await WM.Worldbook.pruneByPrefix('plot::', topPlots.map((x) => 'plot::' + x.id));
       await WM.Worldbook.pruneByPrefix('worldsec::', (s.worldSections || []).map((x) => 'worldsec::' + x.id));
       await WM.Worldbook.pruneByPrefix('summary::', s.summaries.map((x) => 'summary::' + x.id));
     }
@@ -427,30 +430,18 @@
   // ── 清空当前角色卡全部数据（不可还原） ──
   // 1) chat_metadata 中的 warm_memo_v2 整体重置为空库；
   // 2) 把之前因总结而被隐藏的楼层（is_wm_hidden）恢复显示，不再隐藏；
+  // 3) 同步清空本扩展写入当前角色卡世界书的所有条目。
   // 不影响全局设置（autoSummaryEnabled 等存在 localStorage，保留）。
   async function clearAll() {
     await save(emptyStore());
-    // 反隐藏：清除所有被本扩展标记隐藏的消息标记
+    // 反隐藏：交由 FloorHider.unhideAll 统一处理（官方 setChatMessages + 直接改双路径）
     try {
-      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
-      const chat = ctx && ctx.chat;
-      if (chat && Array.isArray(chat)) {
-        let changed = false;
-        for (const m of chat) {
-          if (m && m.is_wm_hidden) {
-            m.is_wm_hidden = false;
-            // 仅恢复「被本扩展临时置为 system 以隐藏」的对话消息；
-            // 若该消息原本就是酒馆的 system 消息，不动它，避免破坏角色卡/系统提示。
-            if (!m.is_user && !m.is_original_system) m.is_system = false;
-            changed = true;
-          }
-        }
-        if (changed) {
-          if (typeof ctx.saveChat === 'function') await ctx.saveChat();
-          if (WM.Sidebar && WM.Sidebar.refreshHidden) WM.Sidebar.refreshHidden();
-        }
-      }
+      if (WM.FloorHider && WM.FloorHider.unhideAll) await WM.FloorHider.unhideAll();
     } catch (e) { console.warn('[WarmMemo] 清空时恢复隐藏楼层失败', e); }
+    // 清空世界书条目（保留世界书本身）
+    try {
+      if (WM.Worldbook && WM.Worldbook.clearAll) await WM.Worldbook.clearAll();
+    } catch (e) { console.warn('[WarmMemo] 清空世界书条目失败', e); }
     return true;
   }
 

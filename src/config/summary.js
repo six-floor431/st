@@ -239,6 +239,9 @@
   }
 
   // 取得最近 N 条原始对话（用于总结）
+  // 返回的每条消息带隐藏标记（is_wm_hidden/is_hidden/is_system），供 buildDialogue 跳过已总结楼层。
+  //   注意：这里不过滤已隐藏楼层——因为 summaryPointer/plotPointer 基于原始 chat 索引，
+  //   若在这里过滤会导致 total 变小、指针对不上。过滤交给 buildDialogue 在「发给 LLM 前」做。
   function getRecentMessages(n) {
     try {
       const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
@@ -249,6 +252,9 @@
         role: m.is_user ? 'user' : 'assistant',
         content: m.mes || '',
         name: m.name || '',
+        is_wm_hidden: !!m.is_wm_hidden,
+        is_hidden: !!m.is_hidden,
+        is_system: !!m.is_system,
       }));
     } catch (e) { return []; }
   }
@@ -261,13 +267,19 @@
     }));
   }
 
-  // 构造传给 LLM 的「对话文本块」：对每条 content 应用标签过滤（剔除 {{{ }}} 等包裹内容）
+  // 构造传给 LLM 的「对话文本块」：
+  //   1) 跳过已隐藏楼层（is_wm_hidden/is_hidden/is_system）—— 这些楼层已被总结过，再发给 LLM 是重复；
+  //   2) 对每条 content 应用标签过滤（剔除 {{{ }}} 等包裹内容）。
+  // 这保证「已总结楼层不会被扩展继续总结推动分析」，与用户的诉求对齐。
   function buildDialogue(msgs, settings) {
     const rules = (settings && settings.tagStripRules) || [];
-    return msgs.map((m) => {
-      const raw = (m.name ? '【' + m.name + '】' : '') + (m.content || '');
-      return WM.TagFilter && WM.TagFilter.strip ? WM.TagFilter.strip(raw, rules) : raw;
-    }).join('\n');
+    return msgs
+      .filter((m) => !(m && (m.is_wm_hidden || m.is_hidden || m.is_system)))
+      .map((m) => {
+        const raw = (m.name ? '【' + m.name + '】' : '') + (m.content || '');
+        return WM.TagFilter && WM.TagFilter.strip ? WM.TagFilter.strip(raw, rules) : raw;
+      })
+      .join('\n');
   }
 
   // 各阶段对应的「任务 token」配置键（用于二级输出上限控制）
@@ -662,6 +674,9 @@
         }
       }
 
+      // 显式 await 世界书同步：save() 里 dispatchLorebook 是 fire-and-forget，
+      // 此处再 await 一次确保条目（最新3条剧情线/所有记忆/所有物品/关系/世界观）已写入当前角色卡世界书
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       if (WM.UI && WM.UI.refresh) WM.UI.refresh();
       return { ok: true, range, count: recent.length, partial: failures.length > 0, successes, failures: failures.map((f) => f.scope) };
     } finally {
@@ -793,6 +808,8 @@
         WM.UI && WM.UI.toast && WM.UI.toast('剧情线部分失败 → ' + failures.map((f) => f.scope).join('、'), 'warn');
       }
 
+      // 显式 await 世界书同步：确保剧情线/关系/物品条目已写入当前角色卡世界书
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       if (WM.UI && WM.UI.refresh) WM.UI.refresh();
       return {
         ok: true, range, count: recent.length, partial: failures.length > 0,
