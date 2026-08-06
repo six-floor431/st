@@ -170,6 +170,7 @@
     body.innerHTML = `
       <div class="wm-card">
         <div class="wm-h">自动总结（有温度记忆）</div>
+        <div class="wm-row" style="background:#f7f2e8;padding:6px 10px;border-radius:6px;margin-bottom:8px;font-size:13px">当前对话共 <b style="color:#c0392b;font-size:15px">${total}</b> 层${s.autoSummaryMode==='new' ? `（已总结到第 ${WM.MemoryStore.getSummaryPointer ? WM.MemoryStore.getSummaryPointer() : 0} 层）` : ''}</div>
         <label class="wm-row"><input type="checkbox" id="a-on" ${s.autoSummaryEnabled ? 'checked' : ''}/> 开启自动总结</label>
         <div class="wm-row">总结模式：
           <select id="a-mode">
@@ -336,10 +337,24 @@
       st.textContent = '处理中…（跑 6 个 LLM：总结/世界观/物品 + 关系/剧情线/物品）';
       try {
         const fresh = WM.Settings.load();
-        // 「立即总结」= 两端全跑 full 模式：
+        // 即时同步当前输入框值进 fresh —— 用户改了区间/模式不用先点「保存设置」也能立即生效。
+        fresh.autoSummaryMode = mode.value;
+        fresh.autoSummaryCount = parseInt(body.querySelector('#a-count').value, 10) || 20;
+        fresh.autoSummaryFloor = parseInt(body.querySelector('#a-floor').value, 10) || 20;
+        fresh.autoSummaryStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
+        fresh.autoSummaryEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
+        const pModeEl = body.querySelector('#p-mode');
+        if (pModeEl) fresh.autoPlotMode = pModeEl.value;
+        fresh.autoPlotCount = parseInt(body.querySelector('#p-count') ? body.querySelector('#p-count').value : body.querySelector('#a-count').value, 10) || 20;
+        fresh.autoPlotFloor = parseInt(body.querySelector('#p-floor') ? body.querySelector('#p-floor').value : body.querySelector('#a-floor').value, 10) || 20;
+        fresh.autoPlotStart = parseInt(body.querySelector('#p-start') ? body.querySelector('#p-start').value : body.querySelector('#a-start').value, 10) || 0;
+        fresh.autoPlotEnd = parseInt(body.querySelector('#p-end') ? body.querySelector('#p-end').value : body.querySelector('#a-end').value, 10) || -1;
+        // 「立即总结」= 两端全跑 full 模式（跑哪些 LLM）：
         //   总结流程(full)：总结 + 世界观 + 物品（3 个 LLM）
         //   剧情流程(full)：关系 + 剧情线 + 物品（3 个 LLM）
-        const r = await WM.Summary.triggerSummary(fresh, { mode: 'full', forceAll: true });
+        // 关键：不传 forceAll —— 尊重用户当前选的总结模式（range/count/floor/new），
+        //   否则 forceAll 会把区间强制成 [1,total] 全量，用户选的「楼层区间」形同虚设。
+        const r = await WM.Summary.triggerSummary(fresh, { mode: 'full' });
         let msg = '';
         if (r && r.ok) {
           const succ = (r.successes || []).join('、') || '无';
@@ -347,7 +362,7 @@
         } else {
           msg += '✗ 总结流程：' + (r && r.reason ? r.reason : '失败') + '\n';
         }
-        const rp = await WM.Summary.triggerPlot(fresh, { mode: 'full', forceAll: true });
+        const rp = await WM.Summary.triggerPlot(fresh, { mode: 'full' });
         if (rp && rp.ok) {
           msg += `✓ 剧情流程（楼层 ${rp.range[0]}-${rp.range[1]}）：${(rp.successes || []).join('、') || '无'}`;
         } else {

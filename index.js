@@ -3471,6 +3471,7 @@ ${p.summary || ""}`.trim() });
       body.innerHTML = `
       <div class="wm-card">
         <div class="wm-h">\u81EA\u52A8\u603B\u7ED3\uFF08\u6709\u6E29\u5EA6\u8BB0\u5FC6\uFF09</div>
+        <div class="wm-row" style="background:#f7f2e8;padding:6px 10px;border-radius:6px;margin-bottom:8px;font-size:13px">\u5F53\u524D\u5BF9\u8BDD\u5171 <b style="color:#c0392b;font-size:15px">${total}</b> \u5C42${s.autoSummaryMode === "new" ? `\uFF08\u5DF2\u603B\u7ED3\u5230\u7B2C ${WM.MemoryStore.getSummaryPointer ? WM.MemoryStore.getSummaryPointer() : 0} \u5C42\uFF09` : ""}</div>
         <label class="wm-row"><input type="checkbox" id="a-on" ${s.autoSummaryEnabled ? "checked" : ""}/> \u5F00\u542F\u81EA\u52A8\u603B\u7ED3</label>
         <div class="wm-row">\u603B\u7ED3\u6A21\u5F0F\uFF1A
           <select id="a-mode">
@@ -3629,7 +3630,18 @@ ${p.summary || ""}`.trim() });
         st.textContent = "\u5904\u7406\u4E2D\u2026\uFF08\u8DD1 6 \u4E2A LLM\uFF1A\u603B\u7ED3/\u4E16\u754C\u89C2/\u7269\u54C1 + \u5173\u7CFB/\u5267\u60C5\u7EBF/\u7269\u54C1\uFF09";
         try {
           const fresh = WM.Settings.load();
-          const r = await WM.Summary.triggerSummary(fresh, { mode: "full", forceAll: true });
+          fresh.autoSummaryMode = mode.value;
+          fresh.autoSummaryCount = parseInt(body.querySelector("#a-count").value, 10) || 20;
+          fresh.autoSummaryFloor = parseInt(body.querySelector("#a-floor").value, 10) || 20;
+          fresh.autoSummaryStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
+          fresh.autoSummaryEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
+          const pModeEl = body.querySelector("#p-mode");
+          if (pModeEl) fresh.autoPlotMode = pModeEl.value;
+          fresh.autoPlotCount = parseInt(body.querySelector("#p-count") ? body.querySelector("#p-count").value : body.querySelector("#a-count").value, 10) || 20;
+          fresh.autoPlotFloor = parseInt(body.querySelector("#p-floor") ? body.querySelector("#p-floor").value : body.querySelector("#a-floor").value, 10) || 20;
+          fresh.autoPlotStart = parseInt(body.querySelector("#p-start") ? body.querySelector("#p-start").value : body.querySelector("#a-start").value, 10) || 0;
+          fresh.autoPlotEnd = parseInt(body.querySelector("#p-end") ? body.querySelector("#p-end").value : body.querySelector("#a-end").value, 10) || -1;
+          const r = await WM.Summary.triggerSummary(fresh, { mode: "full" });
           let msg = "";
           if (r && r.ok) {
             const succ = (r.successes || []).join("\u3001") || "\u65E0";
@@ -3638,7 +3650,7 @@ ${p.summary || ""}`.trim() });
           } else {
             msg += "\u2717 \u603B\u7ED3\u6D41\u7A0B\uFF1A" + (r && r.reason ? r.reason : "\u5931\u8D25") + "\n";
           }
-          const rp = await WM.Summary.triggerPlot(fresh, { mode: "full", forceAll: true });
+          const rp = await WM.Summary.triggerPlot(fresh, { mode: "full" });
           if (rp && rp.ok) {
             msg += `\u2713 \u5267\u60C5\u6D41\u7A0B\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09\uFF1A${(rp.successes || []).join("\u3001") || "\u65E0"}`;
           } else {
