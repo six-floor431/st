@@ -163,13 +163,19 @@
     // 注意：接管向量(takeoverEmbedding)不再阻断世界书同步。
     // 世界书 = 用户可查看/编辑的「持久化数据载体」；向量接管 = 注入阶段的召回策略。
     // 两者解耦：无论怎么接管，数据都要出现在世界书上（满足「同步到自己新建的世界书」的诉求）。
+    //
+    // 条目内容统一加「状态标签」：让模型看到世界书时明确知道这是「过去发生的事」还是「世界设定」，
+    // 避免把历史总结当成正在发生的当前对话叙事。标签放在开头，用【】包裹，和正文换行分隔。
     // 1) 每段总结/剧情摘要 → 独立条目（不挤在一起）
     for (const sm of s.summaries) {
+      const label = sm.kind === 'big' ? '长期记忆·大总结'
+        : sm.kind === 'plot' ? '过往事件·剧情摘要'
+        : '过往对话·总结';
       await WM.Worldbook.writeEntry({
         kind: sm.kind === 'plot' ? 'summary' : 'summary',
         sourceId: 'summary::' + sm.id,
-        title: (sm.kind === 'plot' ? '剧情摘要·' : '总结·') + sm.title,
-        content: sm.text,
+        title: (sm.kind === 'plot' ? '剧情摘要·' : sm.kind === 'big' ? '大总结·' : '总结·') + sm.title,
+        content: `【之前发生过的事情·${label}】\n${sm.text}`,
         strategy: 'constant',
       });
     }
@@ -191,14 +197,14 @@
         kind: 'item',
         sourceId: 'item::' + it.id,
         title: '物品·' + it.name,
-        content: lines.join('\n'),
+        content: `【已知存在的物品】\n${lines.join('\n')}`,
         keys: Array.from(new Set(keys.filter(Boolean))),
         strategy: 'selective',
       });
     }
     // 2.5) 剧情线 → 只写「最新 3 条」到世界书（用户需求：世界书只保留最新 3 条剧情线）。
     //   按 ts 倒序取最新 3 条；旧剧情线条目由下方 pruneByPrefix 同步删除，确保世界书始终是当前进展。
-    //   剧情线为纯事件列表，不再带状态标签，条目内容只含时间+正文。
+    //   条目内容加「之前发生过的剧情事件」标签，明确是过去叙事。
     const plotsSorted = (s.plots || []).slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const topPlots = plotsSorted.slice(0, 3);
     for (const p of topPlots) {
@@ -210,7 +216,7 @@
         kind: 'plot',
         sourceId: 'plot::' + p.id,
         title: '剧情·' + (p.title || p.time || p.id),
-        content: lines.join('\n'),
+        content: `【之前发生过的剧情事件】\n${lines.join('\n')}`,
         keys: [p.title].filter(Boolean),
         strategy: 'constant', // 最新剧情线常驻蓝灯，确保当前进展始终注入上下文
       });
@@ -222,7 +228,7 @@
         kind: 'relation',
         sourceId: 'relation::' + g.person,
         title: '关系·' + g.person,
-        content: `${g.person}的关系：${g.text}`,
+        content: `【人物之间的关系（过往已知）】\n${g.person}的关系：${g.text}`,
         keys: g.keys,
         strategy: 'constant',
       });
@@ -239,18 +245,19 @@
         kind: 'world',
         sourceId: 'world::main',
         title: '世界观·' + (wm.name || '总纲'),
-        content: headLines.join('\n'),
+        content: `【世界的基本设定（固定不变）】\n${headLines.join('\n')}`,
         strategy: 'constant',
       });
     }
     // 5) 世界设定分条 → 每条独立条目（如「修炼体系」「势力分布」）
     for (const w of (s.worldSections || [])) {
       if (!w.title && !w.body) continue;
+      const body = `${w.title ? w.title + '\n' : ''}${w.body || ''}`.trim();
       await WM.Worldbook.writeEntry({
         kind: 'world',
         sourceId: 'worldsec::' + w.id,
         title: '设定·' + (w.title || w.id),
-        content: `${w.title ? w.title + '\n' : ''}${w.body || ''}`.trim(),
+        content: `【世界的具体设定（固定规则）】\n${body}`,
         keys: [w.title].filter(Boolean),
         strategy: 'selective',
       });

@@ -504,11 +504,13 @@ ${it.message}`;
       const settings = WM.Settings.load();
       if (settings.worldToLorebook === false) return;
       for (const sm of s.summaries) {
+        const label = sm.kind === "big" ? "\u957F\u671F\u8BB0\u5FC6\xB7\u5927\u603B\u7ED3" : sm.kind === "plot" ? "\u8FC7\u5F80\u4E8B\u4EF6\xB7\u5267\u60C5\u6458\u8981" : "\u8FC7\u5F80\u5BF9\u8BDD\xB7\u603B\u7ED3";
         await WM.Worldbook.writeEntry({
           kind: sm.kind === "plot" ? "summary" : "summary",
           sourceId: "summary::" + sm.id,
-          title: (sm.kind === "plot" ? "\u5267\u60C5\u6458\u8981\xB7" : "\u603B\u7ED3\xB7") + sm.title,
-          content: sm.text,
+          title: (sm.kind === "plot" ? "\u5267\u60C5\u6458\u8981\xB7" : sm.kind === "big" ? "\u5927\u603B\u7ED3\xB7" : "\u603B\u7ED3\xB7") + sm.title,
+          content: `\u3010\u4E4B\u524D\u53D1\u751F\u8FC7\u7684\u4E8B\u60C5\xB7${label}\u3011
+${sm.text}`,
           strategy: "constant"
         });
       }
@@ -529,7 +531,8 @@ ${it.message}`;
           kind: "item",
           sourceId: "item::" + it.id,
           title: "\u7269\u54C1\xB7" + it.name,
-          content: lines.join("\n"),
+          content: `\u3010\u5DF2\u77E5\u5B58\u5728\u7684\u7269\u54C1\u3011
+${lines.join("\n")}`,
           keys: Array.from(new Set(keys.filter(Boolean))),
           strategy: "selective"
         });
@@ -545,7 +548,8 @@ ${it.message}`;
           kind: "plot",
           sourceId: "plot::" + p.id,
           title: "\u5267\u60C5\xB7" + (p.title || p.time || p.id),
-          content: lines.join("\n"),
+          content: `\u3010\u4E4B\u524D\u53D1\u751F\u8FC7\u7684\u5267\u60C5\u4E8B\u4EF6\u3011
+${lines.join("\n")}`,
           keys: [p.title].filter(Boolean),
           strategy: "constant"
           // 最新剧情线常驻蓝灯，确保当前进展始终注入上下文
@@ -557,7 +561,8 @@ ${it.message}`;
           kind: "relation",
           sourceId: "relation::" + g.person,
           title: "\u5173\u7CFB\xB7" + g.person,
-          content: `${g.person}\u7684\u5173\u7CFB\uFF1A${g.text}`,
+          content: `\u3010\u4EBA\u7269\u4E4B\u95F4\u7684\u5173\u7CFB\uFF08\u8FC7\u5F80\u5DF2\u77E5\uFF09\u3011
+${g.person}\u7684\u5173\u7CFB\uFF1A${g.text}`,
           keys: g.keys,
           strategy: "constant"
         });
@@ -573,17 +578,20 @@ ${it.message}`;
           kind: "world",
           sourceId: "world::main",
           title: "\u4E16\u754C\u89C2\xB7" + (wm.name || "\u603B\u7EB2"),
-          content: headLines.join("\n"),
+          content: `\u3010\u4E16\u754C\u7684\u57FA\u672C\u8BBE\u5B9A\uFF08\u56FA\u5B9A\u4E0D\u53D8\uFF09\u3011
+${headLines.join("\n")}`,
           strategy: "constant"
         });
       }
       for (const w of s.worldSections || []) {
         if (!w.title && !w.body) continue;
+        const body = `${w.title ? w.title + "\n" : ""}${w.body || ""}`.trim();
         await WM.Worldbook.writeEntry({
           kind: "world",
           sourceId: "worldsec::" + w.id,
           title: "\u8BBE\u5B9A\xB7" + (w.title || w.id),
-          content: `${w.title ? w.title + "\n" : ""}${w.body || ""}`.trim(),
+          content: `\u3010\u4E16\u754C\u7684\u5177\u4F53\u8BBE\u5B9A\uFF08\u56FA\u5B9A\u89C4\u5219\uFF09\u3011
+${body}`,
           keys: [w.title].filter(Boolean),
           strategy: "selective"
         });
