@@ -16,9 +16,18 @@
     embeddingUseLLM: true,
     // 向量(Embedding)配置（可选高级项）：留空则自动复用 LLM 的 Base URL 做 embedding；
     // 想用独立的 embedding 服务（如 SiliconFlow bge-m3、本地 Ollama nomic）再填这里覆盖。
-    embeddingBaseUrl: '',           // 任意 Base URL：如 http://127.0.0.1:8080/vec/v1/embeddings、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
+    embeddingBaseUrl: '',           // 任意 Base URL：如 http://127.0.0.1:11434、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
     embeddingApiKey: '',
     embeddingModel: 'text-embedding-3-small',
+    // 向量同源代理（外网访问本地向量服务的关键）：
+    //   本地访问酒馆（端口 8000/8001）→ 直连用户填的原始地址（浏览器和 Ollama 同机，通）
+    //   外网访问酒馆（穿透域名/公网）→ 自动把原始地址改写成「页面源 + 代理路径 + 原 path」的同源 URL
+    //   例：填 http://127.0.0.1:11434/v1/embeddings，外网时自动改成 https://你的域名/vec/v1/embeddings
+    //   需配合 Caddy/反代把 /vec/* 转发到本地 Ollama（见「同源代理」Caddyfile）。
+    vecProxyEnabled: true,          // 默认开：本地自动跳过（无害），外网自动改写
+    vecProxyPath: '/vec',           // 反代的向量分流路径，与 Caddyfile 的 handle_path /vec/* 对齐
+    // 重排序(Rerank)同样支持外网同源代理（复用同一套场景判断，路径独立配置）
+    rerankProxyPath: '/rerank',
     rerankEnabled: false,
     // 重排序(Rerank)配置：直接填 Base URL 自适应任意 OpenAI 兼容服务
     rerankBaseUrl: '',

@@ -1252,6 +1252,8 @@
         s.embeddingModel = q('#c-emb-model') ? q('#c-emb-model').value : s.embeddingModel;
         s.embeddingUseLLM = q('#c-emb-usellm') ? q('#c-emb-usellm').checked : (s.embeddingUseLLM !== false);
         s.takeoverEmbedding = q('#c-take-emb') ? q('#c-take-emb').checked : s.takeoverEmbedding;
+        s.vecProxyEnabled = q('#c-vec-proxy') ? q('#c-vec-proxy').checked : (s.vecProxyEnabled !== false);
+        s.vecProxyPath = q('#c-vec-proxy-path') ? q('#c-vec-proxy-path').value : (s.vecProxyPath || '/vec');
       }
     }
     if (!scope || scope === 'rerank') {
@@ -1422,6 +1424,10 @@
       <div class="wm-hint">想用独立 embedding 服务才填：<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· 本地 Ollama：<code>http://127.0.0.1:11434/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（复用 LLM 时留空）"/></label>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled!==false?'checked':''}/> 外网同源代理（本地直连/外网自动改写）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">外网访问酒馆时，自动把本地地址（如 <code>http://127.0.0.1:11434/v1/embeddings</code>）改写成同源代理 URL（<code>https://你的域名/vec/v1/embeddings</code>），走 Caddy 转发到内网 Ollama。本地访问（端口 8000/8001）自动跳过直连。需配合「同源代理」Caddyfile 的 <code>/vec/* → 11434</code> 分流。</div>
+      <label class="wm-row">代理分流路径<input id="c-vec-proxy-path" value="${s.vecProxyPath||'/vec'}" placeholder="/vec"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用温记自己的 embedding 召回，替代酒馆原生召回）</label>
       <div class="wm-hint" style="margin:-2px 0 4px">勾选即<b>立刻真接管</b>：温记内容不再拆写酒馆世界书，改由温记用向量召回 topK 注入（默认复用 LLM 地址，零配置）。不勾则交回酒馆世界书原生激活。</div>

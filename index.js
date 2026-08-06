@@ -17,9 +17,20 @@
       // 向量(Embedding)配置（可选高级项）：留空则自动复用 LLM 的 Base URL 做 embedding；
       // 想用独立的 embedding 服务（如 SiliconFlow bge-m3、本地 Ollama nomic）再填这里覆盖。
       embeddingBaseUrl: "",
-      // 任意 Base URL：如 http://127.0.0.1:8080/vec/v1/embeddings、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
+      // 任意 Base URL：如 http://127.0.0.1:11434、https://api.siliconflow.cn/v1、https://xxx.openai.azure.com
       embeddingApiKey: "",
       embeddingModel: "text-embedding-3-small",
+      // 向量同源代理（外网访问本地向量服务的关键）：
+      //   本地访问酒馆（端口 8000/8001）→ 直连用户填的原始地址（浏览器和 Ollama 同机，通）
+      //   外网访问酒馆（穿透域名/公网）→ 自动把原始地址改写成「页面源 + 代理路径 + 原 path」的同源 URL
+      //   例：填 http://127.0.0.1:11434/v1/embeddings，外网时自动改成 https://你的域名/vec/v1/embeddings
+      //   需配合 Caddy/反代把 /vec/* 转发到本地 Ollama（见「同源代理」Caddyfile）。
+      vecProxyEnabled: true,
+      // 默认开：本地自动跳过（无害），外网自动改写
+      vecProxyPath: "/vec",
+      // 反代的向量分流路径，与 Caddyfile 的 handle_path /vec/* 对齐
+      // 重排序(Rerank)同样支持外网同源代理（复用同一套场景判断，路径独立配置）
+      rerankProxyPath: "/rerank",
       rerankEnabled: false,
       // 重排序(Rerank)配置：直接填 Base URL 自适应任意 OpenAI 兼容服务
       rerankBaseUrl: "",
@@ -1246,6 +1257,39 @@ ${body}`,
     function isGetMode(urlOrPath) {
       return /[?&]method=GET/i.test(urlOrPath || "") || /[?&]get=1\b/i.test(urlOrPath || "");
     }
+    function applyVecProxy(url, settings) {
+      if (!url) return url;
+      var s = settings || {};
+      if (s.vecProxyEnabled === false) return url;
+      if (!/^https?:\/\//i.test(url)) return url;
+      var base = "";
+      try {
+        base = window.top && window.top.location && window.top.location.origin || window.location.origin;
+      } catch (e) {
+        base = window.location.origin;
+      }
+      if (!base || base === "null") return url;
+      var port = "";
+      try {
+        var u0 = new URL(base);
+        port = u0.port || (u0.protocol === "https:" ? "443" : "80");
+      } catch (e) {
+      }
+      if (port === "8000" || port === "8001") return url;
+      var proxyPath = (s.vecProxyPath || "/vec").replace(/\/+$/, "");
+      try {
+        var eu = new URL(url, base);
+        var pathOnly = eu.pathname + (eu.search || "");
+        var rewritten = base + proxyPath + pathOnly;
+        try {
+          console.log("[WarmMemo] \u5411\u91CF\u540C\u6E90\u4EE3\u7406\u6539\u5199\uFF1A" + url + " \u2192 " + rewritten);
+        } catch (e) {
+        }
+        return rewritten;
+      } catch (e) {
+        return url;
+      }
+    }
     function resolveEmbedUrl(s) {
       let base = normalizeBaseUrl(s.embeddingBaseUrl) || s.baseUrl || "";
       let apiKey = s.embeddingApiKey || s.apiKey || "";
@@ -1282,7 +1326,7 @@ ${body}`,
         }
         return out.length === 1 ? out[0] : out;
       }
-      const url = base;
+      const url = applyVecProxy(base, s);
       const useGet = isGetMode(url);
       const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
       let finalUrl = url;
@@ -1341,7 +1385,7 @@ ${body}`,
         return { success: false, error: String(e.message || e), version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
       }
     }
-    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };
+    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy };
   })();
 
   // src/config/rerank-client.js
@@ -4517,6 +4561,8 @@ ${p.summary || ""}`.trim() });
           s.embeddingModel = q("#c-emb-model") ? q("#c-emb-model").value : s.embeddingModel;
           s.embeddingUseLLM = q("#c-emb-usellm") ? q("#c-emb-usellm").checked : s.embeddingUseLLM !== false;
           s.takeoverEmbedding = q("#c-take-emb") ? q("#c-take-emb").checked : s.takeoverEmbedding;
+          s.vecProxyEnabled = q("#c-vec-proxy") ? q("#c-vec-proxy").checked : s.vecProxyEnabled !== false;
+          s.vecProxyPath = q("#c-vec-proxy-path") ? q("#c-vec-proxy-path").value : s.vecProxyPath || "/vec";
         }
       }
       if (!scope || scope === "rerank") {
@@ -4687,6 +4733,10 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">\u60F3\u7528\u72EC\u7ACB embedding \u670D\u52A1\u624D\u586B\uFF1A<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1</code><br/>\xB7 \u672C\u5730 Ollama\uFF1A<code>http://127.0.0.1:11434/v1</code><br/>\xB7 Gemini\uFF1A<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u590D\u7528 LLM \u65F6\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled !== false ? "checked" : ""}/> \u5916\u7F51\u540C\u6E90\u4EE3\u7406\uFF08\u672C\u5730\u76F4\u8FDE/\u5916\u7F51\u81EA\u52A8\u6539\u5199\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u5916\u7F51\u8BBF\u95EE\u9152\u9986\u65F6\uFF0C\u81EA\u52A8\u628A\u672C\u5730\u5730\u5740\uFF08\u5982 <code>http://127.0.0.1:11434/v1/embeddings</code>\uFF09\u6539\u5199\u6210\u540C\u6E90\u4EE3\u7406 URL\uFF08<code>https://\u4F60\u7684\u57DF\u540D/vec/v1/embeddings</code>\uFF09\uFF0C\u8D70 Caddy \u8F6C\u53D1\u5230\u5185\u7F51 Ollama\u3002\u672C\u5730\u8BBF\u95EE\uFF08\u7AEF\u53E3 8000/8001\uFF09\u81EA\u52A8\u8DF3\u8FC7\u76F4\u8FDE\u3002\u9700\u914D\u5408\u300C\u540C\u6E90\u4EE3\u7406\u300DCaddyfile \u7684 <code>/vec/* \u2192 11434</code> \u5206\u6D41\u3002</div>
+      <label class="wm-row">\u4EE3\u7406\u5206\u6D41\u8DEF\u5F84<input id="c-vec-proxy-path" value="${s.vecProxyPath || "/vec"}" placeholder="/vec"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 embedding \u53EC\u56DE\uFF0C\u66FF\u4EE3\u9152\u9986\u539F\u751F\u53EC\u56DE\uFF09</label>
       <div class="wm-hint" style="margin:-2px 0 4px">\u52FE\u9009\u5373<b>\u7ACB\u523B\u771F\u63A5\u7BA1</b>\uFF1A\u6E29\u8BB0\u5185\u5BB9\u4E0D\u518D\u62C6\u5199\u9152\u9986\u4E16\u754C\u4E66\uFF0C\u6539\u7531\u6E29\u8BB0\u7528\u5411\u91CF\u53EC\u56DE topK \u6CE8\u5165\uFF08\u9ED8\u8BA4\u590D\u7528 LLM \u5730\u5740\uFF0C\u96F6\u914D\u7F6E\uFF09\u3002\u4E0D\u52FE\u5219\u4EA4\u56DE\u9152\u9986\u4E16\u754C\u4E66\u539F\u751F\u6FC0\u6D3B\u3002</div>

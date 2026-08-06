@@ -53,6 +53,36 @@
     return /[?&]method=GET/i.test(urlOrPath || '') || /[?&]get=1\b/i.test(urlOrPath || '');
   }
 
+  // 外网同源代理改写（对齐星河预设 resolveEndpoint 的场景判断）：
+  //   本地访问酒馆（端口 8000/8001）→ 直连原始地址（浏览器和 Ollama 同机，通）
+  //   外网访问酒馆（穿透域名/公网，非 8000/8001）→ 把原始地址改写成「页面源 + 代理路径 + 原 path」的同源 URL，
+  //     走 Caddy/反代转发到本地 Ollama。这样用户照填本地地址，外网也能连到内网向量服务。
+  //   相对路径（用户已填 /vec）或非 http(s) 地址 → 原样返回（已是同源或无需改写）。
+  function applyVecProxy(url, settings) {
+    if (!url) return url;
+    var s = settings || {};
+    if (s.vecProxyEnabled === false) return url; // 用户显式关闭代理改写
+    // 只改写 http(s) 绝对地址；相对路径（如 /vec/...）已是同源，直接放行
+    if (!/^https?:\/\//i.test(url)) return url;
+    // 取顶层窗口的页面源（穿透时就是 https://你的域名）
+    var base = '';
+    try { base = (window.top && window.top.location && window.top.location.origin) || window.location.origin; } catch (e) { base = window.location.origin; }
+    if (!base || base === 'null') return url;
+    // 端口检测：本地访问（8000/8001）→ 直连，跳过改写
+    var port = '';
+    try { var u0 = new URL(base); port = u0.port || (u0.protocol === 'https:' ? '443' : '80'); } catch (e) {}
+    if (port === '8000' || port === '8001') return url;
+    // 外网访问：改写成同源代理 URL = base + 代理路径 + 原 endpoint 的 path(+query)
+    var proxyPath = (s.vecProxyPath || '/vec').replace(/\/+$/, '');
+    try {
+      var eu = new URL(url, base);
+      var pathOnly = eu.pathname + (eu.search || '');
+      var rewritten = base + proxyPath + pathOnly;
+      try { console.log('[WarmMemo] 向量同源代理改写：' + url + ' → ' + rewritten); } catch (e) {}
+      return rewritten;
+    } catch (e) { return url; }
+  }
+
   // 直接按 Base URL 解析 embedding 实际请求地址（自适应任意 OpenAI 兼容 / 本地反代 / Gemini）
   // 关键：当未单独填 Embedding 地址时，自动复用用户已配的 LLM Base URL（embeddingUseLLM 默认开），
   // 实现「只要配了 LLM，向量接管就能零配置真生效」，用户不必再东跑西跑配第二个地址。
@@ -102,7 +132,8 @@
     // OpenAI 兼容（支持本地反代/同源代理的 GET 模式）
     // 注意：info.url（即 base）已由 resolveEmbedUrl/buildEmbedUrl 处理为完整 embeddings 地址，
     // 此处绝不能再二次拼接，否则会出现 .../v1/embeddings/v1/embeddings 的 404。
-    const url = base;
+    // 外网同源代理改写：本地直连，外网把 127.0.0.1:11434/v1/embeddings 改写成 https://域名/vec/v1/embeddings
+    const url = applyVecProxy(base, s);
     const useGet = isGetMode(url);
     const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
     let finalUrl = url;
@@ -163,5 +194,5 @@
     }
   }
 
-  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl };
+  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy };
 })();
