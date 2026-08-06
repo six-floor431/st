@@ -44,14 +44,17 @@
 
     // 路径 2（补充/回退）：直接改 ctx.chat，设三重标记。
     //   - is_wm_hidden：本扩展标记，clearAll 反隐藏时按它识别（无论 API 是否成功都要设）。
-    //   - is_hidden / is_system：API 失败时在这里兜底；API 成功时 setChatMessages 已设 is_hidden，
-    //     这里再设一次 is_system 作为 assistant 楼层的双保险，并记录 is_original_system 便于恢复。
+    //   - is_hidden：无论 API 是否成功，都要显式写到 ctx.chat[i] 上。
+    //     关键：setChatMessages 负责酒馆内部状态 + UI 即时刷新，但不保证把 is_hidden 写回 ctx.chat 引用；
+    //     而 ctx.saveChat() 持久化的数据源正是 ctx.chat。若不显式设 m.is_hidden，存盘 JSON 里就没这个字段，
+    //     重新加载聊天后 is_hidden 丢失 → 楼层又会进入上下文（这是「已总结楼层复现」的根因）。
+    //   - is_system：仅 API 不可用时作为 assistant 楼层的额外兜底（对部分不认 is_hidden 的旧版本有效）。
     for (const i of toHide) {
       const m = chat[i];
       m.is_original_system = false;        // 标记：原本不是 system，反隐藏时可安全恢复
+      m.is_hidden = true;                  // 始终显式写回 ctx.chat，保证 saveChat 持久化带上
       if (!apiOk) {
         m.is_system = true;                // 官方 API 不可用时，用 is_system 兜底（对 assistant 有效）
-        m.is_hidden = true;                // 同时设 is_hidden，兼容支持该字段的酒馆版本
       }
       m.is_wm_hidden = true;               // 本扩展标记，始终设置
     }

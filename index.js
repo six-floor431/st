@@ -2863,9 +2863,9 @@ ${p.summary || ""}`.trim() });
       for (const i of toHide) {
         const m = chat[i];
         m.is_original_system = false;
+        m.is_hidden = true;
         if (!apiOk) {
           m.is_system = true;
-          m.is_hidden = true;
         }
         m.is_wm_hidden = true;
       }
