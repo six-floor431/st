@@ -2254,6 +2254,7 @@ ${recent}
     async function triggerSummary(settings, opts) {
       opts = opts || {};
       settings = settings || {};
+      const mode = opts.mode || "full";
       if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
         try {
           const fresh = WM.Settings && WM.Settings.load && WM.Settings.load();
@@ -2261,7 +2262,6 @@ ${recent}
         } catch (e) {
         }
       }
-      if (!settings.autoSummaryEnabled) return { ok: false, reason: "\u81EA\u52A8\u603B\u7ED3\u672A\u5F00\u542F" };
       if (_summarizing) return { ok: false, reason: "\u4E0A\u4E00\u6BB5\u603B\u7ED3\u4ECD\u5728\u8FD0\u884C\uFF0C\u8BF7\u7A0D\u5019" };
       _summarizing = true;
       let range, total, recent;
@@ -2272,29 +2272,33 @@ ${recent}
         recent = cr.recent;
         total = cr.total;
         const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `\xB7 ${s.title}\uFF1A${s.text}`).join("\n");
-        const summaryTpl = settings.prompts && settings.prompts.summary;
-        const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-        try {
-          const rawSummary = await callLLM(sys, "\u628A\u53D9\u4E8B\u6B63\u6587\u653E\u5728 <Summary> \u548C </Summary> \u4E4B\u95F4\u3002\u6CA1\u6709\u65B0\u5185\u5BB9\u5C31\u8F93\u51FA <Summary></Summary>\u3002\u6807\u7B7E\u4E4B\u5916\u4E0D\u8981\u5199\u4EFB\u4F55\u5185\u5BB9\u3002", settings, { temperature: 0.3, phase: "summary" });
-          const summaryText = taggedSummary(rawSummary);
-          await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
-          await WM.MemoryStore.setSummaryPointer(range[1]);
-        } catch (e) {
-          if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
-          return { ok: false, range, reason: e && e.message ? e.message : String(e) };
+        const successes = [];
+        const failures = [];
+        if (mode === "full" || mode === "summary") {
+          const summaryTpl = settings.prompts && settings.prompts.summary;
+          const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
+          try {
+            const rawSummary = await callLLM(sys, "\u628A\u53D9\u4E8B\u6B63\u6587\u653E\u5728 <Summary> \u548C </Summary> \u4E4B\u95F4\u3002\u6CA1\u6709\u65B0\u5185\u5BB9\u5C31\u8F93\u51FA <Summary></Summary>\u3002\u6807\u7B7E\u4E4B\u5916\u4E0D\u8981\u5199\u4EFB\u4F55\u5185\u5BB9\u3002", settings, { temperature: 0.3, phase: "summary" });
+            const summaryText = taggedSummary(rawSummary);
+            await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
+            await WM.MemoryStore.setSummaryPointer(range[1]);
+            successes.push("summary");
+          } catch (e) {
+            if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
+            WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
+            failures.push({ scope: "summary", err: e });
+          }
         }
         const tasks = [];
         const labels = [];
-        if (settings.autoWorld !== false) {
+        if (mode === "full" || mode === "world") {
           const hasWorld = (() => {
             const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
             const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
             const wold = WM.MemoryStore.getWorld ? WM.MemoryStore.getWorld() : "";
             return !!(meta && (meta.name || meta.kind || meta.desc)) || secs && secs.length || wold && String(wold).trim();
           })();
-          if (hasWorld) {
-          } else {
+          if (mode === "world" || !hasWorld) {
             tasks.push((async () => {
               const worldRaw = await WM.Worldbook.inferWorldview(settings, { recent });
               const world = taggedWorld(worldRaw);
@@ -2320,7 +2324,7 @@ ${recent}
             labels.push("worldview");
           }
         }
-        if (settings.autoItems !== false) {
+        if (mode === "full" || mode === "items") {
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.itemExtract;
             if (!tpl) return { kind: "items", ok: true, skipped: true };
@@ -2356,30 +2360,26 @@ ${recent}
           })());
           labels.push("items");
         }
-        const results = await Promise.allSettled(tasks);
-        const failures = [];
-        const successes = [];
-        results.forEach((r, i) => {
-          if (r.status === "rejected") {
-            failures.push({ scope: labels[i], err: r.reason });
-            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
-            });
-          } else if (r.value && !r.value.skipped) {
-            successes.push(r.value.kind);
-          }
-        });
-        if (failures.length === results.length && failures.length > 0) {
-          const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
-          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u6240\u6709\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, reason });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u8BB0\u5FC6\u63D0\u70BC\u5168\u90E8\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
-        } else if (failures.length > 0) {
-          const okList = successes.join("\u3001") || "\u65E0";
-          const failList = failures.map((f) => f.scope).join("\u3001");
-          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u90E8\u5206\u5E76\u884C\u4EFB\u52A1\u5931\u8D25"), { range, ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
+        if (tasks.length) {
+          const results2 = await Promise.allSettled(tasks);
+          results2.forEach((r, i) => {
+            if (r.status === "rejected") {
+              failures.push({ scope: labels[i], err: r.reason });
+              if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
+              });
+            } else if (r.value && !r.value.skipped) {
+              successes.push(r.value.kind);
+            }
           });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u90E8\u5206\u8BB0\u5FC6\u63D0\u70BC\u5931\u8D25 \u2192 \u6210\u529F\uFF1A" + okList + "\uFF1B\u5931\u8D25\uFF1A" + failList, "warn");
         }
-        if (settings.bigSummaryEnabled !== false) {
+        if (failures.length > 0 && successes.length === 0) {
+          const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
+          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u603B\u7ED3\u6D41\u7A0B\u5B50\u4EFB\u52A1\u5168\u90E8\u5931\u8D25"), { range, reason });
+        } else if (failures.length > 0) {
+          if (WM.ErrLog) await WM.ErrLog.add("pipeline", new Error("\u603B\u7ED3\u6D41\u7A0B\u90E8\u5206\u5931\u8D25"), { range, ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
+          });
+        }
+        if ((mode === "full" || mode === "summary") && settings.bigSummaryEnabled !== false) {
           const allSmall = (WM.MemoryStore.getSummaries ? WM.MemoryStore.getSummaries() : []).filter((s) => s.kind !== "big");
           const every = Math.max(2, settings.bigSummaryEvery || 5);
           if (allSmall.length > 0 && allSmall.length % every === 0) {
@@ -2405,6 +2405,7 @@ ${recent}
     async function triggerPlot(settings, opts) {
       opts = opts || {};
       settings = settings || {};
+      const mode = opts.mode || "full";
       if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
         try {
           const fresh = WM.Settings && WM.Settings.load && WM.Settings.load();
@@ -2412,7 +2413,6 @@ ${recent}
         } catch (e) {
         }
       }
-      if (settings.autoPlotEnabled === false) return { ok: false, reason: "\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u672A\u5F00\u542F" };
       if (_plotting) return { ok: false, reason: "\u4E0A\u4E00\u6BB5\u5267\u60C5\u7EBF\u4ECD\u5728\u63A8\u8FDB\uFF0C\u8BF7\u7A0D\u5019" };
       _plotting = true;
       let range, total, recent;
@@ -2426,9 +2426,11 @@ ${recent}
         const plotsSorted = WM.MemoryStore.getPlotsSorted ? WM.MemoryStore.getPlotsSorted() : WM.MemoryStore.getPlots() || [];
         const historyPlot = plotsSorted.map((p) => `\xB7 ${p.time ? "[" + p.time + "] " : ""}${p.title}\uFF1A${p.summary}`).join("\n") || "\uFF08\u6682\u65E0\uFF0C\u8BF7\u4ECE\u6700\u8FD1\u5BF9\u8BDD\u8D77\u7B14\uFF09";
         const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `\xB7 ${r.from} \u2192 ${r.to}\uFF1A${r.label || ""}`).join("\n") || "\uFF08\u6682\u65E0\u5DF2\u77E5\u5173\u7CFB\uFF09";
+        const successes = [];
+        const failures = [];
         const tasks = [];
         const labels = [];
-        if (settings.autoRelation !== false) {
+        if (mode === "full" || mode === "relations") {
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.relations;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
@@ -2441,7 +2443,7 @@ ${recent}
           })());
           labels.push("relations");
         }
-        if (settings.autoPlot !== false) {
+        if (mode === "full" || mode === "plot") {
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.plot;
             const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
@@ -2466,7 +2468,7 @@ ${recent}
           })());
           labels.push("plot");
         }
-        if (settings.autoItems !== false) {
+        if (mode === "full" || mode === "items") {
           tasks.push((async () => {
             const tpl = settings.prompts && settings.prompts.itemExtract;
             if (!tpl) return { kind: "items", ok: true, skipped: true };
@@ -2495,26 +2497,26 @@ ${recent}
           })());
           labels.push("items");
         }
-        const results = await Promise.allSettled(tasks);
-        const failures = [];
-        const successes = [];
-        results.forEach((r, i) => {
-          if (r.status === "rejected") {
-            failures.push({ scope: labels[i], err: r.reason });
-            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
-            });
-          } else if (r.value) {
-            successes.push(r.value.kind);
-          }
-        });
+        if (tasks.length) {
+          const results2 = await Promise.allSettled(tasks);
+          results2.forEach((r, i) => {
+            if (r.status === "rejected") {
+              failures.push({ scope: labels[i], err: r.reason });
+              if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {
+              });
+            } else if (r.value) {
+              successes.push(r.value.kind);
+            }
+          });
+        }
         if (failures.length === results.length && failures.length > 0) {
           const reason = failures.map((f) => "\u3010" + f.scope + "\u3011" + (f.err && f.err.message ? f.err.message : f.err)).join("\uFF1B\n");
-          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u7EBF\u5E76\u884C\u4EFB\u52A1\u5168\u90E8\u5931\u8D25"), { range, reason });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u7EBF\u63A8\u8FDB\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
+          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u6D41\u7A0B\u5B50\u4EFB\u52A1\u5168\u90E8\u5931\u8D25"), { range, reason });
+          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u6D41\u7A0B\u5931\u8D25\uFF0C\u89C1\u300C\u9519\u8BEF\u62A5\u544A\u300D\uFF1A\n" + reason, "error");
         } else if (failures.length > 0) {
-          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25"), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
+          if (WM.ErrLog) await WM.ErrLog.add("plot-pipeline", new Error("\u5267\u60C5\u6D41\u7A0B\u90E8\u5206\u5931\u8D25"), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {
           });
-          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u7EBF\u90E8\u5206\u5931\u8D25 \u2192 " + failures.map((f) => f.scope).join("\u3001"), "warn");
+          WM.UI && WM.UI.toast && WM.UI.toast("\u5267\u60C5\u6D41\u7A0B\u90E8\u5206\u5931\u8D25 \u2192 " + failures.map((f) => f.scope).join("\u3001"), "warn");
         }
         try {
           if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
@@ -3421,34 +3423,27 @@ ${p.summary || ""}`.trim() });
           <div id="tag-rules"></div>
           <div class="wm-row"><button id="tag-add" class="wm-btn">+ \u65B0\u589E\u6807\u7B7E\u89C4\u5219</button></div>
         </details>
-        <details class="wm-fold" open>
-          <summary>\u81EA\u52A8\u62BD\u53D6\u5B50\u4EFB\u52A1</summary>
-          <div class="wm-hint">\u8BB0\u5FC6\u7C7B\uFF08\u968F\u603B\u7ED3\u4E00\u8D77\u8DD1\uFF09\uFF1A\u4E16\u754C\u89C2\u8BBE\u5B9A\u3002<br/>\u7269\u54C1\u8FFD\u8E2A\uFF1A<b>\u540C\u65F6\u8DDF\u968F\u300C\u603B\u7ED3\u300D\u548C\u300C\u5267\u60C5\u7EBF\u300D\u4E24\u4E2A\u6D41\u7A0B</b>\u5404\u8DD1\u4E00\u6B21\uFF0C\u786E\u4FDD\u4E0D\u6F0F\u3002<br/>\u5267\u60C5\u7C7B\uFF08\u72EC\u7ACB\u6D41\u7A0B\uFF0C\u4E0E\u603B\u7ED3\u89E3\u8026\uFF09\uFF1A\u5267\u60C5\u7EBF + \u5173\u7CFB\u56FE \u2014\u2014 \u89E6\u53D1\u65F6\u5E76\u8054\u8C03\u7528\uFF0C\u5E76\u57FA\u4E8E\u300C\u5DF2\u6709\u5267\u60C5\u7EBF\u300D\u81EA\u6211\u63A8\u8FDB\uFF0C\u603B\u7ED3\u4E0D\u518D\u987A\u5E26\u8DD1\u5B83\u4EEC\u3002</div>
-          <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled !== false ? "checked" : ""}/> \u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\uFF08\u542B\u5173\u7CFB\u56FE\uFF09</label>
-          <div class="wm-row" style="margin-left:8px;flex-direction:column;align-items:flex-start;gap:6px">
-            <div>\u5267\u60C5\u7EBF\u5904\u7406\u697C\u5C42\uFF1A
-              <select id="p-mode">
-                <option value="new" ${s.autoPlotMode === "new" ? "selected" : ""}>\u4EC5\u65B0\u589E\u697C\u5C42</option>
-                <option value="count" ${s.autoPlotMode === "count" ? "selected" : ""}>\u6700\u8FD1 N \u6761</option>
-                <option value="range" ${s.autoPlotMode === "range" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u697C\u5C42\u533A\u95F4</option>
-                <option value="floor" ${s.autoPlotMode === "floor" ? "selected" : ""}>\u6309\u697C\u5C42\u533A\u95F4\uFF081-20,21-40\u2026\uFF09</option>
-              </select>
-            </div>
-            <div id="p-count-row" style="${s.autoPlotMode === "count" ? "" : "display:none"}">\u6700\u8FD1\u6761\u6570\uFF1A
-              <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
-            </div>
-            <div id="p-range-row" style="${s.autoPlotMode === "range" ? "" : "display:none"}">
-              \u697C\u5C42 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
-              <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
-            </div>
-            <div id="p-floor-row" style="${s.autoPlotMode === "floor" ? "" : "display:none"}">
-              \u6BCF <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> \u5C42\u63A8\u8FDB\u4E00\u6BB5
-            </div>
+        <details class="wm-fold">
+          <summary>\u5267\u60C5\u7EBF\u697C\u5C42\u8303\u56F4\uFF08\u72EC\u7ACB\uFF09</summary>
+          <div class="wm-hint">\u5267\u60C5\u7EBF / \u5173\u7CFB\u56FE\u7684\u5904\u7406\u697C\u5C42\u4E0E\u81EA\u52A8\u603B\u7ED3\u89E3\u8026\uFF08\u5404\u81EA\u72EC\u7ACB\u6307\u9488\uFF09\uFF0C\u53EF\u4EE5\u5728\u8FD9\u91CC\u5355\u72EC\u914D\u7F6E\u7A97\u53E3\uFF08\u5982\u60F3\u8DDF\u603B\u7ED3\u7528\u540C\u8303\u56F4\uFF0C\u9009\u62E9\u300C\u4EC5\u65B0\u589E\u697C\u5C42\u300D\u5373\u53EF\uFF09\u3002</div>
+          <div class="wm-row">\u5267\u60C5\u7EBF\u5904\u7406\u697C\u5C42\uFF1A
+            <select id="p-mode">
+              <option value="new" ${s.autoPlotMode === "new" ? "selected" : ""}>\u4EC5\u65B0\u589E\u697C\u5C42</option>
+              <option value="count" ${s.autoPlotMode === "count" ? "selected" : ""}>\u6700\u8FD1 N \u6761</option>
+              <option value="range" ${s.autoPlotMode === "range" ? "selected" : ""}>\u81EA\u5B9A\u4E49\u697C\u5C42\u533A\u95F4</option>
+              <option value="floor" ${s.autoPlotMode === "floor" ? "selected" : ""}>\u6309\u697C\u5C42\u533A\u95F4\uFF081-20,21-40\u2026\uFF09</option>
+            </select>
           </div>
-          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation !== false ? "checked" : ""}/> \u5173\u7CFB\u56FE\uFF08\u968F\u5267\u60C5\u7EBF\u4E00\u5E76\u8DD1\uFF09</label>
-          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot !== false ? "checked" : ""}/> \u5267\u60C5\u7EBF</label>
-          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld !== false ? "checked" : ""}/> \u4E16\u754C\u89C2\u8BBE\u5B9A</label>
-          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems !== false ? "checked" : ""}/> \u7269\u54C1\u8FFD\u8E2A\uFF08\u8DDF\u603B\u7ED3+\u5267\u60C5\u7EBF\uFF09</label>
+          <div id="p-count-row" style="${s.autoPlotMode === "count" ? "" : "display:none"}">\u6700\u8FD1\u6761\u6570\uFF1A
+            <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
+          </div>
+          <div id="p-range-row" style="${s.autoPlotMode === "range" ? "" : "display:none"}">
+            \u697C\u5C42 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
+            <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>\uFF08\u7EC8\u70B9 -1 \u8868\u793A\u6700\u65B0\uFF0C\u5171 ${total} \u5C42\uFF09
+          </div>
+          <div id="p-floor-row" style="${s.autoPlotMode === "floor" ? "" : "display:none"}">
+            \u6BCF <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> \u5C42\u63A8\u8FDB\u4E00\u6BB5
+          </div>
         </details>
         <details class="wm-fold">
           <summary>\u81EA\u52A8\u5927\u603B\u7ED3\uFF08\u5C0F\u603B\u7ED3\u6512\u591F\u81EA\u52A8\u6574\u5408\uFF09</summary>
@@ -3456,6 +3451,15 @@ ${p.summary || ""}`.trim() });
           <label class="wm-row"><input type="checkbox" id="a-big" ${s.bigSummaryEnabled !== false ? "checked" : ""}/> \u5F00\u542F\u81EA\u52A8\u5927\u603B\u7ED3</label>
           <label class="wm-row">\u6BCF <input type="number" id="a-big-every" value="${Number(s.bigSummaryEvery) || 5}" min="2" max="100" style="width:64px"/> \u6B21\u5C0F\u603B\u7ED3\uFF0C\u81EA\u52A8\u6574\u5408\u4E00\u6B21\u5927\u603B\u7ED3</label>
           <label class="wm-row">\u4E00\u6B21\u5927\u603B\u7ED3\u6700\u591A\u56DE\u987E <input type="number" id="a-big-max" value="${Number(s.bigSummaryMaxSegments) || 0}" min="0" max="200" style="width:64px"/> \u6BB5\u5C0F\u603B\u7ED3\uFF080=\u4E0D\u9650\uFF09</label>
+        </details>
+        <details class="wm-fold">
+          <summary>\u89E6\u53D1\u903B\u8F91\u8BF4\u660E\uFF08\u6BCF\u6B21\u603B\u7ED3/\u81EA\u52A8\u5904\u7406\u90FD\u4F1A\u8DD1\uFF09</summary>
+          <div class="wm-hint">
+            \u81EA\u52A8\u603B\u7ED3 / \u300C\u7ACB\u5373\u603B\u7ED3\u300D\u6309\u94AE\uFF1A\u540C\u65F6\u8DD1\u4E24\u6BB5\u6D41\u7A0B\uFF0C\u5171 6 \u4E2A LLM \u8C03\u7528\u3002<br/>
+            &nbsp;&nbsp;\u603B\u7ED3\u6D41\u7A0B\uFF1A\u603B\u7ED3\u672C\u4F53 + \u4E16\u754C\u89C2\uFF08\u9996\u6B21\u624D\u81EA\u52A8\uFF09+ \u7269\u54C1<br/>
+            &nbsp;&nbsp;\u5267\u60C5\u6D41\u7A0B\uFF1A\u5173\u7CFB\u56FE + \u5267\u60C5\u7EBF + \u7269\u54C1\uFF08\u7B2C 2 \u6B21\uFF0C\u53CC\u4FDD\u9669\uFF09<br/>
+            \u5404 tab \u4E0B\u7684\u300C\u751F\u6210\u300D\u6309\u94AE\uFF1A\u53EA\u8DD1\u5F53\u524D tab \u5BF9\u5E94\u7684\u90A3 1 \u4E2A LLM\uFF08\u72EC\u7ACB\u89E6\u53D1\uFF0C\u4E0D\u5F71\u54CD\u5176\u5B83\uFF09\u3002
+          </div>
         </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">\u4FDD\u5B58\u8BBE\u7F6E</button>
@@ -3515,11 +3519,6 @@ ${p.summary || ""}`.trim() });
         s.autoSummaryStart = parseInt(body.querySelector("#a-start").value, 10) || 0;
         s.autoSummaryEnd = parseInt(body.querySelector("#a-end").value, 10) || -1;
         s.autoHideFloors = body.querySelector("#a-hide").checked;
-        s.autoPlotEnabled = body.querySelector("#a-plotflow").checked;
-        s.autoRelation = body.querySelector("#a-rel").checked;
-        s.autoPlot = body.querySelector("#a-plot").checked;
-        s.autoWorld = body.querySelector("#a-world").checked;
-        s.autoItems = body.querySelector("#a-item").checked;
         const pModeEl = body.querySelector("#p-mode");
         s.autoPlotMode = pModeEl ? pModeEl.value : mode ? mode.value : "new";
         s.autoPlotCount = parseInt(body.querySelector("#p-count") ? body.querySelector("#p-count").value : body.querySelector("#a-count").value, 10) || 20;
@@ -3553,23 +3552,23 @@ ${p.summary || ""}`.trim() });
       };
       body.querySelector("#a-run").onclick = async () => {
         const st = body.querySelector("#auto-status");
-        st.textContent = "\u5904\u7406\u4E2D\u2026";
+        st.textContent = "\u5904\u7406\u4E2D\u2026\uFF08\u8DD1 6 \u4E2A LLM\uFF1A\u603B\u7ED3/\u4E16\u754C\u89C2/\u7269\u54C1 + \u5173\u7CFB/\u5267\u60C5\u7EBF/\u7269\u54C1\uFF09";
         try {
           const fresh = WM.Settings.load();
-          const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+          const r = await WM.Summary.triggerSummary(fresh, { mode: "full", forceAll: true });
           let msg = "";
           if (r && r.ok) {
             const succ = (r.successes || []).join("\u3001") || "\u65E0";
-            msg += `\u2713 \u8BB0\u5FC6 ${r.count} \u6761\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF0C\u63D0\u70BC\uFF1A${succ}\uFF09
+            msg += `\u2713 \u603B\u7ED3\u6D41\u7A0B\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09\uFF1A${succ}
 `;
           } else {
-            msg += "\u2717 \u8BB0\u5FC6\uFF1A" + (r && r.reason ? r.reason : "\u5931\u8D25") + "\n";
+            msg += "\u2717 \u603B\u7ED3\u6D41\u7A0B\uFF1A" + (r && r.reason ? r.reason : "\u5931\u8D25") + "\n";
           }
-          const rp = await WM.Summary.triggerPlot(fresh, { forceAll: true });
+          const rp = await WM.Summary.triggerPlot(fresh, { mode: "full", forceAll: true });
           if (rp && rp.ok) {
-            msg += `\u2713 \u5267\u60C5\u7EBF\u63A8\u8FDB ${rp.count} \u6761\uFF08\u5173\u7CFB${rp.results.relations} \u5267\u60C5${rp.results.plots}\uFF09`;
+            msg += `\u2713 \u5267\u60C5\u6D41\u7A0B\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09\uFF1A${(rp.successes || []).join("\u3001") || "\u65E0"}`;
           } else {
-            msg += "\u2717 \u5267\u60C5\u7EBF\uFF1A" + (rp && rp.reason ? rp.reason : "\u5931\u8D25");
+            msg += "\u2717 \u5267\u60C5\u6D41\u7A0B\uFF1A" + (rp && rp.reason ? rp.reason : "\u5931\u8D25");
           }
           if (fresh.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
             const end = (rp && rp.range ? rp.range[1] : 0) || (r && r.range ? r.range[1] : 0);
@@ -3652,6 +3651,9 @@ ${p.summary || ""}`.trim() });
       body.innerHTML = `<div class="wm-card">
       <div class="wm-h">\u5173\u7CFB\u56FE<span class="wm-h-sub">\uFF08\u52A8\u6001\u529B\u5BFC\u5411\uFF09</span></div>
       <div class="wm-hint">\u6EDA\u8F6E\u7F29\u653E \xB7 \u62D6\u7A7A\u767D\u5E73\u79FB \xB7 \u62D6\u8282\u70B9\u91CD\u6392 \xB7 \u70B9\u8282\u70B9\u6216\u4E0B\u65B9\u540D\u5B57\u67E5\u770B\u8BE5\u89D2\u8272\u5173\u7CFB</div>
+      <div class="wm-actions" style="margin-bottom:8px">
+        <button data-act="rel-run" class="wm-btn">\u27F3 \u5F52\u7EB3\u5173\u7CFB\uFF08\u4EC5\u89E6\u53D1\u5173\u7CFB\u56FE LLM\uFF09</button>
+      </div>
       <div class="wm-graph-wrap">
         <svg id="wm-graph"></svg>
         <div class="wm-graph-ctrls">
@@ -3660,12 +3662,22 @@ ${p.summary || ""}`.trim() });
           <button data-act="reset" title="\u91CD\u7F6E\u89C6\u56FE">\u27F2</button>
         </div>
       </div>
-      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002<br/>\u5173\u7CFB\u56FE\u8DDF\u968F\u300C\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u81EA\u52A8\u751F\u6210\uFF08\u5728\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u8BBE\u7F6E\u91CC\u786E\u4FDD\u5DF2\u5F00\u542F\u300C\u542F\u7528\u5267\u60C5\u7EBF\u72EC\u7ACB\u63A8\u8FDB\u300D\u4E0E\u300C\u5173\u7CFB\u56FE\u300D\u4E24\u9879\uFF09\u3002\u4E5F\u53EF\u5728\u300C\u5267\u60C5\u7EBF\u300D\u9875\u70B9\u300C\u5F52\u7EB3\u5267\u60C5\u7EBF\u300D\u624B\u52A8\u89E6\u53D1\u3002</div>'}</div>
+      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join("") : '<div class="wm-empty">\u6682\u65E0\u5173\u7CFB\u6570\u636E\u3002\u70B9\u4E0A\u65B9\u300C\u5F52\u7EB3\u5173\u7CFB\u300D\u6216\u53BB\u300C\u81EA\u52A8\u603B\u7ED3\u300D\u70B9\u7ACB\u5373\u603B\u7ED3\u81EA\u52A8\u751F\u6210\u3002</div>'}</div>
       <div class="wm-rel-detail" id="rel-detail"></div>
+      <div class="wm-status"></div>
     </div>`;
       const svg = body.querySelector("#wm-graph");
       const detailEl = body.querySelector("#rel-detail");
       const namesEl = body.querySelector("#rel-names");
+      const relRunBtn = body.querySelector('[data-act="rel-run"]');
+      if (relRunBtn) relRunBtn.onclick = async () => {
+        const st = body.querySelector(".wm-status");
+        if (st) st.textContent = "\u4EC5\u5F52\u7EB3\u5173\u7CFB\u4E2D\u2026\uFF08\u53EA\u89E6\u53D1\u5173\u7CFB\u56FE LLM\uFF0C\u4E0D\u89E6\u53D1\u5267\u60C5/\u7269\u54C1/\u603B\u7ED3\uFF09";
+        const s = WM.Settings.load();
+        const r = await WM.Summary.triggerPlot(s, { mode: "relations", forceAll: true });
+        if (st) st.textContent = r && r.ok ? "\u2713 \u5173\u7CFB\u5F52\u7EB3\u5B8C\u6210" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
+        renderRel(body);
+      };
       function showDetail(name) {
         namesEl.querySelectorAll(".wm-name-chip").forEach((c) => c.classList.toggle("active", c.dataset.name === name));
         const all = WM.MemoryStore.getRelations();
@@ -3819,7 +3831,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">\u6309\u65F6\u95F4\u5012\u5E8F\u6392\u5217\uFF0C\u6700\u65B0\u7684\u5728\u6700\u4E0A\u9762\uFF1B\u5DE6\u4FA7\u4E3A\u65F6\u95F4\uFF0C\u53F3\u4FA7\u4E3A\u5185\u5BB9\u3002\u6240\u6709\u6539\u52A8\u4F1A\u540C\u6B65\u5230\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66\u3002</div>
       <div class="wm-actions">
         <button data-act="plot-add" class="wm-btn primary">\uFF0B \u6DFB\u52A0\u5267\u60C5</button>
-        <button data-act="plot-run" class="wm-btn">\u4ECE\u8BB0\u5FC6\u66F4\u65B0\u5267\u60C5\u7EBF</button>
+        <button data-act="plot-run" class="wm-btn">\u27F3 \u5F52\u7EB3\u5267\u60C5\u7EBF\uFF08\u4EC5\u89E6\u53D1\u5267\u60C5\u7EBF LLM\uFF09</button>
       </div>
       <div class="wm-timeline">${rows || '<div class="wm-empty">\u6682\u65E0\u5267\u60C5\u7EBF</div>'}</div>
       <div class="wm-status"></div></div>`;
@@ -3843,13 +3855,10 @@ ${p.summary || ""}`.trim() });
       const plotRun = body.querySelector('[data-act="plot-run"]');
       if (plotRun) plotRun.onclick = async () => {
         const st = body.querySelector(".wm-status");
-        if (st) st.textContent = "\u5F52\u7EB3\u4E2D\u2026";
+        if (st) st.textContent = "\u4EC5\u5F52\u7EB3\u5267\u60C5\u7EBF\u4E2D\u2026\uFF08\u53EA\u89E6\u53D1\u5267\u60C5\u7EBF LLM\uFF0C\u4E0D\u89E6\u53D1\u5173\u7CFB/\u7269\u54C1\uFF09";
         const psettings = WM.Settings.load();
-        const r = await WM.Summary.triggerPlot(psettings);
-        if (r && r.ok && psettings.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
-          await WM.FloorHider.hideUntil(r.range[1]);
-        }
-        if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
+        const r = await WM.Summary.triggerPlot(psettings, { mode: "plot", forceAll: true });
+        if (st) st.textContent = r && r.ok ? "\u2713 \u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB\uFF08\u4EC5\u5267\u60C5\u7EBF\uFF09" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
         renderPlot(body);
       };
       body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -3898,8 +3907,12 @@ ${p.summary || ""}`.trim() });
       body.innerHTML = `<div class="wm-card">
       <div class="wm-h">\u7269\u54C1 / \u6301\u6709\u7269\u8FFD\u8E2A\uFF08${items.length}\uFF09</div>
       <div class="wm-hint">\u5361\u7247\u81EA\u4E0A\u800C\u4E0B\u4E3A\uFF1A\u7269\u54C1\u540D\u79F0 \u2192 \u7269\u54C1\u4F5C\u7528 \u2192 \u6301\u6709\u8005\u3002\u7269\u54C1\u4F1A\u5173\u8054\u5230\u89D2\u8272\u4E0E\u5267\u60C5\u7EBF\uFF0C\u6539\u52A8\u5373\u540C\u6B65\u5F53\u524D\u8BB0\u5FC6\u4E16\u754C\u4E66\u3002</div>
-      <div class="wm-actions"><button data-act="it-add" class="wm-btn primary">\uFF0B \u6DFB\u52A0\u7269\u54C1</button></div>
-      <div class="wm-item-list">${cards || '<div class="wm-empty">\u6682\u65E0\u7269\u54C1\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u7269\u54C1\u300D\u65B0\u5EFA</div>'}</div>
+      <div class="wm-actions">
+        <button data-act="it-add" class="wm-btn primary">\uFF0B \u6DFB\u52A0\u7269\u54C1</button>
+        <button data-act="it-run" class="wm-btn">\u27F3 \u5F52\u7EB3\u7269\u54C1\uFF08\u4EC5\u89E6\u53D1\u7269\u54C1 LLM\uFF09</button>
+      </div>
+      <div class="wm-item-list">${cards || '<div class="wm-empty">\u6682\u65E0\u7269\u54C1\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u7269\u54C1\u300D\u65B0\u5EFA\uFF0C\u6216\u70B9\u300C\u5F52\u7EB3\u7269\u54C1\u300D\u4ECE\u6700\u8FD1\u5BF9\u8BDD\u81EA\u52A8\u62BD\u53D6</div>'}</div>
+      <div class="wm-status"></div>
     </div>`;
       const itemFields = (it) => [
         { key: "name", label: "\u7269\u54C1\u540D\u79F0", value: it && it.name || "", placeholder: "\u5982\uFF1A\u9752\u7389\u846B\u82A6" },
@@ -3925,6 +3938,15 @@ ${p.summary || ""}`.trim() });
         }
         await WM.MemoryStore.addItem(r);
         toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
+        renderItem(body);
+      };
+      const itRun = body.querySelector('[data-act="it-run"]');
+      if (itRun) itRun.onclick = async () => {
+        const st = body.querySelector(".wm-status");
+        if (st) st.textContent = "\u4EC5\u5F52\u7EB3\u7269\u54C1\u4E2D\u2026\uFF08\u53EA\u89E6\u53D1\u7269\u54C1 LLM\uFF0C\u4E0D\u89E6\u53D1\u603B\u7ED3/\u5173\u7CFB/\u5267\u60C5\u7EBF\uFF09";
+        const s = WM.Settings.load();
+        const r = await WM.Summary.triggerPlot(s, { mode: "items", forceAll: true });
+        if (st) st.textContent = r && r.ok ? "\u2713 \u7269\u54C1\u5F52\u7EB3\u5B8C\u6210" : r ? "\u2717 " + (r.reason || "\u5931\u8D25") : "\u2717 \u5931\u8D25";
         renderItem(body);
       };
       body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -3978,9 +4000,9 @@ ${p.summary || ""}`.trim() });
       <div class="wm-actions">
         <button data-act="world-edit" class="wm-btn primary">\u7F16\u8F91\u4E16\u754C</button>
         <button data-act="sec-add" class="wm-btn">\uFF0B \u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE</button>
-        <button data-act="world-gen" class="wm-btn">AI \u8865\u5168\u8BBE\u5B9A</button>
+        <button data-act="world-gen" class="wm-btn">\u27F3 AI \u8865\u5168\u8BBE\u5B9A\uFF08\u4EC5\u89E6\u53D1\u4E16\u754C\u89C2 LLM\uFF09</button>
       </div>
-      <div class="wm-hint" style="margin-top:6px">\u63D0\u793A\uFF1A\u4E16\u754C\u89C2<b>\u81EA\u52A8\u53EA\u751F\u6210\u4E00\u6B21</b>\uFF08\u9996\u6B21\u603B\u7ED3\u65F6\uFF09\u3002\u4E4B\u540E\u60F3\u91CD\u65B0/\u8865\u5145\u63A8\u65AD\uFF0C\u8BF7\u70B9\u300CAI \u8865\u5168\u8BBE\u5B9A\u300D\u624B\u52A8\u8C03\u7528\uFF08\u4F1A\u81EA\u52A8\u5728\u5DF2\u6709\u8BBE\u5B9A\u4E0A\u589E\u91CF\u66F4\u65B0\uFF09\u3002</div>
+      <div class="wm-hint" style="margin-top:6px">\u63D0\u793A\uFF1A\u81EA\u52A8\u603B\u7ED3\u53EA\u5728\u300C\u9996\u6B21\u300D\u65F6\u63A8\u65AD\u4E00\u6B21\u4E16\u754C\u89C2\uFF1B\u60F3\u8865\u5145/\u6539\u5199\u4E16\u754C\u89C2\u8BF7\u624B\u52A8\u70B9\u4E0A\u9762\u6309\u94AE\uFF08\u4E0D\u89E6\u53D1\u5176\u4ED6 LLM\uFF09\u3002</div>
 
       <div class="wm-h" style="margin-top:12px">\u5177\u4F53\u8BBE\u5B9A\uFF08${secs.length}\uFF09</div>
       <div class="wm-world-secs">${secHtml || '<div class="wm-empty">\u6682\u65E0\u8BBE\u5B9A\u6761\u76EE\uFF0C\u70B9\u4E0A\u65B9\u300C\u6DFB\u52A0\u8BBE\u5B9A\u6761\u76EE\u300D\u65B0\u5EFA</div>'}</div>
@@ -4710,43 +4732,37 @@ ${p.summary || ""}`.trim() });
     let _lastAutoAt = 0;
     async function autoSummaryHook() {
       const s = WM.Settings.load();
-      if (!s.autoSummaryEnabled && s.autoPlotEnabled !== false) {
-      }
-      if (!s.autoSummaryEnabled && s.autoPlotEnabled === false) return;
+      if (s.autoSummaryEnabled === false) return;
       const now = Date.now();
       if (now - _lastAutoAt < 1200) return;
       _lastAutoAt = now;
       setTimeout(async () => {
         try {
-          if (s.autoSummaryEnabled) {
-            let r = await WM.Summary.triggerSummary(s);
-            if (r && !r.ok && s.autoSummaryMode === "floor") {
-              const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
-              const ptr = WM.MemoryStore.getSummaryPointer();
-              if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
-            }
-            if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
-              await WM.FloorHider.hideUntil(r.range[1]);
-            }
-            if (r && r.ok) {
-              const extra = r.partial ? "\uFF08\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
-              toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u5199\u5165 ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09${extra}`);
-            }
+          let r = await WM.Summary.triggerSummary(s, { mode: "full" });
+          if (r && !r.ok && s.autoSummaryMode === "floor") {
+            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+            const ptr = WM.MemoryStore.getSummaryPointer();
+            if (ptr < total) r = await WM.Summary.triggerSummary(s, { mode: "full", forceEnd: true });
           }
-          if (s.autoPlotEnabled !== false) {
-            let rp = await WM.Summary.triggerPlot(s);
-            if (rp && !rp.ok && s.autoPlotMode === "floor") {
-              const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
-              const ptr = WM.MemoryStore.getPlotPointer();
-              if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
-            }
-            if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
-              await WM.FloorHider.hideUntil(rp.range[1]);
-            }
-            if (rp && rp.ok) {
-              const extra = rp.partial ? "\uFF08\u90E8\u5206\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
-              toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB ${rp.count} \u6761\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09${extra}`);
-            }
+          if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+            await WM.FloorHider.hideUntil(r.range[1]);
+          }
+          if (r && r.ok) {
+            const extra = r.partial ? "\uFF08\u90E8\u5206\u63D0\u70BC\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
+            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5DF2\u5199\u5165 ${r.count} \u6761\u8BB0\u5FC6\uFF08\u697C\u5C42 ${r.range[0]}-${r.range[1]}\uFF09${extra}`);
+          }
+          let rp = await WM.Summary.triggerPlot(s, { mode: "full" });
+          if (rp && !rp.ok && s.autoPlotMode === "floor") {
+            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+            const ptr = WM.MemoryStore.getPlotPointer();
+            if (ptr < total) rp = await WM.Summary.triggerPlot(s, { mode: "full", forceEnd: true });
+          }
+          if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+            await WM.FloorHider.hideUntil(rp.range[1]);
+          }
+          if (rp && rp.ok) {
+            const extra = rp.partial ? "\uFF08\u90E8\u5206\u5931\u8D25\uFF0C\u89C1\u9519\u8BEF\u62A5\u544A\uFF09" : "";
+            toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u7EBF\u5DF2\u63A8\u8FDB ${rp.count} \u6761\uFF08\u697C\u5C42 ${rp.range[0]}-${rp.range[1]}\uFF09${extra}`);
           }
         } catch (e) {
           toast(`\u{1F33F} \u6E29\u8BB0\uFF1A\u81EA\u52A8\u5904\u7406\u5931\u8D25 - ${e.message || e}`);

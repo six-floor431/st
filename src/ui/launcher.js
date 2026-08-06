@@ -196,34 +196,27 @@
           <div id="tag-rules"></div>
           <div class="wm-row"><button id="tag-add" class="wm-btn">+ 新增标签规则</button></div>
         </details>
-        <details class="wm-fold" open>
-          <summary>自动抽取子任务</summary>
-          <div class="wm-hint">记忆类（随总结一起跑）：世界观设定。<br/>物品追踪：<b>同时跟随「总结」和「剧情线」两个流程</b>各跑一次，确保不漏。<br/>剧情类（独立流程，与总结解耦）：剧情线 + 关系图 —— 触发时并联调用，并基于「已有剧情线」自我推进，总结不再顺带跑它们。</div>
-          <label class="wm-row"><input type="checkbox" id="a-plotflow" ${s.autoPlotEnabled!==false?'checked':''}/> 启用剧情线独立推进（含关系图）</label>
-          <div class="wm-row" style="margin-left:8px;flex-direction:column;align-items:flex-start;gap:6px">
-            <div>剧情线处理楼层：
-              <select id="p-mode">
-                <option value="new" ${s.autoPlotMode==='new'?'selected':''}>仅新增楼层</option>
-                <option value="count" ${s.autoPlotMode==='count'?'selected':''}>最近 N 条</option>
-                <option value="range" ${s.autoPlotMode==='range'?'selected':''}>自定义楼层区间</option>
-                <option value="floor" ${s.autoPlotMode==='floor'?'selected':''}>按楼层区间（1-20,21-40…）</option>
-              </select>
-            </div>
-            <div id="p-count-row" style="${s.autoPlotMode==='count'?'':'display:none'}">最近条数：
-              <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
-            </div>
-            <div id="p-range-row" style="${s.autoPlotMode==='range'?'':'display:none'}">
-              楼层 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
-              <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
-            </div>
-            <div id="p-floor-row" style="${s.autoPlotMode==='floor'?'':'display:none'}">
-              每 <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> 层推进一段
-            </div>
+        <details class="wm-fold">
+          <summary>剧情线楼层范围（独立）</summary>
+          <div class="wm-hint">剧情线 / 关系图的处理楼层与自动总结解耦（各自独立指针），可以在这里单独配置窗口（如想跟总结用同范围，选择「仅新增楼层」即可）。</div>
+          <div class="wm-row">剧情线处理楼层：
+            <select id="p-mode">
+              <option value="new" ${s.autoPlotMode==='new'?'selected':''}>仅新增楼层</option>
+              <option value="count" ${s.autoPlotMode==='count'?'selected':''}>最近 N 条</option>
+              <option value="range" ${s.autoPlotMode==='range'?'selected':''}>自定义楼层区间</option>
+              <option value="floor" ${s.autoPlotMode==='floor'?'selected':''}>按楼层区间（1-20,21-40…）</option>
+            </select>
           </div>
-          <label class="wm-row"><input type="checkbox" id="a-rel" ${s.autoRelation!==false?'checked':''}/> 关系图（随剧情线一并跑）</label>
-          <label class="wm-row"><input type="checkbox" id="a-plot" ${s.autoPlot!==false?'checked':''}/> 剧情线</label>
-          <label class="wm-row"><input type="checkbox" id="a-world" ${s.autoWorld!==false?'checked':''}/> 世界观设定</label>
-          <label class="wm-row"><input type="checkbox" id="a-item" ${s.autoItems!==false?'checked':''}/> 物品追踪（跟总结+剧情线）</label>
+          <div id="p-count-row" style="${s.autoPlotMode==='count'?'':'display:none'}">最近条数：
+            <input type="number" id="p-count" value="${s.autoPlotCount}" min="1" max="200" style="width:70px"/>
+          </div>
+          <div id="p-range-row" style="${s.autoPlotMode==='range'?'':'display:none'}">
+            楼层 <input type="number" id="p-start" value="${s.autoPlotStart}" min="0" style="width:64px"/> ~
+            <input type="number" id="p-end" value="${s.autoPlotEnd}" min="-1" style="width:64px"/>（终点 -1 表示最新，共 ${total} 层）
+          </div>
+          <div id="p-floor-row" style="${s.autoPlotMode==='floor'?'':'display:none'}">
+            每 <input type="number" id="p-floor" value="${s.autoPlotFloor}" min="1" max="500" style="width:64px"/> 层推进一段
+          </div>
         </details>
         <details class="wm-fold">
           <summary>自动大总结（小总结攒够自动整合）</summary>
@@ -231,6 +224,15 @@
           <label class="wm-row"><input type="checkbox" id="a-big" ${s.bigSummaryEnabled!==false?'checked':''}/> 开启自动大总结</label>
           <label class="wm-row">每 <input type="number" id="a-big-every" value="${Number(s.bigSummaryEvery)||5}" min="2" max="100" style="width:64px"/> 次小总结，自动整合一次大总结</label>
           <label class="wm-row">一次大总结最多回顾 <input type="number" id="a-big-max" value="${Number(s.bigSummaryMaxSegments)||0}" min="0" max="200" style="width:64px"/> 段小总结（0=不限）</label>
+        </details>
+        <details class="wm-fold">
+          <summary>触发逻辑说明（每次总结/自动处理都会跑）</summary>
+          <div class="wm-hint">
+            自动总结 / 「立即总结」按钮：同时跑两段流程，共 6 个 LLM 调用。<br/>
+            &nbsp;&nbsp;总结流程：总结本体 + 世界观（首次才自动）+ 物品<br/>
+            &nbsp;&nbsp;剧情流程：关系图 + 剧情线 + 物品（第 2 次，双保险）<br/>
+            各 tab 下的「生成」按钮：只跑当前 tab 对应的那 1 个 LLM（独立触发，不影响其它）。
+          </div>
         </details>
         <div class="wm-actions">
           <button id="a-save" class="wm-btn">保存设置</button>
@@ -294,11 +296,6 @@
       s.autoSummaryStart = parseInt(body.querySelector('#a-start').value, 10) || 0;
       s.autoSummaryEnd = parseInt(body.querySelector('#a-end').value, 10) || -1;
       s.autoHideFloors = body.querySelector('#a-hide').checked;
-      s.autoPlotEnabled = body.querySelector('#a-plotflow').checked;
-      s.autoRelation = body.querySelector('#a-rel').checked;
-      s.autoPlot = body.querySelector('#a-plot').checked;
-      s.autoWorld = body.querySelector('#a-world').checked;
-      s.autoItems = body.querySelector('#a-item').checked;
       // 剧情线独立楼层配置（与总结解耦，使用各自的 UI 控件）
       const pModeEl = body.querySelector('#p-mode');
       s.autoPlotMode = pModeEl ? pModeEl.value : (mode ? mode.value : 'new');
@@ -336,27 +333,26 @@
     };
     body.querySelector('#a-run').onclick = async () => {
       const st = body.querySelector('#auto-status');
-      st.textContent = '处理中…';
+      st.textContent = '处理中…（跑 6 个 LLM：总结/世界观/物品 + 关系/剧情线/物品）';
       try {
-        // 强制重新读取已保存设置，避免用到面板打开时的旧配置（未保存的 BaseURL 不会漏）
         const fresh = WM.Settings.load();
-        // 「立即处理」= 强制全部楼层：先写记忆（总结），再独立推进剧情线（并联关系线）
-        const r = await WM.Summary.runSummary(fresh, { forceAll: true });
+        // 「立即总结」= 两端全跑 full 模式：
+        //   总结流程(full)：总结 + 世界观 + 物品（3 个 LLM）
+        //   剧情流程(full)：关系 + 剧情线 + 物品（3 个 LLM）
+        const r = await WM.Summary.triggerSummary(fresh, { mode: 'full', forceAll: true });
         let msg = '';
         if (r && r.ok) {
-          // triggerSummary 返回 successes（数组），用它显示子任务结果，避免读不存在的 r.results
           const succ = (r.successes || []).join('、') || '无';
-          msg += `✓ 记忆 ${r.count} 条（楼层 ${r.range[0]}-${r.range[1]}，提炼：${succ}）` + '\n';
+          msg += `✓ 总结流程（楼层 ${r.range[0]}-${r.range[1]}）：${succ}` + '\n';
         } else {
-          msg += '✗ 记忆：' + (r && r.reason ? r.reason : '失败') + '\n';
+          msg += '✗ 总结流程：' + (r && r.reason ? r.reason : '失败') + '\n';
         }
-        const rp = await WM.Summary.triggerPlot(fresh, { forceAll: true });
+        const rp = await WM.Summary.triggerPlot(fresh, { mode: 'full', forceAll: true });
         if (rp && rp.ok) {
-          msg += `✓ 剧情线推进 ${rp.count} 条（关系${rp.results.relations} 剧情${rp.results.plots}）`;
+          msg += `✓ 剧情流程（楼层 ${rp.range[0]}-${rp.range[1]}）：${(rp.successes || []).join('、') || '无'}`;
         } else {
-          msg += '✗ 剧情线：' + (rp && rp.reason ? rp.reason : '失败');
+          msg += '✗ 剧情流程：' + (rp && rp.reason ? rp.reason : '失败');
         }
-        // 手动「立即处理」后隐藏已处理楼层（与自动流程一致）
         if (fresh.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
           const end = (rp && rp.range ? rp.range[1] : 0) || (r && r.range ? r.range[1] : 0);
           if (end > 0) await WM.FloorHider.hideUntil(end);
@@ -431,6 +427,9 @@
     body.innerHTML = `<div class="wm-card">
       <div class="wm-h">关系图<span class="wm-h-sub">（动态力导向）</span></div>
       <div class="wm-hint">滚轮缩放 · 拖空白平移 · 拖节点重排 · 点节点或下方名字查看该角色关系</div>
+      <div class="wm-actions" style="margin-bottom:8px">
+        <button data-act="rel-run" class="wm-btn">⟳ 归纳关系（仅触发关系图 LLM）</button>
+      </div>
       <div class="wm-graph-wrap">
         <svg id="wm-graph"></svg>
         <div class="wm-graph-ctrls">
@@ -439,13 +438,23 @@
           <button data-act="reset" title="重置视图">⟲</button>
         </div>
       </div>
-      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join('') : '<div class="wm-empty">暂无关系数据。<br/>关系图跟随「剧情线独立推进」自动生成（在「自动总结」设置里确保已开启「启用剧情线独立推进」与「关系图」两项）。也可在「剧情线」页点「归纳剧情线」手动触发。</div>'}</div>
+      <div class="wm-rel-names" id="rel-names">${names.length ? names.map((n) => `<span class="wm-name-chip" data-name="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join('') : '<div class="wm-empty">暂无关系数据。点上方「归纳关系」或去「自动总结」点立即总结自动生成。</div>'}</div>
       <div class="wm-rel-detail" id="rel-detail"></div>
+      <div class="wm-status"></div>
     </div>`;
 
     const svg = body.querySelector('#wm-graph');
     const detailEl = body.querySelector('#rel-detail');
     const namesEl = body.querySelector('#rel-names');
+    const relRunBtn = body.querySelector('[data-act="rel-run"]');
+    if (relRunBtn) relRunBtn.onclick = async () => {
+      const st = body.querySelector('.wm-status');
+      if (st) st.textContent = '仅归纳关系中…（只触发关系图 LLM，不触发剧情/物品/总结）';
+      const s = WM.Settings.load();
+      const r = await WM.Summary.triggerPlot(s, { mode: 'relations', forceAll: true });
+      if (st) st.textContent = r && r.ok ? '✓ 关系归纳完成' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
+      renderRel(body);
+    };
 
     function showDetail(name) {
       namesEl.querySelectorAll('.wm-name-chip').forEach((c) => c.classList.toggle('active', c.dataset.name === name));
@@ -607,7 +616,7 @@
       <div class="wm-hint">按时间倒序排列，最新的在最上面；左侧为时间，右侧为内容。所有改动会同步到当前记忆世界书。</div>
       <div class="wm-actions">
         <button data-act="plot-add" class="wm-btn primary">＋ 添加剧情</button>
-        <button data-act="plot-run" class="wm-btn">从记忆更新剧情线</button>
+        <button data-act="plot-run" class="wm-btn">⟳ 归纳剧情线（仅触发剧情线 LLM）</button>
       </div>
       <div class="wm-timeline">${rows || '<div class="wm-empty">暂无剧情线</div>'}</div>
       <div class="wm-status"></div></div>`;
@@ -630,14 +639,10 @@
     const plotRun = body.querySelector('[data-act="plot-run"]');
     if (plotRun) plotRun.onclick = async () => {
       const st = body.querySelector('.wm-status');
-      if (st) st.textContent = '归纳中…';
+      if (st) st.textContent = '仅归纳剧情线中…（只触发剧情线 LLM，不触发关系/物品）';
       const psettings = WM.Settings.load();
-      const r = await WM.Summary.triggerPlot(psettings);
-      // 推进后隐藏已处理楼层（与自动流程一致）
-      if (r && r.ok && psettings.autoHideFloors && WM.FloorHider && WM.FloorHider.hideUntil) {
-        await WM.FloorHider.hideUntil(r.range[1]);
-      }
-      if (st) st.textContent = r && r.ok ? '✓ 剧情线已推进' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
+      const r = await WM.Summary.triggerPlot(psettings, { mode: 'plot', forceAll: true });
+      if (st) st.textContent = r && r.ok ? '✓ 剧情线已推进（仅剧情线）' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
       renderPlot(body);
     };
     body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -691,8 +696,12 @@
     body.innerHTML = `<div class="wm-card">
       <div class="wm-h">物品 / 持有物追踪（${items.length}）</div>
       <div class="wm-hint">卡片自上而下为：物品名称 → 物品作用 → 持有者。物品会关联到角色与剧情线，改动即同步当前记忆世界书。</div>
-      <div class="wm-actions"><button data-act="it-add" class="wm-btn primary">＋ 添加物品</button></div>
-      <div class="wm-item-list">${cards || '<div class="wm-empty">暂无物品，点上方「添加物品」新建</div>'}</div>
+      <div class="wm-actions">
+        <button data-act="it-add" class="wm-btn primary">＋ 添加物品</button>
+        <button data-act="it-run" class="wm-btn">⟳ 归纳物品（仅触发物品 LLM）</button>
+      </div>
+      <div class="wm-item-list">${cards || '<div class="wm-empty">暂无物品，点上方「添加物品」新建，或点「归纳物品」从最近对话自动抽取</div>'}</div>
+      <div class="wm-status"></div>
     </div>`;
 
     const itemFields = (it) => ([
@@ -715,6 +724,15 @@
       if (!r.name.trim()) { toast('🌿 温记：物品名称不能为空'); return; }
       await WM.MemoryStore.addItem(r);
       toast('🌿 温记：物品已添加并同步世界书');
+      renderItem(body);
+    };
+    const itRun = body.querySelector('[data-act="it-run"]');
+    if (itRun) itRun.onclick = async () => {
+      const st = body.querySelector('.wm-status');
+      if (st) st.textContent = '仅归纳物品中…（只触发物品 LLM，不触发总结/关系/剧情线）';
+      const s = WM.Settings.load();
+      const r = await WM.Summary.triggerPlot(s, { mode: 'items', forceAll: true });
+      if (st) st.textContent = r && r.ok ? '✓ 物品归纳完成' : (r ? '✗ ' + (r.reason || '失败') : '✗ 失败');
       renderItem(body);
     };
     body.querySelectorAll('[data-act="edit"]').forEach((b) => {
@@ -774,9 +792,9 @@
       <div class="wm-actions">
         <button data-act="world-edit" class="wm-btn primary">编辑世界</button>
         <button data-act="sec-add" class="wm-btn">＋ 添加设定条目</button>
-        <button data-act="world-gen" class="wm-btn">AI 补全设定</button>
+        <button data-act="world-gen" class="wm-btn">⟳ AI 补全设定（仅触发世界观 LLM）</button>
       </div>
-      <div class="wm-hint" style="margin-top:6px">提示：世界观<b>自动只生成一次</b>（首次总结时）。之后想重新/补充推断，请点「AI 补全设定」手动调用（会自动在已有设定上增量更新）。</div>
+      <div class="wm-hint" style="margin-top:6px">提示：自动总结只在「首次」时推断一次世界观；想补充/改写世界观请手动点上面按钮（不触发其他 LLM）。</div>
 
       <div class="wm-h" style="margin-top:12px">具体设定（${secs.length}）</div>
       <div class="wm-world-secs">${secHtml || '<div class="wm-empty">暂无设定条目，点上方「添加设定条目」新建</div>'}</div>
@@ -1503,47 +1521,41 @@
   let _lastAutoAt = 0; // 去重：避免 MESSAGE_SENT + MESSAGE_RECEIVED 双触发重复
   async function autoSummaryHook() {
     const s = WM.Settings.load();
-    if (!s.autoSummaryEnabled && s.autoPlotEnabled !== false) { /* 仍可跑剧情线 */ }
-    if (!s.autoSummaryEnabled && s.autoPlotEnabled === false) return;
+    // 注意：用户已取消「自动抽取子任务开关」——自动流程始终两端全跑（full 模式），
+    // 只有 autoSummaryEnabled=false 时才整段停（相当于「开关自动总结」总闸）。
+    if (s.autoSummaryEnabled === false) return;
     const now = Date.now();
     if (now - _lastAutoAt < 1200) return; // 1.2s 内只跑一次
     _lastAutoAt = now;
-    // 注意：本 hook 主要绑定在 MESSAGE_RECEIVED（AI 流式输出完成且楼层落库之后），
-    // 因此这里不需要长延时等待流式，只留极小缓冲让 chat 元数据稳定。
     setTimeout(async () => {
       try {
-        // 流程一：纯记忆总结（summary + 世界观 + 物品），与剧情线完全独立
-        if (s.autoSummaryEnabled) {
-          let r = await WM.Summary.triggerSummary(s);
-          if (r && !r.ok && s.autoSummaryMode === 'floor') {
-            const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
-            const ptr = WM.MemoryStore.getSummaryPointer();
-            if (ptr < total) r = await WM.Summary.triggerSummary(s, { forceEnd: true });
-          }
-          if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
-            await WM.FloorHider.hideUntil(r.range[1]);
-          }
-          if (r && r.ok) {
-            const extra = r.partial ? '（部分提炼失败，见错误报告）' : '';
-            toast(`🌿 温记：已写入 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）${extra}`);
-          }
+        // 流程一：总结流程（full 模式 = 总结 + 世界观 + 物品，3 个 LLM）
+        let r = await WM.Summary.triggerSummary(s, { mode: 'full' });
+        if (r && !r.ok && s.autoSummaryMode === 'floor') {
+          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+          const ptr = WM.MemoryStore.getSummaryPointer();
+          if (ptr < total) r = await WM.Summary.triggerSummary(s, { mode: 'full', forceEnd: true });
         }
-        // 流程二：剧情线独立推进（同时并联关系线 LLM），独立于总结
-        if (s.autoPlotEnabled !== false) {
-          let rp = await WM.Summary.triggerPlot(s);
-          if (rp && !rp.ok && s.autoPlotMode === 'floor') {
-            const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
-            const ptr = WM.MemoryStore.getPlotPointer();
-            if (ptr < total) rp = await WM.Summary.triggerPlot(s, { forceEnd: true });
-          }
-          // 剧情线推进后同样隐藏已处理楼层（与总结流程一致，避免已处理楼层仍进上下文）
-          if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
-            await WM.FloorHider.hideUntil(rp.range[1]);
-          }
-          if (rp && rp.ok) {
-            const extra = rp.partial ? '（部分失败，见错误报告）' : '';
-            toast(`🌿 温记：剧情线已推进 ${rp.count} 条（楼层 ${rp.range[0]}-${rp.range[1]}）${extra}`);
-          }
+        if (s.autoHideFloors && r && r.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+          await WM.FloorHider.hideUntil(r.range[1]);
+        }
+        if (r && r.ok) {
+          const extra = r.partial ? '（部分提炼失败，见错误报告）' : '';
+          toast(`🌿 温记：已写入 ${r.count} 条记忆（楼层 ${r.range[0]}-${r.range[1]}）${extra}`);
+        }
+        // 流程二：剧情流程（full 模式 = 关系线 + 剧情线 + 物品，3 个 LLM）
+        let rp = await WM.Summary.triggerPlot(s, { mode: 'full' });
+        if (rp && !rp.ok && s.autoPlotMode === 'floor') {
+          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+          const ptr = WM.MemoryStore.getPlotPointer();
+          if (ptr < total) rp = await WM.Summary.triggerPlot(s, { mode: 'full', forceEnd: true });
+        }
+        if (s.autoHideFloors && rp && rp.ok && WM.FloorHider && WM.FloorHider.hideUntil) {
+          await WM.FloorHider.hideUntil(rp.range[1]);
+        }
+        if (rp && rp.ok) {
+          const extra = rp.partial ? '（部分失败，见错误报告）' : '';
+          toast(`🌿 温记：剧情线已推进 ${rp.count} 条（楼层 ${rp.range[0]}-${rp.range[1]}）${extra}`);
         }
       } catch (e) {
         toast(`🌿 温记：自动处理失败 - ${e.message || e}`);

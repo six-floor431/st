@@ -525,14 +525,18 @@
     return { name, type, desc, rules };
   }
 
-  // 触发一次「纯记忆」总结（只跑 summary + 世界观 + 物品，不再顺带跑关系/剧情）
+  // 触发一次「总结流程」：根据 mode 决定跑哪些子任务。
+  //   mode==='full' 或默认 → 跑 总结 + 世界观 + 物品（3 个 LLM）；
+  //   mode==='summary' 仅 → 只跑总结本体（1 个 LLM）；
+  //   mode==='world' 仅   → 只跑世界观 LLM（1 个 LLM，单独面板用，hasWorld 仍强制只跑一次）；
+  //   mode==='items' 仅   → 只跑物品 LLM（1 个 LLM）。
   async function triggerSummary(settings, opts) {
     opts = opts || {};
     settings = settings || {};
+    const mode = opts.mode || 'full';
     if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
       try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
     }
-    if (!settings.autoSummaryEnabled) return { ok: false, reason: '自动总结未开启' };
     if (_summarizing) return { ok: false, reason: '上一段总结仍在运行，请稍候' };
     _summarizing = true;
 
@@ -543,64 +547,68 @@
       range = cr.range; recent = cr.recent; total = cr.total;
 
       const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `· ${s.title}：${s.text}`).join('\n');
+      const successes = [];
+      const failures = [];
 
-      // 1) 先做总结（纯记忆）
-      const summaryTpl = settings.prompts && settings.prompts.summary;
-      const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
-      try {
-        const rawSummary = await callLLM(sys, '把叙事正文放在 <Summary> 和 </Summary> 之间。没有新内容就输出 <Summary></Summary>。标签之外不要写任何内容。', settings, { temperature: 0.3, phase: 'summary' });
-        const summaryText = taggedSummary(rawSummary);
-        await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
-        await WM.MemoryStore.setSummaryPointer(range[1]);
-      } catch (e) {
-        if (WM.ErrLog) await WM.ErrLog.add('summary', e, { range });
-        WM.UI && WM.UI.toast && WM.UI.toast('总结失败：' + (e.message || e), 'error');
-        return { ok: false, range, reason: (e && e.message) ? e.message : String(e) };
+      // 1) 总结本体（summary/items-only/world-only 这几种单任务模式都跳过总结 LLM）
+      if (mode === 'full' || mode === 'summary') {
+        const summaryTpl = settings.prompts && settings.prompts.summary;
+        const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
+        try {
+          const rawSummary = await callLLM(sys, '把叙事正文放在 <Summary> 和 </Summary> 之间。没有新内容就输出 <Summary></Summary>。标签之外不要写任何内容。', settings, { temperature: 0.3, phase: 'summary' });
+          const summaryText = taggedSummary(rawSummary);
+          await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
+          await WM.MemoryStore.setSummaryPointer(range[1]);
+          successes.push('summary');
+        } catch (e) {
+          if (WM.ErrLog) await WM.ErrLog.add('summary', e, { range });
+          WM.UI && WM.UI.toast && WM.UI.toast('总结失败：' + (e.message || e), 'error');
+          failures.push({ scope: 'summary', err: e });
+        }
       }
 
-      // 2) 并行跑「记忆类」子任务：世界观 + 物品（关系/剧情已迁出为独立流程）
+      // 2) 并行跑子任务（世界观 + 物品）——根据 mode 决定跑哪些
       const tasks = [];
       const labels = [];
 
-      if (settings.autoWorld !== false) {
-        // 世界观自动只跑一次：若已有世界观数据（世界名/类型/简述/设定条目/旧纯文本任一），自动流程跳过，
-        // 后续只能由用户在「世界设定」面板手动点「生成世界设定」才再次调用 LLM（见 launcher world-gen）。
+      if (mode === 'full' || mode === 'world') {
+        // 世界观只跑一次：已有数据时自动流程跳过，必须去「世界设定」面板手动点补全。
         const hasWorld = (() => {
           const meta = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
           const secs = WM.MemoryStore.getWorldSections ? WM.MemoryStore.getWorldSections() : [];
           const wold = WM.MemoryStore.getWorld ? WM.MemoryStore.getWorld() : '';
           return !!(meta && (meta.name || meta.kind || meta.desc)) || (secs && secs.length) || (wold && String(wold).trim());
         })();
-        if (hasWorld) {
-          // 跳过自动世界观，但仍占位不阻塞其它任务
-        } else {
-        tasks.push((async () => {
-          const worldRaw = await WM.Worldbook.inferWorldview(settings, { recent });
-          const world = taggedWorld(worldRaw);
-          if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
-          const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
-          if (parsed) {
-            const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
-            await WM.MemoryStore.setWorldMeta({
-              name: parsed.name || cur.name || '',
-              kind: parsed.kind || cur.kind || '',
-              desc: parsed.desc || cur.desc || '',
-            });
-            for (const sec of parsed.sections) {
-              const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
-              if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
-              else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+        // 注意：单任务 mode==='world' 是用户手动点的，强制跑（即便已有世界观也要重新更新/补充）；
+        //       只有 mode==='full'（自动总结/立即总结）才遵守 hasWorld 只跑一次。
+        if (mode === 'world' || !hasWorld) {
+          tasks.push((async () => {
+            const worldRaw = await WM.Worldbook.inferWorldview(settings, { recent });
+            const world = taggedWorld(worldRaw);
+            if (!world || !world.trim()) return { kind: 'worldview', ok: true, skipped: true };
+            const parsed = WM.Worldbook.parseWorldview ? WM.Worldbook.parseWorldview(world) : null;
+            if (parsed) {
+              const cur = WM.MemoryStore.getWorldMeta ? WM.MemoryStore.getWorldMeta() : {};
+              await WM.MemoryStore.setWorldMeta({
+                name: parsed.name || cur.name || '',
+                kind: parsed.kind || cur.kind || '',
+                desc: parsed.desc || cur.desc || '',
+              });
+              for (const sec of parsed.sections) {
+                const exist = (WM.MemoryStore.getWorldSections() || []).find((x) => x.title === sec.title);
+                if (exist) await WM.MemoryStore.updateWorldSection(exist.id, { body: sec.body });
+                else await WM.MemoryStore.addWorldSection(sec.title, sec.body);
+              }
+            } else {
+              await WM.MemoryStore.setWorld(world);
             }
-          } else {
-            await WM.MemoryStore.setWorld(world);
-          }
-          return { kind: 'worldview', ok: true };
-        })());
-        labels.push('worldview');
+            return { kind: 'worldview', ok: true };
+          })());
+          labels.push('worldview');
         }
       }
 
-      if (settings.autoItems !== false) {
+      if (mode === 'full' || mode === 'items') {
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.itemExtract;
           if (!tpl) return { kind: 'items', ok: true, skipped: true };
@@ -638,30 +646,27 @@
         labels.push('items');
       }
 
-      const results = await Promise.allSettled(tasks);
-      const failures = [];
-      const successes = [];
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          failures.push({ scope: labels[i], err: r.reason });
-          if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {});
-        } else if (r.value && !r.value.skipped) {
-          successes.push(r.value.kind);
-        }
-      });
-      if (failures.length === results.length && failures.length > 0) {
-        const reason = failures.map((f) => '【' + f.scope + '】' + (f.err && f.err.message ? f.err.message : f.err)).join('；\n');
-        if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('所有并行任务失败'), { range, reason });
-        WM.UI && WM.UI.toast && WM.UI.toast('记忆提炼全部失败，见「错误报告」：\n' + reason, 'error');
-      } else if (failures.length > 0) {
-        const okList = successes.join('、') || '无';
-        const failList = failures.map((f) => f.scope).join('、');
-        if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('部分并行任务失败'), { range, ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {});
-        WM.UI && WM.UI.toast && WM.UI.toast('部分记忆提炼失败 → 成功：' + okList + '；失败：' + failList, 'warn');
+      if (tasks.length) {
+        const results = await Promise.allSettled(tasks);
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            failures.push({ scope: labels[i], err: r.reason });
+            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {});
+          } else if (r.value && !r.value.skipped) {
+            successes.push(r.value.kind);
+          }
+        });
       }
 
-      // 自动大总结：每累计 bigSummaryEvery 次小总结，整合近期小总结为一份长期记忆
-      if (settings.bigSummaryEnabled !== false) {
+      if (failures.length > 0 && successes.length === 0) {
+        const reason = failures.map((f) => '【' + f.scope + '】' + (f.err && f.err.message ? f.err.message : f.err)).join('；\n');
+        if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('总结流程子任务全部失败'), { range, reason });
+      } else if (failures.length > 0) {
+        if (WM.ErrLog) await WM.ErrLog.add('pipeline', new Error('总结流程部分失败'), { range, ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {});
+      }
+
+      // 自动大总结：每累计 bigSummaryEvery 次小总结，整合近期小总结为一份长期记忆（仅 full 模式触发）
+      if ((mode === 'full' || mode === 'summary') && settings.bigSummaryEnabled !== false) {
         const allSmall = (WM.MemoryStore.getSummaries ? WM.MemoryStore.getSummaries() : []).filter((s) => s.kind !== 'big');
         const every = Math.max(2, settings.bigSummaryEvery || 5);
         if (allSmall.length > 0 && allSmall.length % every === 0) {
@@ -674,8 +679,7 @@
         }
       }
 
-      // 显式 await 世界书同步：save() 里 dispatchLorebook 是 fire-and-forget，
-      // 此处再 await 一次确保条目（最新3条剧情线/所有记忆/所有物品/关系/世界观）已写入当前角色卡世界书
+      // 显式 await 世界书同步：确保条目（最新3条剧情线/所有记忆/所有物品/关系/世界观）已写入当前角色卡世界书
       try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       if (WM.UI && WM.UI.refresh) WM.UI.refresh();
       return { ok: true, range, count: recent.length, partial: failures.length > 0, successes, failures: failures.map((f) => f.scope) };
@@ -684,14 +688,18 @@
     }
   }
 
-  // ── 剧情线独立流程：与总结解耦，有独立指针与攒段逻辑；触发时同时并联调用「关系线 LLM」 ──
+  // 剧情线流程：根据 mode 决定跑哪些子任务。
+  //   mode==='full' 或默认 → 跑 关系线 + 剧情线 + 物品（3 个 LLM，并联）；
+  //   mode==='plot' 仅 → 只跑剧情线 LLM（1 个，剧情面板"生成"按钮用）；
+  //   mode==='relations' 仅 → 只跑关系线 LLM（1 个，关系面板"生成"按钮用）；
+  //   mode==='items' 仅   → 只跑物品 LLM（1 个，物品面板"归纳"按钮用）。
   async function triggerPlot(settings, opts) {
     opts = opts || {};
     settings = settings || {};
+    const mode = opts.mode || 'full';
     if (!settings.llmConfig || !settings.llmConfig.apiUrl) {
       try { const fresh = WM.Settings && WM.Settings.load && WM.Settings.load(); if (fresh && fresh.llmConfig && fresh.llmConfig.apiUrl) settings = fresh; } catch (e) {}
     }
-    if (settings.autoPlotEnabled === false) return { ok: false, reason: '剧情线独立推进未开启' };
     if (_plotting) return { ok: false, reason: '上一段剧情线仍在推进，请稍候' };
     _plotting = true;
 
@@ -702,18 +710,18 @@
       range = cr.range; recent = cr.recent; total = cr.total;
 
       const histSummaries = (WM.MemoryStore.getSummaries() || []).map((s) => `· ${s.title}：${s.text}`).join('\n');
-      // 历史剧情线（自我推进的依据）：最新在上
       const plotsSorted = WM.MemoryStore.getPlotsSorted ? WM.MemoryStore.getPlotsSorted() : (WM.MemoryStore.getPlots() || []);
       const historyPlot = plotsSorted.map((p) => `· ${p.time ? '[' + p.time + '] ' : ''}${p.title}：${p.summary}`).join('\n') || '（暂无，请从最近对话起笔）';
-      // 历史关系（并联时 plot 不阻塞等待新关系，直接用已有的）
       const relationsText = (WM.MemoryStore.getRelations() || []).map((r) => `· ${r.from} → ${r.to}：${r.label || ''}`).join('\n') || '（暂无已知关系）';
+      const successes = [];
+      const failures = [];
 
-      // 并联：关系线 + 剧情线 同时调用 LLM
+      // 并联：根据 mode 选择要跑的子任务
       const tasks = [];
       const labels = [];
 
       // —— 关系线 LLM ——
-      if (settings.autoRelation !== false) {
+      if (mode === 'full' || mode === 'relations') {
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.relations;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
@@ -728,25 +736,21 @@
       }
 
       // —— 剧情线 LLM（基于历史剧情线自我推进） ——
-      if (settings.autoPlot !== false) {
+      if (mode === 'full' || mode === 'plot') {
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.plot;
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), relations: relationsText, historyPlot });
           const out = await callLLM(s, '把所有剧情放在 <Plots> 和 </Plots> 之间，每条一行，字段用 | 分隔（time|title|summary）。没有新事件就输出 <Plots></Plots>。', settings, { temperature: 0.4, phase: 'plot' });
           const parsed = parsePlots(taggedPlot(out));
           const existing = WM.MemoryStore.getPlots() || [];
-          // 归一化 key：用于跨次去重，避免模型偶尔回显旧事件时产生重复条目
           const normKey = (p) => `${(p.time || '').replace(/\s/g, '')}|${(p.title || '').replace(/\s/g, '')}|${(p.summary || '').replace(/\s/g, '')}`;
           const existKeys = new Set(existing.map(normKey));
           let added = 0, skipped = 0;
           for (const ev of parsed) {
-            // 增量语义：只追加「新事件」，已有（key 相同）一律跳过，不覆盖、不重复
             if (existKeys.has(normKey(ev))) { skipped++; continue; }
             await WM.MemoryStore.addPlot(ev);
             added++;
           }
-          // 指针推进：仅「仅新增楼层(new)」与「立即处理全部(forceAll)」推进指针，
-          // 避免 count/range/floor 等窗口模式跑一次就把指针顶到 total → 之后永远 skip 导致"不自动更新"。
           if (settings.autoPlotMode === 'new' || opts.forceAll) {
             await WM.MemoryStore.setPlotPointer(range[1]);
           }
@@ -755,8 +759,8 @@
         labels.push('plot');
       }
 
-      // —— 物品 LLM（跟随剧情线一并跑：用本段 recent 区间，关联已有剧情线） ——
-      if (settings.autoItems !== false) {
+      // —— 物品 LLM（剧情流程里跑一次，与总结流程里的那次形成双保险） ——
+      if (mode === 'full' || mode === 'items') {
         tasks.push((async () => {
           const tpl = settings.prompts && settings.prompts.itemExtract;
           if (!tpl) return { kind: 'items', ok: true, skipped: true };
@@ -766,7 +770,6 @@
           const s = fillTemplate(tpl, { recent: buildDialogue(recent, settings), plot: knownPlots });
           const out = await callLLM(s, '把所有物品放在 <Items> 和 </Items> 之间，每件一行，字段用 | 分隔（name|desc|owner|origin|related）。没有物品就输出 <Items></Items>。', settings, { temperature: 0.3, phase: 'items' });
           const itemRaw = taggedItems(out);
-          // 传入 allPlots，让 parseItems 直接把关联剧情文本匹配成 relatedPlots(ID数组)
           const parsedItems = parseItems(itemRaw, allPlots);
           const blank = (v) => !v || /^(无|未知|未标注|-|—)$/.test(v);
           for (const it of parsedItems) {
@@ -788,24 +791,25 @@
         labels.push('items');
       }
 
-      const results = await Promise.allSettled(tasks);
-      const failures = [];
-      const successes = [];
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          failures.push({ scope: labels[i], err: r.reason });
-          if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {});
-        } else if (r.value) {
-          successes.push(r.value.kind);
-        }
-      });
+      if (tasks.length) {
+        const results = await Promise.allSettled(tasks);
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            failures.push({ scope: labels[i], err: r.reason });
+            if (WM.ErrLog) WM.ErrLog.add(labels[i], r.reason, { range }).catch(() => {});
+          } else if (r.value) {
+            successes.push(r.value.kind);
+          }
+        });
+      }
+
       if (failures.length === results.length && failures.length > 0) {
         const reason = failures.map((f) => '【' + f.scope + '】' + (f.err && f.err.message ? f.err.message : f.err)).join('；\n');
-        if (WM.ErrLog) await WM.ErrLog.add('plot-pipeline', new Error('剧情线并行任务全部失败'), { range, reason });
-        WM.UI && WM.UI.toast && WM.UI.toast('剧情线推进失败，见「错误报告」：\n' + reason, 'error');
+        if (WM.ErrLog) await WM.ErrLog.add('plot-pipeline', new Error('剧情流程子任务全部失败'), { range, reason });
+        WM.UI && WM.UI.toast && WM.UI.toast('剧情流程失败，见「错误报告」：\n' + reason, 'error');
       } else if (failures.length > 0) {
-        if (WM.ErrLog) await WM.ErrLog.add('plot-pipeline', new Error('剧情线部分失败'), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {});
-        WM.UI && WM.UI.toast && WM.UI.toast('剧情线部分失败 → ' + failures.map((f) => f.scope).join('、'), 'warn');
+        if (WM.ErrLog) await WM.ErrLog.add('plot-pipeline', new Error('剧情流程部分失败'), { ok: successes, fail: failures.map((f) => f.scope) }).catch(() => {});
+        WM.UI && WM.UI.toast && WM.UI.toast('剧情流程部分失败 → ' + failures.map((f) => f.scope).join('、'), 'warn');
       }
 
       // 显式 await 世界书同步：确保剧情线/关系/物品条目已写入当前角色卡世界书
