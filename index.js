@@ -503,7 +503,6 @@ ${it.message}`;
       const s = load();
       const settings = WM.Settings.load();
       if (settings.worldToLorebook === false) return;
-      if (settings.takeoverEmbedding && settings.vectorEnabled) return;
       for (const sm of s.summaries) {
         await WM.Worldbook.writeEntry({
           kind: sm.kind === "plot" ? "summary" : "summary",
@@ -3997,6 +3996,10 @@ ${p.summary || ""}`.trim() });
         });
         if (!r) return;
         await WM.MemoryStore.setWorldMeta(r);
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
+        }
         toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u4E16\u754C\u4FE1\u606F\u5DF2\u4FDD\u5B58\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderWorld(body);
       };
@@ -4016,6 +4019,10 @@ ${p.summary || ""}`.trim() });
           return;
         }
         await WM.MemoryStore.addWorldSection(r.title, r.body);
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
+        }
         toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderWorld(body);
       };
@@ -4033,6 +4040,10 @@ ${p.summary || ""}`.trim() });
           });
           if (!r) return;
           await WM.MemoryStore.updateWorldSection(w.id, r);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderWorld(body);
         };
@@ -4041,6 +4052,10 @@ ${p.summary || ""}`.trim() });
         b.onclick = async () => {
           if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u6761\u8BBE\u5B9A\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
           await WM.MemoryStore.removeWorldSection(b.dataset.id);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u8BBE\u5B9A\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderWorld(body);
         };
@@ -4080,6 +4095,10 @@ ${p.summary || ""}`.trim() });
           } else {
             await WM.MemoryStore.setWorld(w);
             if (st) st.textContent = "\u2713 \u5DF2\u8865\u5168";
+          }
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
           }
           renderWorld(body);
         } catch (e) {

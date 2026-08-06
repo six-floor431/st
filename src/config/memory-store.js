@@ -160,7 +160,9 @@
     const s = load();
     const settings = WM.Settings.load();
     if (settings.worldToLorebook === false) return; // 用户关闭了世界书写入
-    if (settings.takeoverEmbedding && settings.vectorEnabled) return; // 接管模式：内容由自家向量召回注入，不拆写世界书
+    // 注意：接管向量(takeoverEmbedding)不再阻断世界书同步。
+    // 世界书 = 用户可查看/编辑的「持久化数据载体」；向量接管 = 注入阶段的召回策略。
+    // 两者解耦：无论怎么接管，数据都要出现在世界书上（满足「同步到自己新建的世界书」的诉求）。
     // 1) 每段总结/剧情摘要 → 独立条目（不挤在一起）
     for (const sm of s.summaries) {
       await WM.Worldbook.writeEntry({

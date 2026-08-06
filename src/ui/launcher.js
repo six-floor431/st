@@ -800,6 +800,8 @@
       });
       if (!r) return;
       await WM.MemoryStore.setWorldMeta(r);
+      // Bug 修复：手动编辑后显式同步世界书（之前漏了，UI 骗了用户）
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       toast('🌿 温记：世界信息已保存并同步世界书');
       renderWorld(body);
     };
@@ -816,6 +818,7 @@
       if (!r) return;
       if (!r.title.trim() && !r.body.trim()) { toast('🌿 温记：名称和内容不能都为空'); return; }
       await WM.MemoryStore.addWorldSection(r.title, r.body);
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       toast('🌿 温记：设定已添加并同步世界书');
       renderWorld(body);
     };
@@ -833,6 +836,7 @@
         });
         if (!r) return;
         await WM.MemoryStore.updateWorldSection(w.id, r);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：设定已更新并同步世界书');
         renderWorld(body);
       };
@@ -841,6 +845,7 @@
       b.onclick = async () => {
         if (!confirm('确定删除这条设定？世界书中的对应条目也会一并移除。')) return;
         await WM.MemoryStore.removeWorldSection(b.dataset.id);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：设定已删除并同步世界书');
         renderWorld(body);
       };
@@ -883,6 +888,8 @@
           await WM.MemoryStore.setWorld(w);
           if (st) st.textContent = '✓ 已补全';
         }
+        // Bug 修复：手动补全后显式 await dispatchLorebook()，把 worldMeta/worldSections 真正写到世界书
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         renderWorld(body);
       } catch (e) {
         if (st) st.textContent = '✗ ' + (e.message || e);
