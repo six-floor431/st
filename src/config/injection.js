@@ -89,7 +89,9 @@
 
     const wbOk = WM.Worldbook && WM.Worldbook.available();
     const candidates = collectCandidates();
-    const takeover = settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore;
+    // 统一用 worldbook.isTakeoverOn 作为接管判定真相源 —— 与 buildEntry 设 enabled=false 的条件完全一致，
+    // 避免分裂导致「条目被禁用但温记没召回」的静默丢内容。
+    const takeover = (WM.Worldbook && WM.Worldbook.isTakeoverOn) ? WM.Worldbook.isTakeoverOn() : false;
 
     // 情况 A：开启向量接管 → 用我们的 VectorStore 对候选召回 topK（真正替代酒馆原生向量检索）。
     // 关键点：接管模式下必须「跳过酒馆原生世界书召回」（情况 B），否则情况 B 会提前 return，

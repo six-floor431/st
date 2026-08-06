@@ -1608,7 +1608,7 @@ ${body}`,
     function isTakeoverOn() {
       try {
         const s = WM.Settings && WM.Settings.load ? WM.Settings.load() : {};
-        return !!(s.takeoverEmbedding && s.vectorEnabled);
+        return !!(s.takeoverEmbedding && s.vectorEnabled && WM.VectorStore && WM.EmbeddingClient);
       } catch (e) {
         return false;
       }
@@ -2780,7 +2780,7 @@ ${p.summary || ""}`.trim() });
       }
       const wbOk = WM.Worldbook && WM.Worldbook.available();
       const candidates = collectCandidates();
-      const takeover = settings.takeoverEmbedding && settings.vectorEnabled && WM.VectorStore;
+      const takeover = WM.Worldbook && WM.Worldbook.isTakeoverOn ? WM.Worldbook.isTakeoverOn() : false;
       if (takeover) {
         const q = WM.VectorStore.lastQuery || "";
         const ranked = q ? await WM.VectorStore.search(candidates, q, settings.injectTopK || 8) : candidates.slice(-(settings.injectTopK || 8));

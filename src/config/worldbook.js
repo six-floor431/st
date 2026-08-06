@@ -105,11 +105,14 @@
     };
   }
 
-  // 判定当前是否处于「向量接管」模式（与 injection.js / save() 的判定完全一致）
+  // 判定当前是否处于「向量接管」模式 —— 全局唯一真相源。
+  //   buildEntry 设 enabled=false（酒馆原生不注入）与 injection 情况 A（温记召回注入）必须用同一个判定，
+  //   否则一旦分裂就会出现「条目被禁用但温记没召回」的静默丢内容。
+  //   条件：开关开启 + VectorStore/EmbeddingClient 真实可用（有召回能力才禁用酒馆原生，否则保留原生注入兜底）。
   function isTakeoverOn() {
     try {
       const s = (WM.Settings && WM.Settings.load) ? WM.Settings.load() : {};
-      return !!(s.takeoverEmbedding && s.vectorEnabled);
+      return !!(s.takeoverEmbedding && s.vectorEnabled && WM.VectorStore && WM.EmbeddingClient);
     } catch (e) { return false; }
   }
 
