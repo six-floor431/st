@@ -633,6 +633,7 @@
       if (!r) return;
       if (!r.title.trim() && !r.summary.trim()) { toast('🌿 温记：标题和内容不能都为空'); return; }
       await WM.MemoryStore.addPlot(r);
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       toast('🌿 温记：剧情已添加并同步世界书');
       renderPlot(body);
     };
@@ -652,6 +653,7 @@
         const r = await openModal({ title: '编辑剧情', fields: plotFields(p), okText: '保存' });
         if (!r) return;
         await WM.MemoryStore.updatePlot(p.id, r);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：剧情已更新并同步世界书');
         renderPlot(body);
       };
@@ -660,6 +662,7 @@
       b.onclick = async () => {
         if (!confirm('确定删除这条剧情？世界书中的对应条目也会一并移除。')) return;
         await WM.MemoryStore.removePlot(b.dataset.id);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：剧情已删除并同步世界书');
         renderPlot(body);
       };
@@ -723,6 +726,7 @@
       if (!r) return;
       if (!r.name.trim()) { toast('🌿 温记：物品名称不能为空'); return; }
       await WM.MemoryStore.addItem(r);
+      try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
       toast('🌿 温记：物品已添加并同步世界书');
       renderItem(body);
     };
@@ -743,6 +747,7 @@
         if (!r) return;
         if (!r.name.trim()) { toast('🌿 温记：物品名称不能为空'); return; }
         await WM.MemoryStore.updateItem(it.id, r);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：物品已更新并同步世界书');
         renderItem(body);
       };
@@ -751,6 +756,7 @@
       b.onclick = async () => {
         if (!confirm('确定删除这个物品？世界书中的对应条目也会一并移除。')) return;
         await WM.MemoryStore.removeItem(b.dataset.id);
+        try { if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook(); } catch (e) {}
         toast('🌿 温记：物品已删除并同步世界书');
         renderItem(body);
       };

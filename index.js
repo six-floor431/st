@@ -3849,6 +3849,10 @@ ${p.summary || ""}`.trim() });
           return;
         }
         await WM.MemoryStore.addPlot(r);
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
+        }
         toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderPlot(body);
       };
@@ -3868,6 +3872,10 @@ ${p.summary || ""}`.trim() });
           const r = await openModal({ title: "\u7F16\u8F91\u5267\u60C5", fields: plotFields(p), okText: "\u4FDD\u5B58" });
           if (!r) return;
           await WM.MemoryStore.updatePlot(p.id, r);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderPlot(body);
         };
@@ -3876,6 +3884,10 @@ ${p.summary || ""}`.trim() });
         b.onclick = async () => {
           if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u6761\u5267\u60C5\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
           await WM.MemoryStore.removePlot(b.dataset.id);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u5267\u60C5\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderPlot(body);
         };
@@ -3937,6 +3949,10 @@ ${p.summary || ""}`.trim() });
           return;
         }
         await WM.MemoryStore.addItem(r);
+        try {
+          if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+        } catch (e) {
+        }
         toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u6DFB\u52A0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
         renderItem(body);
       };
@@ -3960,6 +3976,10 @@ ${p.summary || ""}`.trim() });
             return;
           }
           await WM.MemoryStore.updateItem(it.id, r);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u66F4\u65B0\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderItem(body);
         };
@@ -3968,6 +3988,10 @@ ${p.summary || ""}`.trim() });
         b.onclick = async () => {
           if (!confirm("\u786E\u5B9A\u5220\u9664\u8FD9\u4E2A\u7269\u54C1\uFF1F\u4E16\u754C\u4E66\u4E2D\u7684\u5BF9\u5E94\u6761\u76EE\u4E5F\u4F1A\u4E00\u5E76\u79FB\u9664\u3002")) return;
           await WM.MemoryStore.removeItem(b.dataset.id);
+          try {
+            if (WM.MemoryStore && WM.MemoryStore.dispatchLorebook) await WM.MemoryStore.dispatchLorebook();
+          } catch (e) {
+          }
           toast("\u{1F33F} \u6E29\u8BB0\uFF1A\u7269\u54C1\u5DF2\u5220\u9664\u5E76\u540C\u6B65\u4E16\u754C\u4E66");
           renderItem(body);
         };

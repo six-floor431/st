@@ -528,7 +528,7 @@
   // 触发一次「总结流程」：根据 mode 决定跑哪些子任务。
   //   mode==='full' 或默认 → 跑 总结 + 世界观 + 物品（3 个 LLM）；
   //   mode==='summary' 仅 → 只跑总结本体（1 个 LLM）；
-  //   mode==='world' 仅   → 只跑世界观 LLM（1 个 LLM，单独面板用，hasWorld 仍强制只跑一次）；
+  //   mode==='world' 仅   → 只跑世界观 LLM（1 个 LLM，单独面板用，强制忽略 hasWorld）；
   //   mode==='items' 仅   → 只跑物品 LLM（1 个 LLM）。
   async function triggerSummary(settings, opts) {
     opts = opts || {};
@@ -550,7 +550,7 @@
       const successes = [];
       const failures = [];
 
-      // 1) 总结本体（summary/items-only/world-only 这几种单任务模式都跳过总结 LLM）
+      // 1) 总结本体（items-only / world-only 这两种单任务模式跳过总结 LLM）
       if (mode === 'full' || mode === 'summary') {
         const summaryTpl = settings.prompts && settings.prompts.summary;
         const sys = fillTemplate(summaryTpl, { recent: buildDialogue(recent, settings), historySummary: histSummaries });
