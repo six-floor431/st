@@ -242,6 +242,14 @@
   // 返回的每条消息带隐藏标记（is_wm_hidden/is_hidden/is_system），供 buildDialogue 跳过已总结楼层。
   //   注意：这里不过滤已隐藏楼层——因为 summaryPointer/plotPointer 基于原始 chat 索引，
   //   若在这里过滤会导致 total 变小、指针对不上。过滤交给 buildDialogue 在「发给 LLM 前」做。
+  // 返回当前对话的全部原始楼层（供 UI 显示总层数等）。不过滤、不映射，length = 真实总楼层数。
+  function getChatMessages() {
+    try {
+      const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+      const chat = ctx && ctx.chat;
+      return Array.isArray(chat) ? chat : [];
+    } catch (e) { return []; }
+  }
   function getRecentMessages(n) {
     try {
       const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
@@ -861,7 +869,7 @@
     }
   }
 
-  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getRecentMessages, toMessages, isSummarizing, isPlotting,
+  WM.Summary = { fillTemplate, callLLM, triggerSummary, runSummary: triggerSummary, triggerPlot, triggerBigSummary, getChatMessages, getRecentMessages, toMessages, isSummarizing, isPlotting,
     taggedSummary, taggedRelations, taggedPlot, taggedWorld, taggedItems, parsePlots, parseRelations, parseItems, parseWorld, parseJSON,
   sanitizeLLMText, cleanSummaryText, truncateItemFields, isJunkText };
 })();

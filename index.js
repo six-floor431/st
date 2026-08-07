@@ -2095,6 +2095,15 @@ ${recent}
       }
       return [];
     }
+    function getChatMessages() {
+      try {
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+        const chat = ctx && ctx.chat;
+        return Array.isArray(chat) ? chat : [];
+      } catch (e) {
+        return [];
+      }
+    }
     function getRecentMessages(n) {
       try {
         const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
@@ -2653,6 +2662,7 @@ ${s.text}`).join("\n\n");
       runSummary: triggerSummary,
       triggerPlot,
       triggerBigSummary,
+      getChatMessages,
       getRecentMessages,
       toMessages,
       isSummarizing,
