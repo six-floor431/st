@@ -109,6 +109,8 @@
 
   // ── 总结 / 剧情摘要（独立存档，不与其他内容挤在一起） ──
   async function addSummary(text, kind, title) {
+    const t = String(text || '').trim();
+    if (!t) return null; // 防御：空总结不存（避免世界书出现空条目 —— 区间全隐藏/模型返回空标签时触发）
     const s = load();
     const id = 'sm_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
     s.summaries.push({

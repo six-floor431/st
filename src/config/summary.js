@@ -364,9 +364,12 @@
   function computeRange(settings, opts, modeKey, getPtr, forceAllKey) {
     opts = opts || {};
     const auto = settings[modeKey] || 'new';
-    const msgs = getRecentMessages(1000);
-    const total = msgs.length;
+    // total 必须用真实 chat 全长，不能用 getRecentMessages(1000).length ——
+    //   后者 slice(-1000) 会把超过 1000 层的对话截断成 1000，导致 new 模式 ptr>=1000 永远 skip、
+    //   range 模式填 1000+ 区间永远 start>end。这是「对话一长自动总结就失效」的根因。
+    const total = getChatMessages().length;
     if (!total) return { skip: true, range: [0, 0], total, reason: '当前对话没有可总结的楼层（请先有对话内容）' };
+    const msgs = getRecentMessages(total); // 取全部 mapped（含隐藏标记），供 buildDialogue 过滤后取区间
     let range;
     if (opts.forceAll) {
       range = [1, total];
@@ -565,9 +568,15 @@
         try {
           const rawSummary = await callLLM(sys, '把叙事正文放在 <Summary> 和 </Summary> 之间。没有新内容就输出 <Summary></Summary>。标签之外不要写任何内容。', settings, { temperature: 0.3, phase: 'summary' });
           const summaryText = taggedSummary(rawSummary);
-          await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
-          await WM.MemoryStore.setSummaryPointer(range[1]);
-          successes.push('summary');
+          // 空总结防御：区间楼层全隐藏（已总结过）或模型返回空标签时 summaryText 为空。
+          //   不存空条目（否则世界书出现空总结）、不推进指针（否则这段被跳过却没真正总结）。
+          if (summaryText && summaryText.trim()) {
+            await WM.MemoryStore.addSummary(summaryText, 'summary', '楼层 ' + range[0] + '-' + range[1]);
+            await WM.MemoryStore.setSummaryPointer(range[1]);
+            successes.push('summary');
+          } else {
+            console.warn('[WarmMemo] 总结内容为空，跳过存储与指针推进（区间可能全为已隐藏楼层）');
+          }
         } catch (e) {
           if (WM.ErrLog) await WM.ErrLog.add('summary', e, { range });
           WM.UI && WM.UI.toast && WM.UI.toast('总结失败：' + (e.message || e), 'error');

@@ -1566,7 +1566,7 @@
         // 流程一：总结流程（full 模式 = 总结 + 世界观 + 物品，3 个 LLM）
         let r = await WM.Summary.triggerSummary(s, { mode: 'full' });
         if (r && !r.ok && s.autoSummaryMode === 'floor') {
-          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+          const total = (WM.Summary.getChatMessages && WM.Summary.getChatMessages().length) || 0;
           const ptr = WM.MemoryStore.getSummaryPointer();
           if (ptr < total) r = await WM.Summary.triggerSummary(s, { mode: 'full', forceEnd: true });
         }
@@ -1580,7 +1580,7 @@
         // 流程二：剧情流程（full 模式 = 关系线 + 剧情线 + 物品，3 个 LLM）
         let rp = await WM.Summary.triggerPlot(s, { mode: 'full' });
         if (rp && !rp.ok && s.autoPlotMode === 'floor') {
-          const total = (WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1000).length) || 0;
+          const total = (WM.Summary.getChatMessages && WM.Summary.getChatMessages().length) || 0;
           const ptr = WM.MemoryStore.getPlotPointer();
           if (ptr < total) rp = await WM.Summary.triggerPlot(s, { mode: 'full', forceEnd: true });
         }

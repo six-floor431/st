@@ -469,6 +469,8 @@ ${it.message}`;
       return load().memories;
     }
     async function addSummary(text, kind, title) {
+      const t = String(text || "").trim();
+      if (!t) return null;
       const s = load();
       const id = "sm_" + Date.now() + "_" + Math.floor(Math.random() * 1e3);
       s.summaries.push({
@@ -2197,9 +2199,9 @@ ${recent}
     function computeRange(settings, opts, modeKey, getPtr, forceAllKey) {
       opts = opts || {};
       const auto = settings[modeKey] || "new";
-      const msgs = getRecentMessages(1e3);
-      const total = msgs.length;
+      const total = getChatMessages().length;
       if (!total) return { skip: true, range: [0, 0], total, reason: "\u5F53\u524D\u5BF9\u8BDD\u6CA1\u6709\u53EF\u603B\u7ED3\u7684\u697C\u5C42\uFF08\u8BF7\u5148\u6709\u5BF9\u8BDD\u5185\u5BB9\uFF09" };
+      const msgs = getRecentMessages(total);
       let range;
       if (opts.forceAll) {
         range = [1, total];
@@ -2363,9 +2365,13 @@ ${recent}
           try {
             const rawSummary = await callLLM(sys, "\u628A\u53D9\u4E8B\u6B63\u6587\u653E\u5728 <Summary> \u548C </Summary> \u4E4B\u95F4\u3002\u6CA1\u6709\u65B0\u5185\u5BB9\u5C31\u8F93\u51FA <Summary></Summary>\u3002\u6807\u7B7E\u4E4B\u5916\u4E0D\u8981\u5199\u4EFB\u4F55\u5185\u5BB9\u3002", settings, { temperature: 0.3, phase: "summary" });
             const summaryText = taggedSummary(rawSummary);
-            await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
-            await WM.MemoryStore.setSummaryPointer(range[1]);
-            successes.push("summary");
+            if (summaryText && summaryText.trim()) {
+              await WM.MemoryStore.addSummary(summaryText, "summary", "\u697C\u5C42 " + range[0] + "-" + range[1]);
+              await WM.MemoryStore.setSummaryPointer(range[1]);
+              successes.push("summary");
+            } else {
+              console.warn("[WarmMemo] \u603B\u7ED3\u5185\u5BB9\u4E3A\u7A7A\uFF0C\u8DF3\u8FC7\u5B58\u50A8\u4E0E\u6307\u9488\u63A8\u8FDB\uFF08\u533A\u95F4\u53EF\u80FD\u5168\u4E3A\u5DF2\u9690\u85CF\u697C\u5C42\uFF09");
+            }
           } catch (e) {
             if (WM.ErrLog) await WM.ErrLog.add("summary", e, { range });
             WM.UI && WM.UI.toast && WM.UI.toast("\u603B\u7ED3\u5931\u8D25\uFF1A" + (e.message || e), "error");
@@ -4874,7 +4880,7 @@ ${p.summary || ""}`.trim() });
         try {
           let r = await WM.Summary.triggerSummary(s, { mode: "full" });
           if (r && !r.ok && s.autoSummaryMode === "floor") {
-            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+            const total = WM.Summary.getChatMessages && WM.Summary.getChatMessages().length || 0;
             const ptr = WM.MemoryStore.getSummaryPointer();
             if (ptr < total) r = await WM.Summary.triggerSummary(s, { mode: "full", forceEnd: true });
           }
@@ -4887,7 +4893,7 @@ ${p.summary || ""}`.trim() });
           }
           let rp = await WM.Summary.triggerPlot(s, { mode: "full" });
           if (rp && !rp.ok && s.autoPlotMode === "floor") {
-            const total = WM.Summary.getRecentMessages && WM.Summary.getRecentMessages(1e3).length || 0;
+            const total = WM.Summary.getChatMessages && WM.Summary.getChatMessages().length || 0;
             const ptr = WM.MemoryStore.getPlotPointer();
             if (ptr < total) rp = await WM.Summary.triggerPlot(s, { mode: "full", forceEnd: true });
           }
