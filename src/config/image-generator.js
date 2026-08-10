@@ -93,20 +93,47 @@
     return result;
   }
 
-  // 拼接完整生图 prompt：风格前缀 + LLM 画面描述 + 用户自定义模板包裹
+  // 拼接完整正向提示词：常见前缀 + 风格前缀 + LLM 画面描述
+  // 规则：
+  //  1) 先取 STYLE_PREFIX 作为风格基础（画面风格走向）
+  //  2) promptPrefix：用户填的「常见提示词前缀」—— 含 {{prompt}} 时作为模板替换，不含则前置在 LLM 描述前
+  //  3) 顺序：风格前缀 + 用户自定义模板包裹 LLM 描述
   function buildFullPrompt(imagePrompt, settings) {
     const ig = settings.imageGen || {};
     const style = STYLE_PREFIX[ig.promptStyle] || '';
     let core = style ? style + imagePrompt : imagePrompt;
-    // 自定义模板：含 {{prompt}} 占位符则替换，否则作为后缀追加
-    if (ig.promptTemplate && ig.promptTemplate.trim()) {
-      if (ig.promptTemplate.indexOf('{{prompt}}') >= 0) {
-        core = ig.promptTemplate.replace(/\{\{prompt\}\}/g, core);
+    // 优先用 promptPrefix（新版本），没有再回退 promptTemplate（老版本）
+    const tpl = (ig.promptPrefix && ig.promptPrefix.trim()) ? ig.promptPrefix : (ig.promptTemplate || '');
+    if (tpl && tpl.trim()) {
+      if (tpl.indexOf('{{prompt}}') >= 0) {
+        core = tpl.replace(/\{\{prompt\}\}/g, core);
       } else {
-        core = core + ', ' + ig.promptTemplate;
+        // 不含占位符：前置（前缀），逗号分隔
+        core = tpl + ' ' + core;
       }
     }
     return core;
+  }
+
+  // 拼接完整负面提示词：negativePrefix（常见负面前缀） + negativePrompt（本次特定负面）
+  function buildFullNegative(settings) {
+    const ig = settings.imageGen || {};
+    const pre = (ig.negativePrefix || '').trim();
+    const cur = (ig.negativePrompt || '').trim();
+    const parts = [];
+    if (pre) parts.push(pre.replace(/[,，\s]+$/g, ''));
+    if (cur) parts.push(cur.replace(/^[,，\s]+/g, '').replace(/[,，\s]+$/g, ''));
+    return parts.filter(Boolean).join(', ');
+  }
+
+  // 解析种子：-1 表示随机（返回整数≥0），其它返回用户填的整数
+  function resolveSeed(seedCfg) {
+    const n = Number(seedCfg);
+    if (isNaN(n) || n === -1 || n < 0) {
+      // -1 及以下 / 非数字 → 随机种子
+      return Math.floor(Math.random() * 0x7fffffff);
+    }
+    return Math.floor(n);
   }
 
   // ── 后端适配 1：SD WebUI（AUTOMATIC1111）/sdapi/v1/txt2img ──
@@ -114,13 +141,16 @@
     const ig = settings.imageGen || {};
     const base = (ig.apiUrl || 'http://127.0.0.1:7860').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
     const url = base + '/sdapi/v1/txt2img';
+    const negative = buildFullNegative(settings);
     const body = {
       prompt: prompt,
-      negative_prompt: ig.negativePrompt || '',
+      negative_prompt: negative,
       steps: Number(ig.steps) || 20,
       cfg_scale: Number(ig.cfgScale) || 7,
       width: Number(ig.width) || 512,
       height: Number(ig.height) || 768,
+      denoising_strength: ig.denoisingStrength == null ? 1.0 : Math.max(0, Math.min(1, Number(ig.denoisingStrength))),
+      seed: resolveSeed(ig.seed),
       sampler_name: ig.sampler || 'Euler a',
     };
     if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
@@ -139,11 +169,11 @@
   }
 
   // ── 后端适配 2：ComfyUI /prompt + /history 轮询 ──
-  // 工作流支持占位符替换：{{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}}
+  // 占位符列表：{{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
   // 留空则用内置 txt2img 默认工作流（含 KSampler/CheckpointLoader/VAEDecode/SaveImage）
   function defaultComfyWorkflow() {
     return {
-      '3': { class_type: 'KSampler', inputs: { seed: Math.floor(Math.random() * 1e9), steps: '{{steps}}', cfg: '{{cfg}}', sampler_name: 'euler', scheduler: 'normal', denoise: 1, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
+      '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: '{{cfg}}', sampler_name: 'euler', scheduler: 'normal', denoise: '{{denoise}}', model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'v1-5-pruned-emaonly.safetensors' } },
       '5': { class_type: 'EmptyLatentImage', inputs: { width: '{{width}}', height: '{{height}}', batch_size: 1 } },
       '6': { class_type: 'CLIPTextEncode', inputs: { text: '{{prompt}}', clip: ['4', 1] } },
@@ -162,20 +192,25 @@
     } else {
       workflow = defaultComfyWorkflow();
     }
-    const neg = ig.negativePrompt || '';
+    const neg = buildFullNegative(settings);
     const w = Number(ig.width) || 512;
     const h = Number(ig.height) || 768;
     const steps = Number(ig.steps) || 20;
     const cfg = Number(ig.cfgScale) || 7;
-    // 占位符替换：数值类占位符替换后是字符串，ComfyUI 会自动转数字；seed 类不替换（保持原值或随机）
+    const denoise = ig.denoisingStrength == null ? 1.0 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
+    const seed = resolveSeed(ig.seed);
+    // 占位符替换
     let workflowStr = JSON.stringify(workflow);
+    const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     workflowStr = workflowStr
-      .replace(/\{\{prompt\}\}/g, prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"'))
-      .replace(/\{\{negative\}\}/g, neg.replace(/\\/g, '\\\\').replace(/"/g, '\\"'))
+      .replace(/\{\{prompt\}\}/g, esc(prompt))
+      .replace(/\{\{negative\}\}/g, esc(neg))
       .replace(/\{\{width\}\}/g, String(w))
       .replace(/\{\{height\}\}/g, String(h))
       .replace(/\{\{steps\}\}/g, String(steps))
-      .replace(/\{\{cfg\}\}/g, String(cfg));
+      .replace(/\{\{cfg\}\}/g, String(cfg))
+      .replace(/\{\{denoise\}\}/g, String(denoise))
+      .replace(/\{\{seed\}\}/g, String(seed));
     const res = await fetch(base + '/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -188,7 +223,6 @@
     const j = await res.json();
     const promptId = j && j.prompt_id;
     if (!promptId) throw new Error('ComfyUI 未返回 prompt_id');
-    // 轮询 /history/{prompt_id} 直到生成完成（最多 90s）
     return await pollComfyuiResult(promptId, base);
   }
   async function pollComfyuiResult(promptId, base) {
@@ -220,19 +254,31 @@
   }
 
   // ── 后端适配 3：云端 OpenAI 兼容 /images/generations（SiliconFlow / OpenAI 等）──
+  // 注：OpenAI 官方 /images/generations 没有 negative_prompt 参数；部分兼容端点（如 SiliconFlow/Kolors）支持 seed
   async function callCloudApi(prompt, settings) {
     const ig = settings.imageGen || {};
     const base = (ig.apiUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('云端 API 未配置 apiUrl');
     const path = ig.cloudPath || '/images/generations';
     const url = base + path;
+    const w = Number(ig.width) || 512;
+    const h = Number(ig.height) || 512;
     const body = {
       prompt: prompt,
       n: 1,
-      size: (Number(ig.width) || 512) + 'x' + (Number(ig.height) || 512),
+      size: w + 'x' + h,
       response_format: 'b64_json',
     };
     if (ig.model) body.model = ig.model;
+    // seed：用户填了非 -1 非负的才传；一些兼容端点支持，官方 OpenAI 忽略未知字段也不报错
+    const seed = Number(ig.seed);
+    if (seed > 0) body.seed = Math.floor(seed);
+    // steps / cfg：兼容端点普遍支持通过 extra_body / query 参数；OpenAI 官方忽略未知字段不影响
+    if (ig.steps) body.steps = Number(ig.steps) || 20;
+    if (ig.cfgScale) body.cfg_scale = Number(ig.cfgScale) || 7;
+    // negative_prompt：Kolors 等兼容端点支持；官方 OpenAI 忽略
+    const neg = buildFullNegative(settings);
+    if (neg) body.negative_prompt = neg;
     const headers = { 'Content-Type': 'application/json' };
     if (ig.apiKey) headers['Authorization'] = 'Bearer ' + ig.apiKey;
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });

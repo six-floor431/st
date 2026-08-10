@@ -166,16 +166,29 @@
         // API Key（云端必填，本地通常留空）
         model: "",
         // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
+        // 「常见提示词前缀」：对所有生图生效，拼在 LLM 提示词前面或包裹它。含 {{prompt}} 时替换，不含则前置。
+        // 例：masterpiece, best quality, absurdres, {{prompt}}, detailed background
+        promptPrefix: "masterpiece, best quality, absurdres,",
+        // 「常见负面提示词前缀」：对所有生图生效，拼在 negativePrompt 前面
+        negativePrefix: "lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, blurry,",
         negativePrompt: "",
-        // 负面提示词（可选，对所有后端生效）
+        // 当前特定的负面提示词（留空只用上面的前缀）
+        sizePreset: "",
+        // 尺寸预设键名（如 '1_1_avatar' / '3_4_portrait' / '16_9_landscape'，匹配到自动填宽高）
         width: 512,
         height: 768,
         steps: 20,
         cfgScale: 7,
+        denoisingStrength: 1,
+        // 去噪强度（txt2img 默认 1.0，范围 0~1）
+        seed: -1,
+        // 种子，-1 表示每次随机
         sampler: "",
         // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
         // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
-        // 用占位符 {{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} 标记关键参数位置，
+        // 占位符列表：
+        //   {{prompt}} 正向 / {{negative}} 负面（含前缀+负面前缀）
+        //   {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
         // 生图时自动替换。留空则用内置 txt2img 默认工作流。
         comfyWorkflow: "",
         cloudPath: "/images/generations",
@@ -184,8 +197,7 @@
         // 'append' 追加到 AI 楼层末尾 | 'separate' 独立 system 楼层
         promptStyle: "general",
         // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
-        // 自定义提示词模板（可选）：含 {{prompt}} 占位符，生图时会替换为 LLM 整合出的画面描述。
-        // 例：「masterpiece, best quality, {{prompt}}, detailed background」
+        // 兼容旧字段：老版本用 promptTemplate，新版本改名 promptPrefix（做一次迁移兜底）
         promptTemplate: ""
       }
     };
@@ -3129,26 +3141,46 @@ ${p.summary || ""}`.trim() });
       const ig = settings.imageGen || {};
       const style = STYLE_PREFIX[ig.promptStyle] || "";
       let core = style ? style + imagePrompt : imagePrompt;
-      if (ig.promptTemplate && ig.promptTemplate.trim()) {
-        if (ig.promptTemplate.indexOf("{{prompt}}") >= 0) {
-          core = ig.promptTemplate.replace(/\{\{prompt\}\}/g, core);
+      const tpl = ig.promptPrefix && ig.promptPrefix.trim() ? ig.promptPrefix : ig.promptTemplate || "";
+      if (tpl && tpl.trim()) {
+        if (tpl.indexOf("{{prompt}}") >= 0) {
+          core = tpl.replace(/\{\{prompt\}\}/g, core);
         } else {
-          core = core + ", " + ig.promptTemplate;
+          core = tpl + " " + core;
         }
       }
       return core;
+    }
+    function buildFullNegative(settings) {
+      const ig = settings.imageGen || {};
+      const pre = (ig.negativePrefix || "").trim();
+      const cur = (ig.negativePrompt || "").trim();
+      const parts = [];
+      if (pre) parts.push(pre.replace(/[,，\s]+$/g, ""));
+      if (cur) parts.push(cur.replace(/^[,，\s]+/g, "").replace(/[,，\s]+$/g, ""));
+      return parts.filter(Boolean).join(", ");
+    }
+    function resolveSeed(seedCfg) {
+      const n = Number(seedCfg);
+      if (isNaN(n) || n === -1 || n < 0) {
+        return Math.floor(Math.random() * 2147483647);
+      }
+      return Math.floor(n);
     }
     async function callSdWebui(prompt, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "http://127.0.0.1:7860").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
       const url = base + "/sdapi/v1/txt2img";
+      const negative = buildFullNegative(settings);
       const body = {
         prompt,
-        negative_prompt: ig.negativePrompt || "",
+        negative_prompt: negative,
         steps: Number(ig.steps) || 20,
         cfg_scale: Number(ig.cfgScale) || 7,
         width: Number(ig.width) || 512,
         height: Number(ig.height) || 768,
+        denoising_strength: ig.denoisingStrength == null ? 1 : Math.max(0, Math.min(1, Number(ig.denoisingStrength))),
+        seed: resolveSeed(ig.seed),
         sampler_name: ig.sampler || "Euler a"
       };
       if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
@@ -3167,7 +3199,7 @@ ${p.summary || ""}`.trim() });
     }
     function defaultComfyWorkflow() {
       return {
-        "3": { class_type: "KSampler", inputs: { seed: Math.floor(Math.random() * 1e9), steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "euler", scheduler: "normal", denoise: 1, model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
+        "3": { class_type: "KSampler", inputs: { seed: "{{seed}}", steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "euler", scheduler: "normal", denoise: "{{denoise}}", model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
         "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "v1-5-pruned-emaonly.safetensors" } },
         "5": { class_type: "EmptyLatentImage", inputs: { width: "{{width}}", height: "{{height}}", batch_size: 1 } },
         "6": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}", clip: ["4", 1] } },
@@ -3189,13 +3221,16 @@ ${p.summary || ""}`.trim() });
       } else {
         workflow = defaultComfyWorkflow();
       }
-      const neg = ig.negativePrompt || "";
+      const neg = buildFullNegative(settings);
       const w = Number(ig.width) || 512;
       const h = Number(ig.height) || 768;
       const steps = Number(ig.steps) || 20;
       const cfg = Number(ig.cfgScale) || 7;
+      const denoise = ig.denoisingStrength == null ? 1 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
+      const seed = resolveSeed(ig.seed);
       let workflowStr = JSON.stringify(workflow);
-      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, prompt.replace(/\\/g, "\\\\").replace(/"/g, '\\"')).replace(/\{\{negative\}\}/g, neg.replace(/\\/g, "\\\\").replace(/"/g, '\\"')).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg));
+      const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, esc(prompt)).replace(/\{\{negative\}\}/g, esc(neg)).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg)).replace(/\{\{denoise\}\}/g, String(denoise)).replace(/\{\{seed\}\}/g, String(seed));
       const res = await fetch(base + "/prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3243,13 +3278,21 @@ ${p.summary || ""}`.trim() });
       if (!base) throw new Error("\u4E91\u7AEF API \u672A\u914D\u7F6E apiUrl");
       const path = ig.cloudPath || "/images/generations";
       const url = base + path;
+      const w = Number(ig.width) || 512;
+      const h = Number(ig.height) || 512;
       const body = {
         prompt,
         n: 1,
-        size: (Number(ig.width) || 512) + "x" + (Number(ig.height) || 512),
+        size: w + "x" + h,
         response_format: "b64_json"
       };
       if (ig.model) body.model = ig.model;
+      const seed = Number(ig.seed);
+      if (seed > 0) body.seed = Math.floor(seed);
+      if (ig.steps) body.steps = Number(ig.steps) || 20;
+      if (ig.cfgScale) body.cfg_scale = Number(ig.cfgScale) || 7;
+      const neg = buildFullNegative(settings);
+      if (neg) body.negative_prompt = neg;
       const headers = { "Content-Type": "application/json" };
       if (ig.apiKey) headers["Authorization"] = "Bearer " + ig.apiKey;
       const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
@@ -5028,6 +5071,11 @@ ${p.summary || ""}`.trim() });
       }
       if (!scope || scope === "img") {
         if (q("#ig-url") !== null) {
+          const prefixEl = q("#ig-prefix") || q("#ig-tpl");
+          const negPreEl = q("#ig-neg-pre");
+          const sizeEl = q("#ig-size");
+          const seedEl = q("#ig-seed");
+          const denoiseEl = q("#ig-denoise");
           s.imageGen = {
             enabled: q("#ig-on") ? q("#ig-on").checked : false,
             autoTrigger: q("#ig-auto") ? q("#ig-auto").checked : false,
@@ -5035,16 +5083,22 @@ ${p.summary || ""}`.trim() });
             apiUrl: q("#ig-url") ? q("#ig-url").value.trim() : "",
             apiKey: q("#ig-key") ? q("#ig-key").value.trim() : "",
             model: q("#ig-model") ? q("#ig-model").value.trim() : "",
-            negativePrompt: q("#ig-neg") ? q("#ig-neg").value : "",
+            sizePreset: sizeEl ? sizeEl.value : "",
             width: parseInt(q("#ig-w") ? q("#ig-w").value : "512", 10) || 512,
             height: parseInt(q("#ig-h") ? q("#ig-h").value : "768", 10) || 768,
             steps: parseInt(q("#ig-steps") ? q("#ig-steps").value : "20", 10) || 20,
             cfgScale: parseFloat(q("#ig-cfg") ? q("#ig-cfg").value : "7") || 7,
+            denoisingStrength: denoiseEl ? parseFloat(denoiseEl.value) : 1,
+            seed: seedEl ? parseInt(seedEl.value, 10) : -1,
             sampler: q("#ig-sampler") ? q("#ig-sampler").value.trim() : "",
+            promptPrefix: prefixEl ? prefixEl.value : "",
+            negativePrefix: negPreEl ? negPreEl.value : "",
+            negativePrompt: q("#ig-neg") ? q("#ig-neg").value : "",
             comfyWorkflow: q("#ig-comfy") ? q("#ig-comfy").value : "",
             cloudPath: q("#ig-cloud-path") ? q("#ig-cloud-path").value.trim() : "/images/generations",
             displayMode: q("#ig-display") ? q("#ig-display").value : "append",
             promptStyle: q("#ig-style") ? q("#ig-style").value : "general",
+            // 兼容旧字段：旧版本 promptTemplate 也保留一份，防止老设置被误清空
             promptTemplate: q("#ig-tpl") ? q("#ig-tpl").value : ""
           };
         }
@@ -5091,6 +5145,44 @@ ${p.summary || ""}`.trim() });
         WM.Settings.save(s);
         if (WM.UI && WM.UI.toast) WM.UI.toast("\u2713 \u5DF2\u5F3A\u5236\u6062\u590D\u9ED8\u8BA4\u63D0\u793A\u8BCD\uFF08\u65B0\u7248\u5DF2\u9876\u66FF\u65E7\u7248\uFF09\uFF0C\u53EF\u76F4\u63A5\u4F7F\u7528");
       };
+      const sizeSel = body.querySelector("#ig-size");
+      const wInput = body.querySelector("#ig-w");
+      const hInput = body.querySelector("#ig-h");
+      const seedInput = body.querySelector("#ig-seed");
+      if (sizeSel) {
+        sizeSel.addEventListener("change", () => {
+          const v = sizeSel.value || "";
+          const parts = v.split("_");
+          if (parts.length >= 2) {
+            const w = parseInt(parts[0], 10);
+            const h = parseInt(parts[1], 10);
+            if (w && h) {
+              if (wInput) wInput.value = String(w);
+              if (hInput) hInput.value = String(h);
+              syncPaneToSettings(body, s);
+            }
+          }
+        });
+      }
+      if (wInput) wInput.addEventListener("input", () => {
+        if (sizeSel && sizeSel.value) {
+          sizeSel.value = "";
+          syncPaneToSettings(body, s);
+        }
+      });
+      if (hInput) hInput.addEventListener("input", () => {
+        if (sizeSel && sizeSel.value) {
+          sizeSel.value = "";
+          syncPaneToSettings(body, s);
+        }
+      });
+      if (seedInput) {
+        seedInput.title = "\u586B -1 \u8868\u793A\u6BCF\u6B21\u968F\u673A\uFF1B\u53CC\u51FB\u8F93\u5165\u6846\u5FEB\u901F\u8BBE\u4E3A -1";
+        seedInput.addEventListener("dblclick", () => {
+          seedInput.value = "-1";
+          syncPaneToSettings(body, s);
+        });
+      }
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
@@ -5249,6 +5341,20 @@ ${p.summary || ""}`.trim() });
         { v: "append", label: "\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\uFF08\u9ED8\u8BA4\uFF09" },
         { v: "separate", label: "\u72EC\u7ACB system \u697C\u5C42" }
       ].map((o) => `<option value="${o.v}" ${ig.displayMode === o.v ? "selected" : ""}>${o.label}</option>`).join("");
+      const SIZE_PRESETS = [
+        { v: "", label: "\u81EA\u5B9A\u4E49\uFF08\u624B\u52A8\u586B\u5BBD\u9AD8\uFF09" },
+        { v: "512_512_1_1\u5934\u50CF", label: "512x512 (1:1 \xB7 \u5934\u50CF / \u56FE\u6807)" },
+        { v: "768_768_1_1\u65B9\u56FE", label: "768x768 (1:1 \xB7 \u9AD8\u6E05\u65B9\u56FE)" },
+        { v: "512_768_2_3\u7AD6\u7248", label: "512x768 (2:3 \xB7 \u7AD6\u7248\u4EBA\u50CF)" },
+        { v: "768_1024_3_4\u4EBA\u50CF", label: "768x1024 (3:4 \xB7 \u9AD8\u6E05\u4EBA\u50CF)" },
+        { v: "600_800_3_4\u4E2A\u4EBA\u4FE1\u606F", label: "600x800 (3:4 \xB7 \u4E2A\u4EBA\u4FE1\u606F\u56FE\u50CF)" },
+        { v: "768_512_3_2\u6A2A\u7248", label: "768x512 (3:2 \xB7 \u6A2A\u7248\u53D9\u4E8B)" },
+        { v: "1024_768_4_3\u6A2A\u56FE", label: "1024x768 (4:3 \xB7 \u9AD8\u6E05\u6A2A\u56FE)" },
+        { v: "1024_576_16_9\u6A2A\u5E45", label: "1024x576 (16:9 \xB7 \u5BBD\u5C4F\u6A2A\u5E45)" },
+        { v: "1344_768_16_9\u5927\u6A2A\u5E45", label: "1344x768 (16:9 \xB7 \u9AD8\u6E05\u6A2A\u5E45)" },
+        { v: "576_1024_9_16\u7AD6\u5C4F", label: "576x1024 (9:16 \xB7 \u7AD6\u5C4F / \u624B\u673A\u58C1\u7EB8)" }
+      ];
+      const sizeOpts = SIZE_PRESETS.map((o) => `<option value="${o.v}" ${ig.sizePreset === o.v ? "selected" : ""}>${o.label}</option>`).join("");
       const portHint = ig.backendType === "comfyui" ? "8188" : ig.backendType === "cloud" ? "\u5B8C\u6574 BaseURL\uFF0C\u5982 https://api.siliconflow.cn/v1" : "7860";
       const isCloud = ig.backendType === "cloud";
       const isComfy = ig.backendType === "comfyui";
@@ -5268,36 +5374,47 @@ ${p.summary || ""}`.trim() });
       ${isCloud ? `<label class="wm-row">\u4E91\u7AEF API \u8DEF\u5F84<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath || "/images/generations")}" placeholder="/images/generations"/></label>
       <div class="wm-hint">\u62FC\u5728 apiUrl \u540E\u3002SiliconFlow / OpenAI \u517C\u5BB9\u7AEF\u70B9\u90FD\u7528 <code>/images/generations</code>\u3002</div>` : ""}
       <div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">\u51FA\u56FE\u53C2\u6570</div>
+      <div class="wm-h" style="margin-top:0">\u5C3A\u5BF8\u9884\u8BBE</div>
+      <label class="wm-row">\u5C3A\u5BF8\u9884\u8BBE
+        <select id="ig-size">${sizeOpts}</select>
+      </label>
+      <div class="wm-hint">\u9009\u9884\u8BBE\u4F1A\u81EA\u52A8\u586B\u5165\u4E0B\u65B9\u5BBD\u9AD8\uFF1B\u4E4B\u540E\u624B\u52A8\u6539\u5BBD\u9AD8\u4F1A\u628A\u9884\u8BBE\u7F6E\u4E3A\u300C\u81EA\u5B9A\u4E49\u300D\u3002</div>
+      <div class="wm-h" style="margin-top:0">\u51FA\u56FE\u53C2\u6570\uFF08\u90FD\u53EF\u81EA\u5DF1\u586B\u5199\uFF09</div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <label class="wm-row" style="flex:1;min-width:120px">\u5BBD<input id="ig-w" type="number" min="64" max="2048" step="64" value="${Number(ig.width) || 512}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">\u9AD8<input id="ig-h" type="number" min="64" max="2048" step="64" value="${Number(ig.height) || 768}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">\u6B65\u6570<input id="ig-steps" type="number" min="1" max="100" value="${Number(ig.steps) || 20}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">CFG<input id="ig-cfg" type="number" min="1" max="20" step="0.5" value="${Number(ig.cfgScale) || 7}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u5BBD (px)<input id="ig-w" type="number" min="64" max="3072" step="8" value="${Number(ig.width) || 512}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u9AD8 (px)<input id="ig-h" type="number" min="64" max="3072" step="8" value="${Number(ig.height) || 768}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u91C7\u6837\u6B65\u6570<input id="ig-steps" type="number" min="1" max="150" value="${Number(ig.steps) || 20}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">CFG \u7F29\u653E<input id="ig-cfg" type="number" min="1" max="30" step="0.5" value="${Number(ig.cfgScale) || 7}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u53BB\u566A\u5F3A\u5EA6<input id="ig-denoise" type="number" min="0" max="1" step="0.05" value="${Number(ig.denoisingStrength) || 1}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u79CD\u5B50 (-1=\u968F\u673A)<input id="ig-seed" type="number" min="-1" step="1" value="${ig.seed == null ? -1 : Number(ig.seed)}"/></label>
       </div>
-      ${!isCloud ? `<label class="wm-row">\u91C7\u6837\u5668 (\u7559\u7A7A\u7528\u9ED8\u8BA4)<input id="ig-sampler" value="${escapeHtml(ig.sampler || "")}" placeholder="Euler a / DPM++ 2M Karras"/></label>` : ""}
-      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u8D1F\u9762\u63D0\u793A\u8BCD\uFF08\u53EF\u9009\uFF09
-        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digits, cropped, worst quality">${escapeHtml(ig.negativePrompt || "")}</textarea>
+      ${!isCloud ? `<label class="wm-row">\u91C7\u6837\u5668 (\u7559\u7A7A\u7528\u9ED8\u8BA4)<input id="ig-sampler" value="${escapeHtml(ig.sampler || "")}" placeholder="Euler a / DPM++ 2M Karras / Euler"/></label>` : ""}
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u5E38\u89C1\u63D0\u793A\u8BCD\u524D\u7F00\uFF08\u5BF9\u6240\u6709\u56FE\u751F\u6548\uFF1B{{prompt}} \u8868\u793A LLM \u6574\u5408\u51FA\u7684\u753B\u9762\u63CF\u8FF0\u4F4D\u7F6E\uFF09
+        <textarea id="ig-prefix" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="masterpiece, best quality, absurdres, {{prompt}}">${escapeHtml((ig.promptPrefix != null ? ig.promptPrefix : ig.promptTemplate) || "")}</textarea>
+      </label>
+      <div class="wm-hint">\u542B <code>{{prompt}}</code> \u65F6\u66FF\u6362\uFF1B\u4E0D\u542B\u65F6\u4F1A\u81EA\u52A8\u524D\u7F6E\u5230 LLM \u753B\u9762\u63CF\u8FF0\u4E4B\u524D\u3002</div>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u5E38\u89C1\u8D1F\u9762\u63D0\u793A\u8BCD\u524D\u7F00\uFF08\u5BF9\u6240\u6709\u56FE\u751F\u6548\uFF0C\u7559\u7A7A\u4E5F\u884C\uFF09
+        <textarea id="ig-neg-pre" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digit, cropped, worst quality">${escapeHtml(ig.negativePrefix || "")}</textarea>
+      </label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u672C\u6B21\u7279\u5B9A\u8D1F\u9762\u63D0\u793A\u8BCD\uFF08\u53EF\u9009\uFF0C\u4F1A\u62FC\u5728\u4E0A\u9762\u524D\u7F00\u4E4B\u540E\uFF09
+        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="\uFF08\u901A\u5E38\u7559\u7A7A\uFF1B\u5BF9\u67D0\u5F20\u56FE\u60F3\u989D\u5916\u6392\u9664\u7684\u5185\u5BB9\u586B\u8FD9\u91CC\uFF09">${escapeHtml(ig.negativePrompt || "")}</textarea>
       </label>
       <div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">\u63D0\u793A\u8BCD\u98CE\u683C\u4E0E\u5C55\u793A</div>
-      <label class="wm-row">\u753B\u9762\u98CE\u683C\uFF08\u8FFD\u52A0\u524D\u7F00\uFF0C\u5F15\u5BFC\u51FA\u56FE\u8C03\u6027\uFF09
+      <div class="wm-h" style="margin-top:0">\u753B\u9762\u98CE\u683C\u4E0E\u5C55\u793A</div>
+      <label class="wm-row">\u753B\u9762\u98CE\u683C\uFF08\u8FFD\u52A0\u98CE\u683C\u524D\u7F00\uFF0C\u5F15\u5BFC\u51FA\u56FE\u8C03\u6027\uFF09
         <select id="ig-style">${styleOpts}</select>
       </label>
-      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u81EA\u5B9A\u4E49\u63D0\u793A\u8BCD\u6A21\u677F\uFF08\u53EF\u9009\uFF0C\u542B {{prompt}} \u5360\u4F4D\u7B26\uFF09
-        <textarea id="ig-tpl" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="\u5982\uFF1Amasterpiece, best quality, {{prompt}}, detailed background">${escapeHtml(ig.promptTemplate || "")}</textarea>
-      </label>
-      <div class="wm-hint">LLM \u6574\u5408\u51FA\u7684\u753B\u9762\u63CF\u8FF0\u4F1A\u66FF\u6362 {{prompt}}\u3002\u4E0D\u542B {{prompt}} \u65F6\u4F5C\u4E3A\u540E\u7F00\u8FFD\u52A0\u3002</div>
       <label class="wm-row">\u56FE\u7247\u5C55\u793A\u65B9\u5F0F
         <select id="ig-display">${displayOpts}</select>
       </label>
       <div class="wm-hint">\u300C\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\u300D\uFF1A\u56FE\u7247\u7D27\u8DDF AI \u56DE\u590D\u4E0B\u65B9\u3002\u300C\u72EC\u7ACB system \u697C\u5C42\u300D\uFF1A\u5355\u72EC\u4E00\u5C42\u663E\u793A\u3002\u4E24\u79CD\u65B9\u5F0F\u5747\u4E0D\u8FDB\u4E0A\u4E0B\u6587\u3002</div>
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41\uFF08\u53EF\u9009\uFF09</div>
-      <div class="wm-hint">\u7C98\u8D34 ComfyUI <b>prompt API \u683C\u5F0F</b>\u7684\u5DE5\u4F5C\u6D41 JSON\uFF08\u5728 ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u5F97\u5230\u7684 .json \u5373\u6B64\u683C\u5F0F\uFF09\u3002\u7528\u5360\u4F4D\u7B26\u6807\u8BB0\u5173\u952E\u53C2\u6570\u4F4D\u7F6E\uFF0C\u751F\u56FE\u65F6\u81EA\u52A8\u66FF\u6362\uFF1A<br/><code>{{prompt}}</code> \u6B63\u5411\u63D0\u793A\u8BCD / <code>{{negative}}</code> \u8D1F\u9762 / <code>{{width}}</code> <code>{{height}}</code> \u5C3A\u5BF8 / <code>{{steps}}</code> <code>{{cfg}}</code> \u91C7\u6837\u53C2\u6570\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4 txt2img \u5DE5\u4F5C\u6D41\u3002</div>
-      <textarea id="ig-comfy" rows="6" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"steps":"{{steps}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>` : ""}
+      <div class="wm-hint">\u7C98\u8D34 ComfyUI <b>prompt API \u683C\u5F0F</b>\u7684\u5DE5\u4F5C\u6D41 JSON\uFF08\u5728 ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u5F97\u5230\u7684 .json \u5373\u6B64\u683C\u5F0F\uFF09\u3002\u7528\u5360\u4F4D\u7B26\u6807\u8BB0\u5173\u952E\u53C2\u6570\u4F4D\u7F6E\uFF0C\u751F\u56FE\u65F6\u81EA\u52A8\u66FF\u6362\u3002<br/>
+        \u5360\u4F4D\u7B26\u5217\u8868\uFF1A<code>{{prompt}}</code> \u6B63\u5411 / <code>{{negative}}</code> \u8D1F\u9762\uFF08\u542B\u524D\u7F00+\u672C\u6B21\u7279\u5B9A\uFF09 / <code>{{width}}</code> <code>{{height}}</code> \u5C3A\u5BF8 / <code>{{steps}}</code> <code>{{cfg}}</code> <code>{{denoise}}</code> \u91C7\u6837 / <code>{{seed}}</code> \u79CD\u5B50\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4 txt2img \u5DE5\u4F5C\u6D41\u3002</div>
+      <textarea id="ig-comfy" rows="7" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}","steps":"{{steps}}","cfg":"{{cfg}}","denoise":"{{denoise}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>` : ""}
       <div class="wm-divider"></div>
-      <div class="wm-hint">\u{1F4A1} \u63D0\u793A\uFF1A\u914D\u7F6E\u5B8C\u6210\u540E\u70B9\u4E0A\u65B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u4F1A\u771F\u7684\u51FA\u4E00\u5F20\u6D4B\u8BD5\u56FE\uFF08\u7528 "a cute cat" \u505A prompt\uFF09\uFF0C\u9A8C\u8BC1\u540E\u7AEF\u8FDE\u901A\u6027\u3002\u751F\u56FE\u63D0\u793A\u8BCD\u590D\u7528\u300CLLM \u8C03\u7528\u300D\u6807\u7B7E\u9875\u7684\u914D\u7F6E\uFF0C\u65E0\u9700\u5728\u6B64\u91CD\u590D\u586B\u3002</div>
+      <div class="wm-hint">\u{1F4A1} \u63D0\u793A\uFF1A\u70B9\u4E0A\u65B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u4F1A\u771F\u7684\u51FA\u4E00\u5F20\u6D4B\u8BD5\u56FE\uFF0C\u9A8C\u8BC1\u540E\u7AEF\u8FDE\u901A\u6027+\u53C2\u6570\u3002\u751F\u56FE\u63D0\u793A\u8BCD\u590D\u7528\u300CLLM \u8C03\u7528\u300D\u6807\u7B7E\u9875\u914D\u7F6E\uFF0C\u65E0\u9700\u5728\u6B64\u91CD\u590D\u586B\u3002</div>
     </div>`;
     }
     function renderPaneLore(s) {

@@ -142,21 +142,30 @@
       apiUrl: 'http://127.0.0.1:7860', // 后端地址（SD WebUI 默认 7860 / ComfyUI 默认 8188 / 云端填完整 BaseURL）
       apiKey: '',                      // API Key（云端必填，本地通常留空）
       model: '',                       // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
-      negativePrompt: '',              // 负面提示词（可选，对所有后端生效）
+      // 「常见提示词前缀」：对所有生图生效，拼在 LLM 提示词前面或包裹它。含 {{prompt}} 时替换，不含则前置。
+      // 例：masterpiece, best quality, absurdres, {{prompt}}, detailed background
+      promptPrefix: 'masterpiece, best quality, absurdres,',
+      // 「常见负面提示词前缀」：对所有生图生效，拼在 negativePrompt 前面
+      negativePrefix: 'lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, blurry,',
+      negativePrompt: '',              // 当前特定的负面提示词（留空只用上面的前缀）
+      sizePreset: '',                  // 尺寸预设键名（如 '1_1_avatar' / '3_4_portrait' / '16_9_landscape'，匹配到自动填宽高）
       width: 512,
       height: 768,
       steps: 20,
       cfgScale: 7,
+      denoisingStrength: 1.0,          // 去噪强度（txt2img 默认 1.0，范围 0~1）
+      seed: -1,                        // 种子，-1 表示每次随机
       sampler: '',                     // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
       // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
-      // 用占位符 {{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} 标记关键参数位置，
+      // 占位符列表：
+      //   {{prompt}} 正向 / {{negative}} 负面（含前缀+负面前缀）
+      //   {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
       // 生图时自动替换。留空则用内置 txt2img 默认工作流。
       comfyWorkflow: '',
       cloudPath: '/images/generations',// 云端 API 路径（拼在 apiUrl 后；SiliconFlow/OpenAI 兼容端点都用此默认值）
       displayMode: 'append',           // 'append' 追加到 AI 楼层末尾 | 'separate' 独立 system 楼层
       promptStyle: 'general',          // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
-      // 自定义提示词模板（可选）：含 {{prompt}} 占位符，生图时会替换为 LLM 整合出的画面描述。
-      // 例：「masterpiece, best quality, {{prompt}}, detailed background」
+      // 兼容旧字段：老版本用 promptTemplate，新版本改名 promptPrefix（做一次迁移兜底）
       promptTemplate: '',
     },
   };

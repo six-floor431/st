@@ -1293,6 +1293,12 @@
     }
     if (!scope || scope === 'img') {
       if (q('#ig-url') !== null) {
+        // 兼容：老版本 ID 是 #ig-tpl，新版本换成了 #ig-prefix；哪个存在用哪个
+        const prefixEl = q('#ig-prefix') || q('#ig-tpl');
+        const negPreEl = q('#ig-neg-pre');
+        const sizeEl = q('#ig-size');
+        const seedEl = q('#ig-seed');
+        const denoiseEl = q('#ig-denoise');
         s.imageGen = {
           enabled: q('#ig-on') ? q('#ig-on').checked : false,
           autoTrigger: q('#ig-auto') ? q('#ig-auto').checked : false,
@@ -1300,16 +1306,22 @@
           apiUrl: q('#ig-url') ? q('#ig-url').value.trim() : '',
           apiKey: q('#ig-key') ? q('#ig-key').value.trim() : '',
           model: q('#ig-model') ? q('#ig-model').value.trim() : '',
-          negativePrompt: q('#ig-neg') ? q('#ig-neg').value : '',
+          sizePreset: sizeEl ? sizeEl.value : '',
           width: parseInt(q('#ig-w') ? q('#ig-w').value : '512', 10) || 512,
           height: parseInt(q('#ig-h') ? q('#ig-h').value : '768', 10) || 768,
           steps: parseInt(q('#ig-steps') ? q('#ig-steps').value : '20', 10) || 20,
           cfgScale: parseFloat(q('#ig-cfg') ? q('#ig-cfg').value : '7') || 7,
+          denoisingStrength: denoiseEl ? (parseFloat(denoiseEl.value)) : 1.0,
+          seed: seedEl ? parseInt(seedEl.value, 10) : -1,
           sampler: q('#ig-sampler') ? q('#ig-sampler').value.trim() : '',
+          promptPrefix: prefixEl ? prefixEl.value : '',
+          negativePrefix: negPreEl ? negPreEl.value : '',
+          negativePrompt: q('#ig-neg') ? q('#ig-neg').value : '',
           comfyWorkflow: q('#ig-comfy') ? q('#ig-comfy').value : '',
           cloudPath: q('#ig-cloud-path') ? q('#ig-cloud-path').value.trim() : '/images/generations',
           displayMode: q('#ig-display') ? q('#ig-display').value : 'append',
           promptStyle: q('#ig-style') ? q('#ig-style').value : 'general',
+          // 兼容旧字段：旧版本 promptTemplate 也保留一份，防止老设置被误清空
           promptTemplate: q('#ig-tpl') ? q('#ig-tpl').value : '',
         };
       }
@@ -1365,6 +1377,39 @@
       WM.Settings.save(s);
       if (WM.UI && WM.UI.toast) WM.UI.toast('✓ 已强制恢复默认提示词（新版已顶替旧版），可直接使用');
     };
+
+    // ── 生图专属交互：尺寸预设下拉 ↔ 宽高输入框联动 ──
+    const sizeSel = body.querySelector('#ig-size');
+    const wInput = body.querySelector('#ig-w');
+    const hInput = body.querySelector('#ig-h');
+    const seedInput = body.querySelector('#ig-seed');
+    if (sizeSel) {
+      sizeSel.addEventListener('change', () => {
+        const v = sizeSel.value || ''; // '512_768_2_3竖版'
+        const parts = v.split('_');
+        if (parts.length >= 2) {
+          const w = parseInt(parts[0], 10);
+          const h = parseInt(parts[1], 10);
+          if (w && h) {
+            if (wInput) wInput.value = String(w);
+            if (hInput) hInput.value = String(h);
+            syncPaneToSettings(body, s);
+          }
+        }
+      });
+    }
+    // 用户手动改宽高 → 自动切到「自定义」（清空 preset）
+    if (wInput) wInput.addEventListener('input', () => {
+      if (sizeSel && sizeSel.value) { sizeSel.value = ''; syncPaneToSettings(body, s); }
+    });
+    if (hInput) hInput.addEventListener('input', () => {
+      if (sizeSel && sizeSel.value) { sizeSel.value = ''; syncPaneToSettings(body, s); }
+    });
+    // 种子一键随机：双击输入框把值设为 -1
+    if (seedInput) {
+      seedInput.title = '填 -1 表示每次随机；双击输入框快速设为 -1';
+      seedInput.addEventListener('dblclick', () => { seedInput.value = '-1'; syncPaneToSettings(body, s); });
+    }
 
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
@@ -1518,6 +1563,21 @@
       { v: 'append', label: '追加到 AI 楼层末尾（默认）' },
       { v: 'separate', label: '独立 system 楼层' },
     ].map((o) => `<option value="${o.v}" ${ig.displayMode===o.v?'selected':''}>${o.label}</option>`).join('');
+    // 尺寸预设：key = 'w_h_描述'，change 时自动填宽高
+    const SIZE_PRESETS = [
+      { v: '', label: '自定义（手动填宽高）' },
+      { v: '512_512_1_1头像', label: '512x512 (1:1 · 头像 / 图标)' },
+      { v: '768_768_1_1方图', label: '768x768 (1:1 · 高清方图)' },
+      { v: '512_768_2_3竖版', label: '512x768 (2:3 · 竖版人像)' },
+      { v: '768_1024_3_4人像', label: '768x1024 (3:4 · 高清人像)' },
+      { v: '600_800_3_4个人信息', label: '600x800 (3:4 · 个人信息图像)' },
+      { v: '768_512_3_2横版', label: '768x512 (3:2 · 横版叙事)' },
+      { v: '1024_768_4_3横图', label: '1024x768 (4:3 · 高清横图)' },
+      { v: '1024_576_16_9横幅', label: '1024x576 (16:9 · 宽屏横幅)' },
+      { v: '1344_768_16_9大横幅', label: '1344x768 (16:9 · 高清横幅)' },
+      { v: '576_1024_9_16竖屏', label: '576x1024 (9:16 · 竖屏 / 手机壁纸)' },
+    ];
+    const sizeOpts = SIZE_PRESETS.map((o) => `<option value="${o.v}" ${ig.sizePreset===o.v?'selected':''}>${o.label}</option>`).join('');
     // 不同后端的默认端口提示
     const portHint = ig.backendType === 'comfyui' ? '8188' : (ig.backendType === 'cloud' ? '完整 BaseURL，如 https://api.siliconflow.cn/v1' : '7860');
     const isCloud = ig.backendType === 'cloud';
@@ -1538,36 +1598,47 @@
       ${isCloud ? `<label class="wm-row">云端 API 路径<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath||'/images/generations')}" placeholder="/images/generations"/></label>
       <div class="wm-hint">拼在 apiUrl 后。SiliconFlow / OpenAI 兼容端点都用 <code>/images/generations</code>。</div>` : ''}
       <div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">出图参数</div>
+      <div class="wm-h" style="margin-top:0">尺寸预设</div>
+      <label class="wm-row">尺寸预设
+        <select id="ig-size">${sizeOpts}</select>
+      </label>
+      <div class="wm-hint">选预设会自动填入下方宽高；之后手动改宽高会把预设置为「自定义」。</div>
+      <div class="wm-h" style="margin-top:0">出图参数（都可自己填写）</div>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <label class="wm-row" style="flex:1;min-width:120px">宽<input id="ig-w" type="number" min="64" max="2048" step="64" value="${Number(ig.width)||512}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">高<input id="ig-h" type="number" min="64" max="2048" step="64" value="${Number(ig.height)||768}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">步数<input id="ig-steps" type="number" min="1" max="100" value="${Number(ig.steps)||20}"/></label>
-        <label class="wm-row" style="flex:1;min-width:120px">CFG<input id="ig-cfg" type="number" min="1" max="20" step="0.5" value="${Number(ig.cfgScale)||7}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">宽 (px)<input id="ig-w" type="number" min="64" max="3072" step="8" value="${Number(ig.width)||512}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">高 (px)<input id="ig-h" type="number" min="64" max="3072" step="8" value="${Number(ig.height)||768}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">采样步数<input id="ig-steps" type="number" min="1" max="150" value="${Number(ig.steps)||20}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">CFG 缩放<input id="ig-cfg" type="number" min="1" max="30" step="0.5" value="${Number(ig.cfgScale)||7}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">去噪强度<input id="ig-denoise" type="number" min="0" max="1" step="0.05" value="${Number(ig.denoisingStrength)||1}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">种子 (-1=随机)<input id="ig-seed" type="number" min="-1" step="1" value="${ig.seed==null?-1:Number(ig.seed)}"/></label>
       </div>
-      ${!isCloud ? `<label class="wm-row">采样器 (留空用默认)<input id="ig-sampler" value="${escapeHtml(ig.sampler||'')}" placeholder="Euler a / DPM++ 2M Karras"/></label>` : ''}
-      <label class="wm-row" style="flex-direction:column;align-items:stretch">负面提示词（可选）
-        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digits, cropped, worst quality">${escapeHtml(ig.negativePrompt||'')}</textarea>
+      ${!isCloud ? `<label class="wm-row">采样器 (留空用默认)<input id="ig-sampler" value="${escapeHtml(ig.sampler||'')}" placeholder="Euler a / DPM++ 2M Karras / Euler"/></label>` : ''}
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">常见提示词前缀（对所有图生效；{{prompt}} 表示 LLM 整合出的画面描述位置）
+        <textarea id="ig-prefix" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="masterpiece, best quality, absurdres, {{prompt}}">${escapeHtml((ig.promptPrefix!=null?ig.promptPrefix:ig.promptTemplate)||'')}</textarea>
+      </label>
+      <div class="wm-hint">含 <code>{{prompt}}</code> 时替换；不含时会自动前置到 LLM 画面描述之前。</div>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">常见负面提示词前缀（对所有图生效，留空也行）
+        <textarea id="ig-neg-pre" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digit, cropped, worst quality">${escapeHtml(ig.negativePrefix||'')}</textarea>
+      </label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">本次特定负面提示词（可选，会拼在上面前缀之后）
+        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="（通常留空；对某张图想额外排除的内容填这里）">${escapeHtml(ig.negativePrompt||'')}</textarea>
       </label>
       <div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">提示词风格与展示</div>
-      <label class="wm-row">画面风格（追加前缀，引导出图调性）
+      <div class="wm-h" style="margin-top:0">画面风格与展示</div>
+      <label class="wm-row">画面风格（追加风格前缀，引导出图调性）
         <select id="ig-style">${styleOpts}</select>
       </label>
-      <label class="wm-row" style="flex-direction:column;align-items:stretch">自定义提示词模板（可选，含 {{prompt}} 占位符）
-        <textarea id="ig-tpl" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="如：masterpiece, best quality, {{prompt}}, detailed background">${escapeHtml(ig.promptTemplate||'')}</textarea>
-      </label>
-      <div class="wm-hint">LLM 整合出的画面描述会替换 {{prompt}}。不含 {{prompt}} 时作为后缀追加。</div>
       <label class="wm-row">图片展示方式
         <select id="ig-display">${displayOpts}</select>
       </label>
       <div class="wm-hint">「追加到 AI 楼层末尾」：图片紧跟 AI 回复下方。「独立 system 楼层」：单独一层显示。两种方式均不进上下文。</div>
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI 工作流（可选）</div>
-      <div class="wm-hint">粘贴 ComfyUI <b>prompt API 格式</b>的工作流 JSON（在 ComfyUI 里「保存(Ctrl+S)」得到的 .json 即此格式）。用占位符标记关键参数位置，生图时自动替换：<br/><code>{{prompt}}</code> 正向提示词 / <code>{{negative}}</code> 负面 / <code>{{width}}</code> <code>{{height}}</code> 尺寸 / <code>{{steps}}</code> <code>{{cfg}}</code> 采样参数。留空用内置默认 txt2img 工作流。</div>
-      <textarea id="ig-comfy" rows="6" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"steps":"{{steps}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>` : ''}
+      <div class="wm-hint">粘贴 ComfyUI <b>prompt API 格式</b>的工作流 JSON（在 ComfyUI 里「保存(Ctrl+S)」得到的 .json 即此格式）。用占位符标记关键参数位置，生图时自动替换。<br/>
+        占位符列表：<code>{{prompt}}</code> 正向 / <code>{{negative}}</code> 负面（含前缀+本次特定） / <code>{{width}}</code> <code>{{height}}</code> 尺寸 / <code>{{steps}}</code> <code>{{cfg}}</code> <code>{{denoise}}</code> 采样 / <code>{{seed}}</code> 种子。留空用内置默认 txt2img 工作流。</div>
+      <textarea id="ig-comfy" rows="7" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}","steps":"{{steps}}","cfg":"{{cfg}}","denoise":"{{denoise}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>` : ''}
       <div class="wm-divider"></div>
-      <div class="wm-hint">💡 提示：配置完成后点上方「测试连接」会真的出一张测试图（用 "a cute cat" 做 prompt），验证后端连通性。生图提示词复用「LLM 调用」标签页的配置，无需在此重复填。</div>
+      <div class="wm-hint">💡 提示：点上方「测试连接」会真的出一张测试图，验证后端连通性+参数。生图提示词复用「LLM 调用」标签页配置，无需在此重复填。</div>
     </div>`;
   }
 
