@@ -131,6 +131,34 @@
 
       itemExtract: '你是物品记录员。任务：从【最近对话】中提取出现的具体物品，存入物品清单。\n\n记录规范：\n- 只提取本段新出现或状态发生变化的物品；已记录且无变化的物品不重复输出。\n- name：只写可被拿取、使用、持有的具象物件（√ 青锋剑、丹药、玉佩、信件；× 地点如「丹房」「山洞」、场景如「战斗」「对话」、抽象概念如「修为」「境界」「灵气」、人物本身）。2-20字，不带修饰语、不带标点。\n- desc：一句话说明作用，不超过40字。不知道则留空。\n- owner：当前持有者姓名，不知道则留空。\n- origin：来历简述，不超过30字。不知道则留空。\n- related：关联的剧情标题（从【已知剧情线】取），无则留空。\n- 没有物品就输出空标签。宁缺毋滥，不编造。\n\n输出契约：每件物品占一行，字段用 | 分隔（name|desc|owner|origin|related）。某字段不知道就留空但保留 | 占位。把所有物品放在 <Items> 和 </Items> 之间。标签之外的所有文字都会被程序丢弃。字段内不要使用 | 符号。格式：\n<Items>\n青锋剑|师尊的佩剑，锋利无比|林晚|藏剑阁所藏|丹房初遇\n丹药|回复灵力的丹药||师尊炼制|丹房初遇\n</Items>\n没有物品时输出：\n<Items></Items>\n\n【已知剧情线】\n{{plot}}\n\n【最近对话】\n{{recent}}',
     },
+    // ── 生图功能配置（温记独立，不依赖酒馆原生 SD 模块）──
+    // 流程：AI 回复完成 → 取最新 AI 楼层 message → 调 LLM 整合为画面提示词 → 送生图后端 → 插入图片
+    // 后端三选一：sd-webui（/sdapi/v1/txt2img）/ comfyui（/prompt + /history 轮询）/ cloud（OpenAI 兼容 /images/generations）
+    // 图片以 <!-- WM_IMG_* --> 标记包裹写入楼层，injection.js 在注入上下文时剔除这些标记块，保证「图片不进上下文」。
+    imageGen: {
+      enabled: false,                  // 生图总开关（默认关，配置好后手动开）
+      autoTrigger: false,              // 自动触发：AI 回复落库后自动生图（关闭则仅手动按钮触发）
+      backendType: 'sd-webui',         // 'sd-webui' | 'comfyui' | 'cloud'
+      apiUrl: 'http://127.0.0.1:7860', // 后端地址（SD WebUI 默认 7860 / ComfyUI 默认 8188 / 云端填完整 BaseURL）
+      apiKey: '',                      // API Key（云端必填，本地通常留空）
+      model: '',                       // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
+      negativePrompt: '',              // 负面提示词（可选，对所有后端生效）
+      width: 512,
+      height: 768,
+      steps: 20,
+      cfgScale: 7,
+      sampler: '',                     // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
+      // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
+      // 用占位符 {{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} 标记关键参数位置，
+      // 生图时自动替换。留空则用内置 txt2img 默认工作流。
+      comfyWorkflow: '',
+      cloudPath: '/images/generations',// 云端 API 路径（拼在 apiUrl 后；SiliconFlow/OpenAI 兼容端点都用此默认值）
+      displayMode: 'append',           // 'append' 追加到 AI 楼层末尾 | 'separate' 独立 system 楼层
+      promptStyle: 'general',          // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
+      // 自定义提示词模板（可选）：含 {{prompt}} 占位符，生图时会替换为 LLM 整合出的画面描述。
+      // 例：「masterpiece, best quality, {{prompt}}, detailed background」
+      promptTemplate: '',
+    },
   };
 
   function load() {

@@ -148,6 +148,45 @@
         plot: '\u4F60\u662F\u5267\u60C5\u8BB0\u5F55\u5458\u3002\u4EFB\u52A1\uFF1A\u4ECE\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u63D0\u53D6\u672C\u6BB5\u65B0\u53D1\u751F\u7684\u5267\u60C5\u4E8B\u4EF6\uFF0C\u5B58\u5165\u5267\u60C5\u7EBF\u3002\n\n\u8BB0\u5F55\u89C4\u8303\uFF1A\n- \u53EA\u8F93\u51FA\u672C\u6BB5\u5BF9\u8BDD\u91CC\u3010\u65B0\u53D1\u751F\u3011\u7684\u4E8B\u3002\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\u4EC5\u4F9B\u4F60\u907F\u514D\u91CD\u590D\u2014\u2014\u5176\u4E2D\u7684\u6761\u76EE\u4E00\u5F8B\u4E0D\u518D\u8F93\u51FA\uFF0C\u54EA\u6015\u5B83\u5F88\u91CD\u8981\u3002\n- \u6CA1\u6709\u65B0\u4E8B\u4EF6\u5C31\u8F93\u51FA\u7A7A\u6807\u7B7E\uFF0C\u4E0D\u8981\u7F16\u9020\u3002\u5B81\u7F3A\u6BCB\u6EE5\u3002\n- time\uFF1A\u5267\u60C5\u5185\u65F6\u95F4\u70B9\uFF08\u5982\u300C\u7B2C\u4E00\u5929\u300D\u300C\u5348\u540E\u300D\uFF09\uFF0C\u5BF9\u8BDD\u672A\u63D0\u53CA\u5219\u7559\u7A7A\u3002\u4E0D\u8981\u5199"\u672A\u63D0\u53CA""\u672A\u77E5"\u8FD9\u7C7B\u8BDD\u3002\n- title\uFF1A2-12\u5B57\u7684\u77ED\u6807\u9898\uFF0C\u540D\u8BCD\u52A0\u52A8\u8BCD\u6982\u62EC\uFF08\u221A\u300C\u4E39\u623F\u521D\u9047\u300D\u300C\u7A81\u7834\u5883\u754C\u300D\uFF0C\xD7\u300C\u6797\u665A\u5728\u4E39\u623F\u9047\u5230\u5E08\u5C0A\u300D\uFF09\u3002\u4E0D\u5E26\u7F16\u53F7\u3001\u4E0D\u5E26\u6807\u70B9\u3002\n- summary\uFF1A\u4E00\u5230\u4E24\u53E5\u5BA2\u89C2\u63CF\u8FF0\uFF0C\u5199\u6E05\u4EBA\u7269\u3001\u52A8\u4F5C\u3001\u7ED3\u679C\u3002\u4E0D\u5199\u5FC3\u7406\uFF0C\u4E0D\u8D85\u8FC780\u5B57\u3002\n\n\u8F93\u51FA\u5951\u7EA6\uFF1A\u6BCF\u6761\u5267\u60C5\u5360\u4E00\u884C\uFF0C\u5B57\u6BB5\u7528 | \u5206\u9694\uFF08time|title|summary\uFF09\u3002time \u4E3A\u7A7A\u65F6\u4FDD\u7559 | \u5360\u4F4D\u3002\u628A\u6240\u6709\u5267\u60C5\u653E\u5728 <Plots> \u548C </Plots> \u4E4B\u95F4\u3002\u6807\u7B7E\u4E4B\u5916\u7684\u6240\u6709\u6587\u5B57\u90FD\u4F1A\u88AB\u7A0B\u5E8F\u4E22\u5F03\u3002\u683C\u5F0F\uFF1A\n<Plots>\n\u7B2C\u4E00\u5929|\u4E39\u623F\u521D\u9047|\u6797\u665A\u5165\u4E39\u623F\uFF0C\u89C1\u5E08\u5C0A\u70BC\u4E39\uFF0C\u88AB\u547D\u53D6\u5251\u3002\n|\u7A81\u7834\u5883\u754C|\u6797\u665A\u5728\u85CF\u5251\u9601\u7A81\u7834\u81F3\u7B51\u57FA\u3002\n</Plots>\n\u6CA1\u6709\u65B0\u4E8B\u4EF6\u65F6\u8F93\u51FA\uFF1A\n<Plots></Plots>\n\n\u3010\u5DF2\u6709\u5267\u60C5\u7EBF\u3011\n{{historyPlot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         worldview: '\u3010\u4EFB\u52A1\u3011\u4ECE\u5267\u60C5\u548C\u5BF9\u8BDD\u4E2D\u63D0\u70BC\u4E16\u754C\u901A\u7528\u89C4\u5219\u3002\n\u3010\u786C\u6027\u89C4\u5219\u3011\n1. \u4E0D\u5199\u5355\u4E2A\u5177\u4F53\u7269\u54C1/\u89D2\u8272/\u5730\u70B9\u540D\u79F0\n2. \u5199\u8BE5\u4E16\u754C\u7684\u901A\u7528\u8BBE\u5B9A\uFF08\u4FEE\u70BC\u4F53\u7CFB/\u793E\u4F1A\u89C4\u5219/\u81EA\u7136\u6CD5\u5219\u7B49\uFF09\n3. 3-6\u6761\u89C4\u5219\n4. title \u8BBE\u5B9A\u6807\u9898(\u226410\u5B57)\uFF0Ccontent \u4E00\u53E5\u8BDD\u8BF4\u660E(\u226440\u5B57)\n\n\u3010\u8F93\u51FA\u683C\u5F0F\u3011\u53EA\u8F93\u51FAJSON\u5BF9\u8C61\uFF08\u4E0D\u8981markdown\u56F4\u680F\u3001\u4E0D\u8981\u89E3\u91CA\uFF09\uFF1A\n{"name":"\u4E16\u754C\u540D","type":"\u4E16\u754C\u7C7B\u578B","desc":"1-2\u53E5\u7B80\u8FF0","rules":[{"title":"\u8BBE\u5B9A\u6807\u9898","content":"\u8BBE\u5B9A\u5185\u5BB9"}]}\n\n\u3010\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}',
         itemExtract: "\u4F60\u662F\u7269\u54C1\u8BB0\u5F55\u5458\u3002\u4EFB\u52A1\uFF1A\u4ECE\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\u4E2D\u63D0\u53D6\u51FA\u73B0\u7684\u5177\u4F53\u7269\u54C1\uFF0C\u5B58\u5165\u7269\u54C1\u6E05\u5355\u3002\n\n\u8BB0\u5F55\u89C4\u8303\uFF1A\n- \u53EA\u63D0\u53D6\u672C\u6BB5\u65B0\u51FA\u73B0\u6216\u72B6\u6001\u53D1\u751F\u53D8\u5316\u7684\u7269\u54C1\uFF1B\u5DF2\u8BB0\u5F55\u4E14\u65E0\u53D8\u5316\u7684\u7269\u54C1\u4E0D\u91CD\u590D\u8F93\u51FA\u3002\n- name\uFF1A\u53EA\u5199\u53EF\u88AB\u62FF\u53D6\u3001\u4F7F\u7528\u3001\u6301\u6709\u7684\u5177\u8C61\u7269\u4EF6\uFF08\u221A \u9752\u950B\u5251\u3001\u4E39\u836F\u3001\u7389\u4F69\u3001\u4FE1\u4EF6\uFF1B\xD7 \u5730\u70B9\u5982\u300C\u4E39\u623F\u300D\u300C\u5C71\u6D1E\u300D\u3001\u573A\u666F\u5982\u300C\u6218\u6597\u300D\u300C\u5BF9\u8BDD\u300D\u3001\u62BD\u8C61\u6982\u5FF5\u5982\u300C\u4FEE\u4E3A\u300D\u300C\u5883\u754C\u300D\u300C\u7075\u6C14\u300D\u3001\u4EBA\u7269\u672C\u8EAB\uFF09\u30022-20\u5B57\uFF0C\u4E0D\u5E26\u4FEE\u9970\u8BED\u3001\u4E0D\u5E26\u6807\u70B9\u3002\n- desc\uFF1A\u4E00\u53E5\u8BDD\u8BF4\u660E\u4F5C\u7528\uFF0C\u4E0D\u8D85\u8FC740\u5B57\u3002\u4E0D\u77E5\u9053\u5219\u7559\u7A7A\u3002\n- owner\uFF1A\u5F53\u524D\u6301\u6709\u8005\u59D3\u540D\uFF0C\u4E0D\u77E5\u9053\u5219\u7559\u7A7A\u3002\n- origin\uFF1A\u6765\u5386\u7B80\u8FF0\uFF0C\u4E0D\u8D85\u8FC730\u5B57\u3002\u4E0D\u77E5\u9053\u5219\u7559\u7A7A\u3002\n- related\uFF1A\u5173\u8054\u7684\u5267\u60C5\u6807\u9898\uFF08\u4ECE\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\u53D6\uFF09\uFF0C\u65E0\u5219\u7559\u7A7A\u3002\n- \u6CA1\u6709\u7269\u54C1\u5C31\u8F93\u51FA\u7A7A\u6807\u7B7E\u3002\u5B81\u7F3A\u6BCB\u6EE5\uFF0C\u4E0D\u7F16\u9020\u3002\n\n\u8F93\u51FA\u5951\u7EA6\uFF1A\u6BCF\u4EF6\u7269\u54C1\u5360\u4E00\u884C\uFF0C\u5B57\u6BB5\u7528 | \u5206\u9694\uFF08name|desc|owner|origin|related\uFF09\u3002\u67D0\u5B57\u6BB5\u4E0D\u77E5\u9053\u5C31\u7559\u7A7A\u4F46\u4FDD\u7559 | \u5360\u4F4D\u3002\u628A\u6240\u6709\u7269\u54C1\u653E\u5728 <Items> \u548C </Items> \u4E4B\u95F4\u3002\u6807\u7B7E\u4E4B\u5916\u7684\u6240\u6709\u6587\u5B57\u90FD\u4F1A\u88AB\u7A0B\u5E8F\u4E22\u5F03\u3002\u5B57\u6BB5\u5185\u4E0D\u8981\u4F7F\u7528 | \u7B26\u53F7\u3002\u683C\u5F0F\uFF1A\n<Items>\n\u9752\u950B\u5251|\u5E08\u5C0A\u7684\u4F69\u5251\uFF0C\u950B\u5229\u65E0\u6BD4|\u6797\u665A|\u85CF\u5251\u9601\u6240\u85CF|\u4E39\u623F\u521D\u9047\n\u4E39\u836F|\u56DE\u590D\u7075\u529B\u7684\u4E39\u836F||\u5E08\u5C0A\u70BC\u5236|\u4E39\u623F\u521D\u9047\n</Items>\n\u6CA1\u6709\u7269\u54C1\u65F6\u8F93\u51FA\uFF1A\n<Items></Items>\n\n\u3010\u5DF2\u77E5\u5267\u60C5\u7EBF\u3011\n{{plot}}\n\n\u3010\u6700\u8FD1\u5BF9\u8BDD\u3011\n{{recent}}"
+      },
+      // ── 生图功能配置（温记独立，不依赖酒馆原生 SD 模块）──
+      // 流程：AI 回复完成 → 取最新 AI 楼层 message → 调 LLM 整合为画面提示词 → 送生图后端 → 插入图片
+      // 后端三选一：sd-webui（/sdapi/v1/txt2img）/ comfyui（/prompt + /history 轮询）/ cloud（OpenAI 兼容 /images/generations）
+      // 图片以 <!-- WM_IMG_* --> 标记包裹写入楼层，injection.js 在注入上下文时剔除这些标记块，保证「图片不进上下文」。
+      imageGen: {
+        enabled: false,
+        // 生图总开关（默认关，配置好后手动开）
+        autoTrigger: false,
+        // 自动触发：AI 回复落库后自动生图（关闭则仅手动按钮触发）
+        backendType: "sd-webui",
+        // 'sd-webui' | 'comfyui' | 'cloud'
+        apiUrl: "http://127.0.0.1:7860",
+        // 后端地址（SD WebUI 默认 7860 / ComfyUI 默认 8188 / 云端填完整 BaseURL）
+        apiKey: "",
+        // API Key（云端必填，本地通常留空）
+        model: "",
+        // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
+        negativePrompt: "",
+        // 负面提示词（可选，对所有后端生效）
+        width: 512,
+        height: 768,
+        steps: 20,
+        cfgScale: 7,
+        sampler: "",
+        // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
+        // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
+        // 用占位符 {{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} 标记关键参数位置，
+        // 生图时自动替换。留空则用内置 txt2img 默认工作流。
+        comfyWorkflow: "",
+        cloudPath: "/images/generations",
+        // 云端 API 路径（拼在 apiUrl 后；SiliconFlow/OpenAI 兼容端点都用此默认值）
+        displayMode: "append",
+        // 'append' 追加到 AI 楼层末尾 | 'separate' 独立 system 楼层
+        promptStyle: "general",
+        // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
+        // 自定义提示词模板（可选）：含 {{prompt}} 占位符，生图时会替换为 LLM 整合出的画面描述。
+        // 例：「masterpiece, best quality, {{prompt}}, detailed background」
+        promptTemplate: ""
       }
     };
     function load() {
@@ -2817,8 +2856,23 @@ ${p.summary || ""}`.trim() });
     }
     const WM_BLOCK_START = "\u3010\u6E29\u8BB0\xB7BEGIN\u3011";
     const WM_BLOCK_END = "\u3010\u6E29\u8BB0\xB7END\u3011";
+    const IMG_START_TAG = "<!-- WM_IMG_START -->";
+    const IMG_END_TAG = "<!-- WM_IMG_END -->";
+    function stripImageBlocks(content) {
+      if (!content) return content;
+      let out = String(content);
+      out = out.replace(new RegExp(IMG_START_TAG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\\s\\S]*?" + IMG_END_TAG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "");
+      out = out.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+      return out.replace(/\n{3,}/g, "\n\n").trim();
+    }
     function injectBlockIntoChat(chat, block) {
-      if (!Array.isArray(chat) || !chat.length || !block) return chat;
+      if (!Array.isArray(chat) || !chat.length) return chat;
+      for (const m of chat) {
+        if (m && typeof m.content === "string" && (m.content.indexOf(IMG_START_TAG) >= 0 || m.content.indexOf("![") >= 0)) {
+          m.content = stripImageBlocks(m.content);
+        }
+      }
+      if (!block) return chat;
       const sys = chat.find((m) => m && m.role === "system");
       const wrapped = WM_BLOCK_START + "\n" + block + "\n" + WM_BLOCK_END;
       if (sys) {
@@ -2992,6 +3046,365 @@ ${p.summary || ""}`.trim() });
       return true;
     }
     WM.FloorHider = { applySummaryPointerHiding, hideUntil, unhideAll };
+  })();
+
+  // src/config/image-generator.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    const IMG_START = "<!-- WM_IMG_START -->";
+    const IMG_END = "<!-- WM_IMG_END -->";
+    function helper() {
+      return window.TavernHelper;
+    }
+    function getChatMessages(range, opts) {
+      const h = helper();
+      if (h && typeof h.getChatMessages === "function") return h.getChatMessages(range, opts);
+      if (typeof window.getChatMessages === "function") return window.getChatMessages(range, opts);
+      if (typeof getChatMessages === "function") return getChatMessages(range, opts);
+      return [];
+    }
+    async function setChatMessages(arr, opts) {
+      const h = helper();
+      if (h && typeof h.setChatMessages === "function") return h.setChatMessages(arr, opts);
+      if (typeof window.setChatMessages === "function") return window.setChatMessages(arr, opts);
+      if (typeof setChatMessages === "function") return setChatMessages(arr, opts);
+      throw new Error("setChatMessages \u4E0D\u53EF\u7528\uFF08\u9700\u9152\u9986\u52A9\u624B\uFF09");
+    }
+    async function createChatMessages(arr, opts) {
+      const h = helper();
+      if (h && typeof h.createChatMessages === "function") return h.createChatMessages(arr, opts);
+      if (typeof window.createChatMessages === "function") return window.createChatMessages(arr, opts);
+      if (typeof createChatMessages === "function") return createChatMessages(arr, opts);
+      throw new Error("createChatMessages \u4E0D\u53EF\u7528\uFF08\u9700\u9152\u9986\u52A9\u624B\uFF09");
+    }
+    function extractTag(raw, tag) {
+      if (raw == null) return "";
+      const s = String(raw).replace(/^```[a-zA-Z]*\s*/gim, "").replace(/```\s*$/g, "").trim();
+      const lower = s.toLowerCase();
+      const start = lower.indexOf("<" + tag.toLowerCase());
+      if (start === -1) return "";
+      let i = start + tag.length + 1;
+      while (i < s.length && s[i] !== ">" && s[i] !== "/" && s[i] !== "<") i++;
+      if (s[i] === "/") return "";
+      if (s[i] !== ">") return "";
+      const contentStart = i + 1;
+      const end = lower.indexOf("</" + tag.toLowerCase(), contentStart);
+      if (end === -1) return s.slice(contentStart).trim();
+      return s.slice(contentStart, end).trim();
+    }
+    const STYLE_PREFIX = {
+      general: "",
+      anime: "anime style, illustration, vibrant colors, detailed shading, ",
+      realistic: "photorealistic, high detail, natural lighting, sharp focus, 8k, ",
+      ink: "traditional chinese ink painting, sumi-e, minimalist, monochrome, brush stroke, "
+    };
+    async function generateImagePrompt(aiMessage, settings) {
+      const sys = [
+        "\u4F60\u662F\u753B\u9762\u6784\u56FE\u5E08\u3002\u4EFB\u52A1\uFF1A\u4ECE\u7ED9\u5B9A\u7684\u53D9\u4E8B\u6587\u672C\u4E2D\u63D0\u70BC\u4E00\u4E2A\u9002\u5408\u6587\u751F\u56FE\u7684\u753B\u9762\u63CF\u8FF0\u3002",
+        "",
+        "\u63D0\u70BC\u89C4\u8303\uFF1A",
+        "- \u53EA\u5199\u300C\u8089\u773C\u53EF\u89C1\u300D\u7684\u753B\u9762\u5143\u7D20\uFF1A\u4EBA\u7269\u5916\u89C2/\u670D\u88C5/\u52A8\u4F5C/\u8868\u60C5\u3001\u573A\u666F/\u73AF\u5883/\u5149\u5F71/\u5929\u6C14\u3001\u6784\u56FE/\u89C6\u89D2/\u666F\u522B\u3002",
+        "- \u4E0D\u5199\u53F0\u8BCD\u3001\u5FC3\u7406\u3001\u62BD\u8C61\u6982\u5FF5\u3001\u5267\u60C5\u80CC\u666F\u2014\u2014\u751F\u56FE\u6A21\u578B\u770B\u4E0D\u61C2\u8FD9\u4E9B\u3002",
+        "- \u7528\u82F1\u6587\u77ED\u53E5+\u9017\u53F7\u5206\u9694\u7684\u5173\u952E\u8BCD\u7EC4\uFF08tag \u5F0F\uFF09\uFF0C\u4FBF\u4E8E\u751F\u56FE\u6A21\u578B\u89E3\u6790\u3002\u5982\uFF1A1girl, long black hair, red hanfu, standing in pavilion, moonlight, side view\u3002",
+        "- \u628A\u591A\u4E2A\u89D2\u8272\u7684\u5916\u89C2\u5206\u522B\u63CF\u8FF0\u6E05\u695A\uFF08\u53D1\u8272/\u670D\u88C5/\u4F4D\u7F6E\uFF09\u3002",
+        "- 80-150 \u5B57\u4E4B\u5185\uFF0C\u5B81\u7CBE\u52FF\u6CDB\u3002",
+        "",
+        "\u8F93\u51FA\u5951\u7EA6\uFF1A\u628A\u753B\u9762\u63CF\u8FF0\u653E\u5728 <ImagePrompt> \u548C </ImagePrompt> \u4E4B\u95F4\u3002\u6807\u7B7E\u5916\u7684\u6240\u6709\u6587\u5B57\u90FD\u4F1A\u88AB\u4E22\u5F03\u3002",
+        "\u683C\u5F0F\uFF1A",
+        "<ImagePrompt>",
+        "1girl, long black hair, red hanfu, standing in bamboo forest, sunlight filtering through leaves, upper body",
+        "</ImagePrompt>"
+      ].join("\n");
+      const user = "\u3010AI \u56DE\u590D\u3011\n" + String(aiMessage || "").slice(0, 4e3);
+      const opts = { maxTokens: 400, temperature: 0.5 };
+      const out = await WM.LLMClient.complete(sys, user, settings, opts);
+      const tagged = extractTag(out, "ImagePrompt");
+      const cleaned = String(out || "").replace(/^```[a-zA-Z]*\s*/gim, "").replace(/```\s*$/g, "").trim();
+      const result = (tagged || cleaned || "").trim();
+      if (!result) throw new Error("LLM \u672A\u751F\u6210\u6709\u6548\u753B\u9762\u63D0\u793A\u8BCD");
+      return result;
+    }
+    function buildFullPrompt(imagePrompt, settings) {
+      const ig = settings.imageGen || {};
+      const style = STYLE_PREFIX[ig.promptStyle] || "";
+      let core = style ? style + imagePrompt : imagePrompt;
+      if (ig.promptTemplate && ig.promptTemplate.trim()) {
+        if (ig.promptTemplate.indexOf("{{prompt}}") >= 0) {
+          core = ig.promptTemplate.replace(/\{\{prompt\}\}/g, core);
+        } else {
+          core = core + ", " + ig.promptTemplate;
+        }
+      }
+      return core;
+    }
+    async function callSdWebui(prompt, settings) {
+      const ig = settings.imageGen || {};
+      const base = (ig.apiUrl || "http://127.0.0.1:7860").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
+      const url = base + "/sdapi/v1/txt2img";
+      const body = {
+        prompt,
+        negative_prompt: ig.negativePrompt || "",
+        steps: Number(ig.steps) || 20,
+        cfg_scale: Number(ig.cfgScale) || 7,
+        width: Number(ig.width) || 512,
+        height: Number(ig.height) || 768,
+        sampler_name: ig.sampler || "Euler a"
+      };
+      if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error("SD WebUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
+      }
+      const j = await res.json();
+      if (!j.images || !j.images.length) throw new Error("SD WebUI \u672A\u8FD4\u56DE\u56FE\u7247");
+      return "data:image/png;base64," + j.images[0];
+    }
+    function defaultComfyWorkflow() {
+      return {
+        "3": { class_type: "KSampler", inputs: { seed: Math.floor(Math.random() * 1e9), steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "euler", scheduler: "normal", denoise: 1, model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
+        "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "v1-5-pruned-emaonly.safetensors" } },
+        "5": { class_type: "EmptyLatentImage", inputs: { width: "{{width}}", height: "{{height}}", batch_size: 1 } },
+        "6": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}", clip: ["4", 1] } },
+        "7": { class_type: "CLIPTextEncode", inputs: { text: "{{negative}}", clip: ["4", 1] } },
+        "8": { class_type: "VAEDecode", inputs: { samples: ["3", 0], vae: ["4", 2] } },
+        "9": { class_type: "SaveImage", inputs: { filename_prefix: "WarmMemo", images: ["8", 0] } }
+      };
+    }
+    async function callComfyui(prompt, settings) {
+      const ig = settings.imageGen || {};
+      const base = (ig.apiUrl || "http://127.0.0.1:8188").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
+      let workflow;
+      if (ig.comfyWorkflow && ig.comfyWorkflow.trim()) {
+        try {
+          workflow = JSON.parse(ig.comfyWorkflow);
+        } catch (e) {
+          throw new Error("ComfyUI \u5DE5\u4F5C\u6D41 JSON \u89E3\u6790\u5931\u8D25\uFF1A" + e.message);
+        }
+      } else {
+        workflow = defaultComfyWorkflow();
+      }
+      const neg = ig.negativePrompt || "";
+      const w = Number(ig.width) || 512;
+      const h = Number(ig.height) || 768;
+      const steps = Number(ig.steps) || 20;
+      const cfg = Number(ig.cfgScale) || 7;
+      let workflowStr = JSON.stringify(workflow);
+      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, prompt.replace(/\\/g, "\\\\").replace(/"/g, '\\"')).replace(/\{\{negative\}\}/g, neg.replace(/\\/g, "\\\\").replace(/"/g, '\\"')).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg));
+      const res = await fetch(base + "/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: workflowStr
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error("ComfyUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
+      }
+      const j = await res.json();
+      const promptId = j && j.prompt_id;
+      if (!promptId) throw new Error("ComfyUI \u672A\u8FD4\u56DE prompt_id");
+      return await pollComfyuiResult(promptId, base);
+    }
+    async function pollComfyuiResult(promptId, base) {
+      for (let i = 0; i < 90; i++) {
+        await new Promise((r) => setTimeout(r, 1e3));
+        try {
+          const res = await fetch(base + "/history/" + encodeURIComponent(promptId));
+          if (!res.ok) continue;
+          const j = await res.json();
+          const item = j[promptId];
+          if (!item || !item.outputs) continue;
+          for (const nodeId of Object.keys(item.outputs)) {
+            const out = item.outputs[nodeId];
+            const imgs = out.images || out.gifs;
+            if (imgs && imgs.length) {
+              const img = imgs[0];
+              const params = new URLSearchParams({
+                filename: img.filename || "",
+                subfolder: img.subfolder || "",
+                type: img.type || "output"
+              });
+              return base + "/view?" + params.toString();
+            }
+          }
+        } catch (e) {
+        }
+      }
+      throw new Error("ComfyUI \u751F\u6210\u8D85\u65F6\uFF0890s \u672A\u51FA\u56FE\uFF09");
+    }
+    async function callCloudApi(prompt, settings) {
+      const ig = settings.imageGen || {};
+      const base = (ig.apiUrl || "").replace(/\/+$/, "");
+      if (!base) throw new Error("\u4E91\u7AEF API \u672A\u914D\u7F6E apiUrl");
+      const path = ig.cloudPath || "/images/generations";
+      const url = base + path;
+      const body = {
+        prompt,
+        n: 1,
+        size: (Number(ig.width) || 512) + "x" + (Number(ig.height) || 512),
+        response_format: "b64_json"
+      };
+      if (ig.model) body.model = ig.model;
+      const headers = { "Content-Type": "application/json" };
+      if (ig.apiKey) headers["Authorization"] = "Bearer " + ig.apiKey;
+      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error("\u4E91\u7AEF API HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
+      }
+      const j = await res.json();
+      if (j.data && j.data[0]) {
+        if (j.data[0].b64_json) return "data:image/png;base64," + j.data[0].b64_json;
+        if (j.data[0].url) return j.data[0].url;
+      }
+      throw new Error("\u4E91\u7AEF API \u672A\u8FD4\u56DE\u56FE\u7247\u6570\u636E");
+    }
+    async function generateImage(prompt, settings) {
+      const ig = settings.imageGen || {};
+      const type = ig.backendType || "sd-webui";
+      if (WM.DebugLog) {
+        WM.DebugLog.logRequest("llm", { url: "[image-gen:" + type + "]", model: ig.model || "", messages: [{ role: "user", content: prompt.slice(0, 500) }], max_tokens: 0, temperature: 0, deepThinking: false, reasoningEffort: false, note: "\u751F\u56FE\u8BF7\u6C42" });
+      }
+      let imageUrl;
+      try {
+        if (type === "sd-webui") imageUrl = await callSdWebui(prompt, settings);
+        else if (type === "comfyui") imageUrl = await callComfyui(prompt, settings);
+        else if (type === "cloud" || type === "cloud-openai") imageUrl = await callCloudApi(prompt, settings);
+        else throw new Error("\u4E0D\u652F\u6301\u7684\u751F\u56FE\u540E\u7AEF\u7C7B\u578B\uFF1A" + type);
+        if (WM.DebugLog) WM.DebugLog.logResponse("llm", { url: "[image-gen:" + type + "]", model: ig.model || "", output: imageUrl.slice(0, 80) + (imageUrl.length > 80 ? "..." : ""), usage: null, finish_reason: "image-ok", rawPreview: "imageUrl length=" + imageUrl.length });
+        return imageUrl;
+      } catch (e) {
+        if (WM.DebugLog) WM.DebugLog.logError("llm", { url: "[image-gen:" + type + "]", error: e.message || String(e) });
+        throw e;
+      }
+    }
+    function getLastAIMessage(messageId) {
+      if (messageId != null) {
+        try {
+          const msgs = getChatMessages(messageId);
+          if (msgs && msgs.length) return msgs[0];
+        } catch (e) {
+        }
+      }
+      try {
+        const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+        const chat = ctx && ctx.chat;
+        if (Array.isArray(chat)) {
+          for (let i = chat.length - 1; i >= 0; i--) {
+            const m = chat[i];
+            if (!m || m.is_user || m.is_system) continue;
+            const mid = m.message_id != null ? m.message_id : i;
+            try {
+              const msgs = getChatMessages(mid);
+              if (msgs && msgs.length) return msgs[0];
+            } catch (e) {
+            }
+            return {
+              message_id: mid,
+              message: m.mes || "",
+              role: "assistant",
+              is_hidden: !!m.is_hidden
+            };
+          }
+        }
+      } catch (e) {
+      }
+      return null;
+    }
+    async function insertImage(imageUrl, messageId, settings) {
+      const ig = settings.imageGen || {};
+      const alt = "\u6E29\u8BB0\u751F\u56FE " + (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN");
+      const markdown = "![" + alt + "](" + imageUrl + ")";
+      const wrapped = IMG_START + markdown + IMG_END;
+      if (ig.displayMode === "separate") {
+        await createChatMessages([{ role: "system", message: wrapped, is_hidden: false }], { refresh: "affected" });
+      } else {
+        const target = getLastAIMessage(messageId);
+        if (!target) throw new Error("\u627E\u4E0D\u5230\u76EE\u6807 AI \u697C\u5C42\uFF0C\u65E0\u6CD5\u8FFD\u52A0\u56FE\u7247");
+        const newMessage = (target.message || "") + "\n\n" + wrapped;
+        await setChatMessages([{ message_id: target.message_id, message: newMessage }], { refresh: "affected" });
+      }
+    }
+    let _generating = false;
+    async function triggerImageGeneration(opts) {
+      opts = opts || {};
+      if (_generating) return { ok: false, error: "\u6B63\u5728\u751F\u56FE\u4E2D\uFF0C\u8BF7\u7A0D\u5019" };
+      const settings = WM.Settings.load();
+      const ig = settings.imageGen || {};
+      if (ig.enabled === false) return { ok: false, error: "\u751F\u56FE\u529F\u80FD\u672A\u5F00\u542F\uFF08\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u5F00\u542F\uFF09" };
+      _generating = true;
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u6B63\u5728\u751F\u6210\u753B\u9762\u63D0\u793A\u8BCD\u2026");
+      const aiMsg = getLastAIMessage(opts.messageId);
+      if (!aiMsg || !aiMsg.message) {
+        _generating = false;
+        return { ok: false, error: "\u6CA1\u6709\u53EF\u7528\u7684 AI \u6D88\u606F" };
+      }
+      const aiText = aiMsg.message;
+      let imagePrompt;
+      try {
+        imagePrompt = await generateImagePrompt(aiText, settings);
+      } catch (e) {
+        _generating = false;
+        if (WM.ErrLog) await WM.ErrLog.add("image-prompt", e, { stage: "prompt-gen", aiTextPreview: aiText.slice(0, 200) });
+        const msg = "\u63D0\u793A\u8BCD\u751F\u6210\u5931\u8D25\uFF1A" + (e.message || e);
+        if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
+        return { ok: false, error: msg };
+      }
+      const fullPrompt = buildFullPrompt(imagePrompt, settings);
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u63D0\u793A\u8BCD\u5C31\u7EEA\uFF0C\u6B63\u5728\u8C03\u7528\u751F\u56FE\u540E\u7AEF\u2026");
+      let imageUrl;
+      try {
+        imageUrl = await generateImage(fullPrompt, settings);
+      } catch (e) {
+        _generating = false;
+        if (WM.ErrLog) await WM.ErrLog.add("image-gen", e, { stage: "image-gen", backend: ig.backendType, prompt: fullPrompt.slice(0, 300) });
+        const msg = "\u751F\u56FE\u5931\u8D25\uFF1A" + (e.message || e);
+        if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
+        return { ok: false, error: msg, prompt: fullPrompt };
+      }
+      try {
+        await insertImage(imageUrl, aiMsg.message_id, settings);
+      } catch (e) {
+        _generating = false;
+        if (WM.ErrLog) await WM.ErrLog.add("image-insert", e, { stage: "insert", displayMode: ig.displayMode });
+        const msg = "\u56FE\u7247\u63D2\u5165\u5931\u8D25\uFF1A" + (e.message || e);
+        if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
+        return { ok: false, error: msg, prompt: fullPrompt, imageUrl };
+      }
+      _generating = false;
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u751F\u56FE\u5B8C\u6210\uFF0C\u5DF2\u63D2\u5165\u5BF9\u8BDD");
+      return { ok: true, prompt: fullPrompt, imageUrl };
+    }
+    async function testConnection(settings) {
+      const ig = settings && settings.imageGen || WM.Settings.load().imageGen || {};
+      if (!ig.apiUrl && ig.backendType !== "sd-webui") {
+        return { success: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740\uFF08apiUrl\uFF09" };
+      }
+      try {
+        const testPrompt = "a cute cat, simple test image";
+        const url = await generateImage(testPrompt, { imageGen: ig });
+        if (url) return { success: true, detail: "\u8FDE\u901A\uFF0C\u5DF2\u8FD4\u56DE\u56FE\u7247\uFF08" + (url.startsWith("data:") ? "base64" : "url") + "\uFF09" };
+        return { success: false, error: "\u672A\u8FD4\u56DE\u56FE\u7247" };
+      } catch (e) {
+        return { success: false, error: e.message || String(e) };
+      }
+    }
+    WM.ImageGen = {
+      triggerImageGeneration,
+      generateImage,
+      generateImagePrompt,
+      buildFullPrompt,
+      insertImage,
+      testConnection,
+      IMG_START,
+      IMG_END,
+      isGenerating: () => _generating
+    };
   })();
 
   // src/ui/rel-graph.js
@@ -4496,6 +4909,7 @@ ${p.summary || ""}`.trim() });
         { key: "vec", label: "\u5411\u91CF(Embedding)" },
         { key: "rerank", label: "\u91CD\u6392\u5E8F(Rerank)" },
         { key: "lore", label: "\u4E16\u754C\u4E66" },
+        { key: "img", label: "\u751F\u56FE" },
         { key: "err", label: "\u9519\u8BEF\u62A5\u544A" }
       ];
       const active = WM._cfgTab || "llm";
@@ -4503,7 +4917,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-subtabs" id="cfg-tabs">
         ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? "active" : ""}">${t.label}</button>`).join("")}
       </div>
-      <div id="cfg-pane">${active === "llm" ? renderPaneLlm(s) : active === "mem" ? renderPaneMemory(s) : active === "vec" ? renderPaneVector(s) : active === "rerank" ? renderPaneRerank(s) : active === "lore" ? renderPaneLore(s) : active === "err" ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
+      <div id="cfg-pane">${active === "llm" ? renderPaneLlm(s) : active === "mem" ? renderPaneMemory(s) : active === "vec" ? renderPaneVector(s) : active === "rerank" ? renderPaneRerank(s) : active === "lore" ? renderPaneLore(s) : active === "img" ? renderPaneImage(s) : active === "err" ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">\u6D4B\u8BD5\u8FDE\u63A5</button>
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
@@ -4521,6 +4935,7 @@ ${p.summary || ""}`.trim() });
           else if (key === "vec") pane.innerHTML = renderPaneVector(s);
           else if (key === "rerank") pane.innerHTML = renderPaneRerank(s);
           else if (key === "lore") pane.innerHTML = renderPaneLore(s);
+          else if (key === "img") pane.innerHTML = renderPaneImage(s);
           else if (key === "err") pane.innerHTML = renderPaneErrors(s);
           bindPaneEvents(body, s);
         };
@@ -4611,6 +5026,29 @@ ${p.summary || ""}`.trim() });
           s.worldToLorebook = q("#c-wlore").checked;
         }
       }
+      if (!scope || scope === "img") {
+        if (q("#ig-url") !== null) {
+          s.imageGen = {
+            enabled: q("#ig-on") ? q("#ig-on").checked : false,
+            autoTrigger: q("#ig-auto") ? q("#ig-auto").checked : false,
+            backendType: q("#ig-backend") ? q("#ig-backend").value : "sd-webui",
+            apiUrl: q("#ig-url") ? q("#ig-url").value.trim() : "",
+            apiKey: q("#ig-key") ? q("#ig-key").value.trim() : "",
+            model: q("#ig-model") ? q("#ig-model").value.trim() : "",
+            negativePrompt: q("#ig-neg") ? q("#ig-neg").value : "",
+            width: parseInt(q("#ig-w") ? q("#ig-w").value : "512", 10) || 512,
+            height: parseInt(q("#ig-h") ? q("#ig-h").value : "768", 10) || 768,
+            steps: parseInt(q("#ig-steps") ? q("#ig-steps").value : "20", 10) || 20,
+            cfgScale: parseFloat(q("#ig-cfg") ? q("#ig-cfg").value : "7") || 7,
+            sampler: q("#ig-sampler") ? q("#ig-sampler").value.trim() : "",
+            comfyWorkflow: q("#ig-comfy") ? q("#ig-comfy").value : "",
+            cloudPath: q("#ig-cloud-path") ? q("#ig-cloud-path").value.trim() : "/images/generations",
+            displayMode: q("#ig-display") ? q("#ig-display").value : "append",
+            promptStyle: q("#ig-style") ? q("#ig-style").value : "general",
+            promptTemplate: q("#ig-tpl") ? q("#ig-tpl").value : ""
+          };
+        }
+      }
     }
     function bindPaneEvents(body, s) {
       const pane = body.querySelector("#cfg-pane");
@@ -4667,7 +5105,7 @@ ${p.summary || ""}`.trim() });
           } catch (e) {
           }
         }
-        const labelMap = { llm: "LLM \u8C03\u7528", mem: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165", vec: "\u5411\u91CF(Embedding)", rerank: "\u91CD\u6392\u5E8F(Rerank)", lore: "\u4E16\u754C\u4E66", err: "\u9519\u8BEF\u62A5\u544A" };
+        const labelMap = { llm: "LLM \u8C03\u7528", mem: "\u8BB0\u5FC6\u4E0E\u6CE8\u5165", vec: "\u5411\u91CF(Embedding)", rerank: "\u91CD\u6392\u5E8F(Rerank)", lore: "\u4E16\u754C\u4E66", img: "\u751F\u56FE", err: "\u9519\u8BEF\u62A5\u544A" };
         toast("\u{1F33F} \u5DF2\u4FDD\u5B58\u300C" + (labelMap[scope] || scope) + "\u300D\u8BBE\u7F6E");
       };
       const testBtn = body.querySelector("#c-test");
@@ -4732,6 +5170,14 @@ ${p.summary || ""}`.trim() });
           await testRk();
         } else if (scope === "lore") {
           await testWorld();
+        } else if (scope === "img") {
+          try {
+            const r = await WM.ImageGen.testConnection(tmp);
+            add("\u751F\u56FE(" + (tmp.imageGen && tmp.imageGen.backendType || "sd-webui") + ")", r, r.success ? "\u5DF2\u8FD4\u56DE\u56FE\u7247" : "");
+          } catch (e) {
+            add("\u751F\u56FE", { success: false }, String(e.message || e));
+          }
+          await testLlm();
         } else {
           await testLlm();
           await testWorld();
@@ -4783,7 +5229,75 @@ ${p.summary || ""}`.trim() });
       </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u5728\u5411\u91CF\u63A5\u7BA1\u57FA\u7840\u4E0A\uFF0C\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">\u9700\u914D\u5408\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u4E00\u8D77\u5F00\u542F\u624D\u751F\u6548\uFF1A\u5411\u91CF\u53EC\u56DE\u540E\u518D\u7528\u4F60\u914D\u7F6E\u7684 Rerank \u670D\u52A1\u91CD\u6392\uFF0C\u63D0\u5347\u76F8\u5173\u6027\u3002\u5355\u72EC\u5F00\u542F\u65E0\u6548\u3002</div>
+      <div class="wm-hint" style="margin:-2px 0 4px">\u9700\u914D\u5408\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u4E00\u8D77\u5F00\u542F\u624D\u751F\u6548\uFF1A\u5411\u91CF\u53EC\u56DE\u540E\u518D\u7528\u4F60\u914D\u7F6E\u7684 Rerank \u670D\u52A1\u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF0C\u63D0\u5347\u76F8\u5173\u6027\u3002\u5355\u72EC\u5F00\u542F\u65E0\u6548\u3002</div>
+    </div>`;
+    }
+    function renderPaneImage(s) {
+      const ig = s.imageGen || {};
+      const backendOpts = [
+        { v: "sd-webui", label: "SD WebUI (AUTOMATIC1111)" },
+        { v: "comfyui", label: "ComfyUI" },
+        { v: "cloud", label: "\u4E91\u7AEF OpenAI \u517C\u5BB9 (SiliconFlow/OpenAI \u7B49)" }
+      ].map((o) => `<option value="${o.v}" ${ig.backendType === o.v ? "selected" : ""}>${o.label}</option>`).join("");
+      const styleOpts = [
+        { v: "general", label: "\u901A\u7528\uFF08\u4E0D\u8FFD\u52A0\u98CE\u683C\u524D\u7F00\uFF09" },
+        { v: "anime", label: "\u52A8\u6F2B\u63D2\u753B" },
+        { v: "realistic", label: "\u5199\u5B9E\u6444\u5F71" },
+        { v: "ink", label: "\u4E1C\u65B9\u6C34\u58A8" }
+      ].map((o) => `<option value="${o.v}" ${ig.promptStyle === o.v ? "selected" : ""}>${o.label}</option>`).join("");
+      const displayOpts = [
+        { v: "append", label: "\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\uFF08\u9ED8\u8BA4\uFF09" },
+        { v: "separate", label: "\u72EC\u7ACB system \u697C\u5C42" }
+      ].map((o) => `<option value="${o.v}" ${ig.displayMode === o.v ? "selected" : ""}>${o.label}</option>`).join("");
+      const portHint = ig.backendType === "comfyui" ? "8188" : ig.backendType === "cloud" ? "\u5B8C\u6574 BaseURL\uFF0C\u5982 https://api.siliconflow.cn/v1" : "7860";
+      const isCloud = ig.backendType === "cloud";
+      const isComfy = ig.backendType === "comfyui";
+      return `<div class="wm-card">
+      <div class="wm-h">\u{1F3A8} \u751F\u56FE\u914D\u7F6E</div>
+      <div class="wm-hint">AI \u6BCF\u6B21\u56DE\u590D\u540E\uFF0C\u81EA\u52A8\u8C03\u7528 LLM \u628A\u56DE\u590D\u6574\u5408\u6210\u753B\u9762\u63D0\u793A\u8BCD\uFF0C\u518D\u9001\u751F\u56FE\u540E\u7AEF\u51FA\u56FE\u3002<b>\u56FE\u7247\u4E0D\u8FDB\u5BF9\u8BDD\u4E0A\u4E0B\u6587</b>\uFF08\u7528\u6807\u8BB0\u5305\u88F9\uFF0C\u6CE8\u5165\u65F6\u5254\u9664\uFF09\u3002\u590D\u7528\u4E0A\u65B9\u300CLLM \u8C03\u7528\u300D\u914D\u7F6E\u505A\u63D0\u793A\u8BCD\u6574\u5408\uFF0C\u65E0\u9700\u989D\u5916\u914D LLM\u3002</div>
+      <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled ? "checked" : ""}/> \u542F\u7528\u751F\u56FE\u529F\u80FD</label>
+      <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger ? "checked" : ""}/> \u81EA\u52A8\u89E6\u53D1\uFF08AI \u56DE\u590D\u843D\u5E93\u540E\u81EA\u52A8\u751F\u56FE\uFF1B\u5173\u95ED\u5219\u4EC5\u624B\u52A8\u70B9\u300C\u{1F3A8} \u7ACB\u5373\u751F\u56FE\u300D\u6309\u94AE\uFF09</label>
+      <div class="wm-divider"></div>
+      <label class="wm-row">\u540E\u7AEF\u7C7B\u578B
+        <select id="ig-backend">${backendOpts}</select>
+      </label>
+      <label class="wm-row">\u540E\u7AEF\u5730\u5740 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl || "")}" placeholder="${isCloud ? "https://api.siliconflow.cn/v1" : "http://127.0.0.1:" + portHint}"/></label>
+      <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? "ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u4F1A\u8C03\u7528 /prompt \u63D0\u4EA4\u3001/history \u8F6E\u8BE2\u3001/view \u53D6\u56FE\u3002" : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u8C03\u7528 /sdapi/v1/txt2img\u3002"}</div>
+      <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey || "")}" placeholder="${isCloud ? "sk-...\uFF08\u4E91\u7AEF\u5FC5\u586B\uFF09" : "\u672C\u5730\u901A\u5E38\u7559\u7A7A"}"/></label>
+      <label class="wm-row">\u6A21\u578B / Checkpoint<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="${isCloud ? "\u5982 Kwai-Kolors/Kolors" : "\u5982 v1-5-pruned-emaonly.safetensors\uFF08\u7559\u7A7A\u7528\u540E\u7AEF\u5F53\u524D\u6A21\u578B\uFF09"}"/></label>
+      ${isCloud ? `<label class="wm-row">\u4E91\u7AEF API \u8DEF\u5F84<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath || "/images/generations")}" placeholder="/images/generations"/></label>
+      <div class="wm-hint">\u62FC\u5728 apiUrl \u540E\u3002SiliconFlow / OpenAI \u517C\u5BB9\u7AEF\u70B9\u90FD\u7528 <code>/images/generations</code>\u3002</div>` : ""}
+      <div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">\u51FA\u56FE\u53C2\u6570</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label class="wm-row" style="flex:1;min-width:120px">\u5BBD<input id="ig-w" type="number" min="64" max="2048" step="64" value="${Number(ig.width) || 512}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u9AD8<input id="ig-h" type="number" min="64" max="2048" step="64" value="${Number(ig.height) || 768}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">\u6B65\u6570<input id="ig-steps" type="number" min="1" max="100" value="${Number(ig.steps) || 20}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">CFG<input id="ig-cfg" type="number" min="1" max="20" step="0.5" value="${Number(ig.cfgScale) || 7}"/></label>
+      </div>
+      ${!isCloud ? `<label class="wm-row">\u91C7\u6837\u5668 (\u7559\u7A7A\u7528\u9ED8\u8BA4)<input id="ig-sampler" value="${escapeHtml(ig.sampler || "")}" placeholder="Euler a / DPM++ 2M Karras"/></label>` : ""}
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u8D1F\u9762\u63D0\u793A\u8BCD\uFF08\u53EF\u9009\uFF09
+        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digits, cropped, worst quality">${escapeHtml(ig.negativePrompt || "")}</textarea>
+      </label>
+      <div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">\u63D0\u793A\u8BCD\u98CE\u683C\u4E0E\u5C55\u793A</div>
+      <label class="wm-row">\u753B\u9762\u98CE\u683C\uFF08\u8FFD\u52A0\u524D\u7F00\uFF0C\u5F15\u5BFC\u51FA\u56FE\u8C03\u6027\uFF09
+        <select id="ig-style">${styleOpts}</select>
+      </label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u81EA\u5B9A\u4E49\u63D0\u793A\u8BCD\u6A21\u677F\uFF08\u53EF\u9009\uFF0C\u542B {{prompt}} \u5360\u4F4D\u7B26\uFF09
+        <textarea id="ig-tpl" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="\u5982\uFF1Amasterpiece, best quality, {{prompt}}, detailed background">${escapeHtml(ig.promptTemplate || "")}</textarea>
+      </label>
+      <div class="wm-hint">LLM \u6574\u5408\u51FA\u7684\u753B\u9762\u63CF\u8FF0\u4F1A\u66FF\u6362 {{prompt}}\u3002\u4E0D\u542B {{prompt}} \u65F6\u4F5C\u4E3A\u540E\u7F00\u8FFD\u52A0\u3002</div>
+      <label class="wm-row">\u56FE\u7247\u5C55\u793A\u65B9\u5F0F
+        <select id="ig-display">${displayOpts}</select>
+      </label>
+      <div class="wm-hint">\u300C\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\u300D\uFF1A\u56FE\u7247\u7D27\u8DDF AI \u56DE\u590D\u4E0B\u65B9\u3002\u300C\u72EC\u7ACB system \u697C\u5C42\u300D\uFF1A\u5355\u72EC\u4E00\u5C42\u663E\u793A\u3002\u4E24\u79CD\u65B9\u5F0F\u5747\u4E0D\u8FDB\u4E0A\u4E0B\u6587\u3002</div>
+      ${isComfy ? `<div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41\uFF08\u53EF\u9009\uFF09</div>
+      <div class="wm-hint">\u7C98\u8D34 ComfyUI <b>prompt API \u683C\u5F0F</b>\u7684\u5DE5\u4F5C\u6D41 JSON\uFF08\u5728 ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u5F97\u5230\u7684 .json \u5373\u6B64\u683C\u5F0F\uFF09\u3002\u7528\u5360\u4F4D\u7B26\u6807\u8BB0\u5173\u952E\u53C2\u6570\u4F4D\u7F6E\uFF0C\u751F\u56FE\u65F6\u81EA\u52A8\u66FF\u6362\uFF1A<br/><code>{{prompt}}</code> \u6B63\u5411\u63D0\u793A\u8BCD / <code>{{negative}}</code> \u8D1F\u9762 / <code>{{width}}</code> <code>{{height}}</code> \u5C3A\u5BF8 / <code>{{steps}}</code> <code>{{cfg}}</code> \u91C7\u6837\u53C2\u6570\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4 txt2img \u5DE5\u4F5C\u6D41\u3002</div>
+      <textarea id="ig-comfy" rows="6" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"steps":"{{steps}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>` : ""}
+      <div class="wm-divider"></div>
+      <div class="wm-hint">\u{1F4A1} \u63D0\u793A\uFF1A\u914D\u7F6E\u5B8C\u6210\u540E\u70B9\u4E0A\u65B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u4F1A\u771F\u7684\u51FA\u4E00\u5F20\u6D4B\u8BD5\u56FE\uFF08\u7528 "a cute cat" \u505A prompt\uFF09\uFF0C\u9A8C\u8BC1\u540E\u7AEF\u8FDE\u901A\u6027\u3002\u751F\u56FE\u63D0\u793A\u8BCD\u590D\u7528\u300CLLM \u8C03\u7528\u300D\u6807\u7B7E\u9875\u7684\u914D\u7F6E\uFF0C\u65E0\u9700\u5728\u6B64\u91CD\u590D\u586B\u3002</div>
     </div>`;
     }
     function renderPaneLore(s) {
@@ -4858,6 +5372,7 @@ ${p.summary || ""}`.trim() });
     }
     function init() {
       injectButton();
+      injectImageButton();
       if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook().catch((e) => console.warn("[WarmMemo] \u4E16\u754C\u4E66\u7ED1\u5B9A\u5931\u8D25", e));
       WM.Injection.init();
       const es = window.eventSource && window.eventSource.eventNames ? window.eventSource : window.SillyTavern && window.SillyTavern.eventSource;
@@ -4867,7 +5382,55 @@ ${p.summary || ""}`.trim() });
         const evSent = names.MESSAGE_SENT || "MESSAGE_SENT";
         es.on(evReceived, autoSummaryHook);
         es.on(evSent, autoSummaryHook);
+        es.on(evReceived, autoImageHook);
       }
+    }
+    function injectImageButton() {
+      if (document.getElementById("warmmemo-img-btn")) return;
+      const container = findInputContainer();
+      if (!container) return;
+      const btn = document.createElement("button");
+      btn.id = "warmmemo-img-btn";
+      btn.className = "wm-input-btn menu_button";
+      btn.type = "button";
+      btn.title = "\u6E29\u8BB0 \xB7 \u5BF9\u5F53\u524D AI \u56DE\u590D\u751F\u56FE";
+      btn.textContent = "\u{1F3A8} \u751F\u56FE";
+      btn.onclick = async () => {
+        const s = WM.Settings.load();
+        if (!s.imageGen || s.imageGen.enabled !== true) {
+          toast("\u{1F3A8} \u751F\u56FE\u672A\u5F00\u542F\uFF0C\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E\u2026");
+          WM._cfgTab = "img";
+          openPanel();
+          return;
+        }
+        if (WM.ImageGen && WM.ImageGen.isGenerating && WM.ImageGen.isGenerating()) {
+          toast("\u{1F3A8} \u6B63\u5728\u751F\u56FE\u4E2D\uFF0C\u8BF7\u7A0D\u5019\u2026");
+          return;
+        }
+        await WM.ImageGen.triggerImageGeneration({});
+      };
+      const memBtn = document.getElementById("warmmemo-btn");
+      if (memBtn && memBtn.parentNode === container) {
+        container.insertBefore(btn, memBtn.nextSibling);
+      } else {
+        container.appendChild(btn);
+      }
+    }
+    let _lastImgAt = 0;
+    async function autoImageHook() {
+      const s = WM.Settings.load();
+      const ig = s.imageGen || {};
+      if (ig.enabled !== true || ig.autoTrigger !== true) return;
+      const now = Date.now();
+      if (now - _lastImgAt < 2e3) return;
+      _lastImgAt = now;
+      setTimeout(async () => {
+        try {
+          await WM.ImageGen.triggerImageGeneration({ silent: false });
+        } catch (e) {
+          toast("\u{1F3A8} \u81EA\u52A8\u751F\u56FE\u5931\u8D25 - " + (e.message || e));
+        }
+      }, 3e3);
     }
     let _lastAutoAt = 0;
     async function autoSummaryHook() {
@@ -4925,7 +5488,7 @@ ${p.summary || ""}`.trim() });
         t.style.transition = "opacity .5s";
       }, 3200);
     }
-    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
+    WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot, toast, openPanel };
   })();
 
   // src/index.js

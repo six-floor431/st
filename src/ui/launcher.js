@@ -1168,6 +1168,7 @@
       { key: 'vec', label: '向量(Embedding)' },
       { key: 'rerank', label: '重排序(Rerank)' },
       { key: 'lore', label: '世界书' },
+      { key: 'img', label: '生图' },
       { key: 'err', label: '错误报告' },
     ];
     const active = (WM._cfgTab) || 'llm';
@@ -1175,7 +1176,7 @@
       <div class="wm-subtabs" id="cfg-tabs">
         ${tabs.map((t) => `<button data-tab="${t.key}" class="${t.key === active ? 'active' : ''}">${t.label}</button>`).join('')}
       </div>
-      <div id="cfg-pane">${active === 'llm' ? renderPaneLlm(s) : active === 'mem' ? renderPaneMemory(s) : active === 'vec' ? renderPaneVector(s) : active === 'rerank' ? renderPaneRerank(s) : active === 'lore' ? renderPaneLore(s) : active === 'err' ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
+      <div id="cfg-pane">${active === 'llm' ? renderPaneLlm(s) : active === 'mem' ? renderPaneMemory(s) : active === 'vec' ? renderPaneVector(s) : active === 'rerank' ? renderPaneRerank(s) : active === 'lore' ? renderPaneLore(s) : active === 'img' ? renderPaneImage(s) : active === 'err' ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">测试连接</button>
         <button id="c-save" class="wm-btn primary">保存设置</button>
@@ -1195,6 +1196,7 @@
         else if (key === 'vec') pane.innerHTML = renderPaneVector(s);
         else if (key === 'rerank') pane.innerHTML = renderPaneRerank(s);
         else if (key === 'lore') pane.innerHTML = renderPaneLore(s);
+        else if (key === 'img') pane.innerHTML = renderPaneImage(s);
         else if (key === 'err') pane.innerHTML = renderPaneErrors(s);
         bindPaneEvents(body, s);
       };
@@ -1289,6 +1291,29 @@
         s.worldToLorebook = q('#c-wlore').checked;
       }
     }
+    if (!scope || scope === 'img') {
+      if (q('#ig-url') !== null) {
+        s.imageGen = {
+          enabled: q('#ig-on') ? q('#ig-on').checked : false,
+          autoTrigger: q('#ig-auto') ? q('#ig-auto').checked : false,
+          backendType: q('#ig-backend') ? q('#ig-backend').value : 'sd-webui',
+          apiUrl: q('#ig-url') ? q('#ig-url').value.trim() : '',
+          apiKey: q('#ig-key') ? q('#ig-key').value.trim() : '',
+          model: q('#ig-model') ? q('#ig-model').value.trim() : '',
+          negativePrompt: q('#ig-neg') ? q('#ig-neg').value : '',
+          width: parseInt(q('#ig-w') ? q('#ig-w').value : '512', 10) || 512,
+          height: parseInt(q('#ig-h') ? q('#ig-h').value : '768', 10) || 768,
+          steps: parseInt(q('#ig-steps') ? q('#ig-steps').value : '20', 10) || 20,
+          cfgScale: parseFloat(q('#ig-cfg') ? q('#ig-cfg').value : '7') || 7,
+          sampler: q('#ig-sampler') ? q('#ig-sampler').value.trim() : '',
+          comfyWorkflow: q('#ig-comfy') ? q('#ig-comfy').value : '',
+          cloudPath: q('#ig-cloud-path') ? q('#ig-cloud-path').value.trim() : '/images/generations',
+          displayMode: q('#ig-display') ? q('#ig-display').value : 'append',
+          promptStyle: q('#ig-style') ? q('#ig-style').value : 'general',
+          promptTemplate: q('#ig-tpl') ? q('#ig-tpl').value : '',
+        };
+      }
+    }
   }
 
   // 绑定 cfg 内各面板的交互事件（每次渲染面板后调用）
@@ -1355,7 +1380,7 @@
       if (oldTakeover !== newTakeover && WM.Worldbook && WM.Worldbook.syncEntryEnabled) {
         try { await WM.Worldbook.syncEntryEnabled(); } catch (e) {}
       }
-      const labelMap = { llm: 'LLM 调用', mem: '记忆与注入', vec: '向量(Embedding)', rerank: '重排序(Rerank)', lore: '世界书', err: '错误报告' };
+      const labelMap = { llm: 'LLM 调用', mem: '记忆与注入', vec: '向量(Embedding)', rerank: '重排序(Rerank)', lore: '世界书', img: '生图', err: '错误报告' };
       toast('🌿 已保存「' + (labelMap[scope] || scope) + '」设置');
     };
 
@@ -1409,6 +1434,13 @@
       else if (scope === 'vec') { await testEmb(); }
       else if (scope === 'rerank') { await testRk(); }
       else if (scope === 'lore') { await testWorld(); }
+      else if (scope === 'img') { // 生图：用极简 prompt 测一次后端连通性（会真的出一张图）
+        try {
+          const r = await WM.ImageGen.testConnection(tmp);
+          add('生图(' + (tmp.imageGen && tmp.imageGen.backendType || 'sd-webui') + ')', r, r.success ? '已返回图片' : '');
+        } catch (e) { add('生图', { success: false }, String(e.message || e)); }
+        await testLlm(); // 生图提示词也依赖 LLM，顺带测一下
+      }
       else { await testLlm(); await testWorld(); } // err 等其它：默认测 LLM+世界书
       box.innerHTML = rows.join('');
     };
@@ -1463,7 +1495,79 @@
       </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（在向量接管基础上，用温记自己的 Rerank 重排召回结果）</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">需配合「接管向量检索」一起开启才生效：向量召回后再用你配置的 Rerank 服务重排，提升相关性。单独开启无效。</div>
+      <div class="wm-hint" style="margin:-2px 0 4px">需配合「接管向量检索」一起开启才生效：向量召回后再用你配置的 Rerank 服务重排召回结果，提升相关性。单独开启无效。</div>
+    </div>`;
+  }
+
+  // 生图面板：温记独立配置，不依赖酒馆原生 SD 模块。
+  // 流程：AI 回复 → LLM 整合画面提示词 → 送生图后端（SD WebUI/ComfyUI/云端）→ 图片插入对话（不进上下文）
+  function renderPaneImage(s) {
+    const ig = s.imageGen || {};
+    const backendOpts = [
+      { v: 'sd-webui', label: 'SD WebUI (AUTOMATIC1111)' },
+      { v: 'comfyui', label: 'ComfyUI' },
+      { v: 'cloud', label: '云端 OpenAI 兼容 (SiliconFlow/OpenAI 等)' },
+    ].map((o) => `<option value="${o.v}" ${ig.backendType===o.v?'selected':''}>${o.label}</option>`).join('');
+    const styleOpts = [
+      { v: 'general', label: '通用（不追加风格前缀）' },
+      { v: 'anime', label: '动漫插画' },
+      { v: 'realistic', label: '写实摄影' },
+      { v: 'ink', label: '东方水墨' },
+    ].map((o) => `<option value="${o.v}" ${ig.promptStyle===o.v?'selected':''}>${o.label}</option>`).join('');
+    const displayOpts = [
+      { v: 'append', label: '追加到 AI 楼层末尾（默认）' },
+      { v: 'separate', label: '独立 system 楼层' },
+    ].map((o) => `<option value="${o.v}" ${ig.displayMode===o.v?'selected':''}>${o.label}</option>`).join('');
+    // 不同后端的默认端口提示
+    const portHint = ig.backendType === 'comfyui' ? '8188' : (ig.backendType === 'cloud' ? '完整 BaseURL，如 https://api.siliconflow.cn/v1' : '7860');
+    const isCloud = ig.backendType === 'cloud';
+    const isComfy = ig.backendType === 'comfyui';
+    return `<div class="wm-card">
+      <div class="wm-h">🎨 生图配置</div>
+      <div class="wm-hint">AI 每次回复后，自动调用 LLM 把回复整合成画面提示词，再送生图后端出图。<b>图片不进对话上下文</b>（用标记包裹，注入时剔除）。复用上方「LLM 调用」配置做提示词整合，无需额外配 LLM。</div>
+      <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled?'checked':''}/> 启用生图功能</label>
+      <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger?'checked':''}/> 自动触发（AI 回复落库后自动生图；关闭则仅手动点「🎨 立即生图」按钮）</label>
+      <div class="wm-divider"></div>
+      <label class="wm-row">后端类型
+        <select id="ig-backend">${backendOpts}</select>
+      </label>
+      <label class="wm-row">后端地址 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl||'')}" placeholder="${isCloud ? 'https://api.siliconflow.cn/v1' : 'http://127.0.0.1:' + portHint}"/></label>
+      <div class="wm-hint">${isCloud ? '云端 OpenAI 兼容端点的 BaseURL，自动拼接下方的 API 路径。' : (isComfy ? 'ComfyUI 服务地址，默认端口 8188。会调用 /prompt 提交、/history 轮询、/view 取图。' : 'SD WebUI (AUTOMATIC1111) 服务地址，默认端口 7860。调用 /sdapi/v1/txt2img。')}</div>
+      <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey||'')}" placeholder="${isCloud ? 'sk-...（云端必填）' : '本地通常留空'}"/></label>
+      <label class="wm-row">模型 / Checkpoint<input id="ig-model" value="${escapeHtml(ig.model||'')}" placeholder="${isCloud ? '如 Kwai-Kolors/Kolors' : '如 v1-5-pruned-emaonly.safetensors（留空用后端当前模型）'}"/></label>
+      ${isCloud ? `<label class="wm-row">云端 API 路径<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath||'/images/generations')}" placeholder="/images/generations"/></label>
+      <div class="wm-hint">拼在 apiUrl 后。SiliconFlow / OpenAI 兼容端点都用 <code>/images/generations</code>。</div>` : ''}
+      <div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">出图参数</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label class="wm-row" style="flex:1;min-width:120px">宽<input id="ig-w" type="number" min="64" max="2048" step="64" value="${Number(ig.width)||512}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">高<input id="ig-h" type="number" min="64" max="2048" step="64" value="${Number(ig.height)||768}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">步数<input id="ig-steps" type="number" min="1" max="100" value="${Number(ig.steps)||20}"/></label>
+        <label class="wm-row" style="flex:1;min-width:120px">CFG<input id="ig-cfg" type="number" min="1" max="20" step="0.5" value="${Number(ig.cfgScale)||7}"/></label>
+      </div>
+      ${!isCloud ? `<label class="wm-row">采样器 (留空用默认)<input id="ig-sampler" value="${escapeHtml(ig.sampler||'')}" placeholder="Euler a / DPM++ 2M Karras"/></label>` : ''}
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">负面提示词（可选）
+        <textarea id="ig-neg" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="lowres, bad anatomy, bad hands, missing fingers, extra digits, cropped, worst quality">${escapeHtml(ig.negativePrompt||'')}</textarea>
+      </label>
+      <div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">提示词风格与展示</div>
+      <label class="wm-row">画面风格（追加前缀，引导出图调性）
+        <select id="ig-style">${styleOpts}</select>
+      </label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">自定义提示词模板（可选，含 {{prompt}} 占位符）
+        <textarea id="ig-tpl" rows="2" style="width:100%;font-family:monospace;font-size:12px" placeholder="如：masterpiece, best quality, {{prompt}}, detailed background">${escapeHtml(ig.promptTemplate||'')}</textarea>
+      </label>
+      <div class="wm-hint">LLM 整合出的画面描述会替换 {{prompt}}。不含 {{prompt}} 时作为后缀追加。</div>
+      <label class="wm-row">图片展示方式
+        <select id="ig-display">${displayOpts}</select>
+      </label>
+      <div class="wm-hint">「追加到 AI 楼层末尾」：图片紧跟 AI 回复下方。「独立 system 楼层」：单独一层显示。两种方式均不进上下文。</div>
+      ${isComfy ? `<div class="wm-divider"></div>
+      <div class="wm-h" style="margin-top:0">ComfyUI 工作流（可选）</div>
+      <div class="wm-hint">粘贴 ComfyUI <b>prompt API 格式</b>的工作流 JSON（在 ComfyUI 里「保存(Ctrl+S)」得到的 .json 即此格式）。用占位符标记关键参数位置，生图时自动替换：<br/><code>{{prompt}}</code> 正向提示词 / <code>{{negative}}</code> 负面 / <code>{{width}}</code> <code>{{height}}</code> 尺寸 / <code>{{steps}}</code> <code>{{cfg}}</code> 采样参数。留空用内置默认 txt2img 工作流。</div>
+      <textarea id="ig-comfy" rows="6" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"steps":"{{steps}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>` : ''}
+      <div class="wm-divider"></div>
+      <div class="wm-hint">💡 提示：配置完成后点上方「测试连接」会真的出一张测试图（用 "a cute cat" 做 prompt），验证后端连通性。生图提示词复用「LLM 调用」标签页的配置，无需在此重复填。</div>
     </div>`;
   }
 
@@ -1537,6 +1641,7 @@
 
   function init() {
     injectButton();
+    injectImageButton();
     // 绑定 WarmMemo 世界书到当前角色卡，实现「每个角色卡数据隔离」
     if (WM.Worldbook && WM.Worldbook.ensureLorebook) WM.Worldbook.ensureLorebook().catch((e) => console.warn('[WarmMemo] 世界书绑定失败', e));
     WM.Injection.init();
@@ -1549,7 +1654,60 @@
       const evSent = names.MESSAGE_SENT || 'MESSAGE_SENT';
       es.on(evReceived, autoSummaryHook); // 主：流式真正结束后
       es.on(evSent, autoSummaryHook);    // 备：兼容旧版/无 RECEIVED 环境
+      es.on(evReceived, autoImageHook);  // 生图：AI 回复落库后自动触发（内部按 autoTrigger 开关判定）
     }
+  }
+
+  // 生图按钮：注入到输入框旁，与「🌿 记忆」并列。点击对最新 AI 回复生图。
+  function injectImageButton() {
+    if (document.getElementById('warmmemo-img-btn')) return;
+    const container = findInputContainer();
+    if (!container) return; // 容器找不到时不注入（用户可开 autoTrigger 或在面板手动触发）
+    const btn = document.createElement('button');
+    btn.id = 'warmmemo-img-btn';
+    btn.className = 'wm-input-btn menu_button';
+    btn.type = 'button';
+    btn.title = '温记 · 对当前 AI 回复生图';
+    btn.textContent = '🎨 生图';
+    btn.onclick = async () => {
+      const s = WM.Settings.load();
+      if (!s.imageGen || s.imageGen.enabled !== true) {
+        toast('🎨 生图未开启，正在打开设置…');
+        WM._cfgTab = 'img';
+        openPanel();
+        return;
+      }
+      if (WM.ImageGen && WM.ImageGen.isGenerating && WM.ImageGen.isGenerating()) {
+        toast('🎨 正在生图中，请稍候…');
+        return;
+      }
+      await WM.ImageGen.triggerImageGeneration({});
+    };
+    // 紧挨「🌿 记忆」按钮后面插入
+    const memBtn = document.getElementById('warmmemo-btn');
+    if (memBtn && memBtn.parentNode === container) {
+      container.insertBefore(btn, memBtn.nextSibling);
+    } else {
+      container.appendChild(btn);
+    }
+  }
+
+  // 自动生图钩子：AI 回复落库后触发。延迟 3s 让总结先跑（生图比总结慢且不紧急）。
+  let _lastImgAt = 0;
+  async function autoImageHook() {
+    const s = WM.Settings.load();
+    const ig = s.imageGen || {};
+    if (ig.enabled !== true || ig.autoTrigger !== true) return;
+    const now = Date.now();
+    if (now - _lastImgAt < 2000) return; // 2s 内只跑一次，避免和总结双触发重复
+    _lastImgAt = now;
+    setTimeout(async () => {
+      try {
+        await WM.ImageGen.triggerImageGeneration({ silent: false });
+      } catch (e) {
+        toast('🎨 自动生图失败 - ' + (e.message || e));
+      }
+    }, 3000);
   }
 
   let _lastAutoAt = 0; // 去重：避免 MESSAGE_SENT + MESSAGE_RECEIVED 双触发重复
@@ -1612,6 +1770,6 @@
     t._timer = setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .5s'; }, 3200);
   }
 
-  WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot };
+  WM.Launcher = { init, renderTab, renderCfg, renderWorld, renderAuto, renderMem, renderRel, renderItem, renderPlot, toast, openPanel };
 })();
 

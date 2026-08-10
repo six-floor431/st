@@ -127,8 +127,30 @@
   // 用唯一包裹标记（START/END）圈定本次注入范围，避免贪心正则误删温记块之后的其它 system 内容。
   const WM_BLOCK_START = '【温记·BEGIN】';
   const WM_BLOCK_END = '【温记·END】';
+  // 图片标记：与 image-generator.js 的 IMG_START/IMG_END 对齐。
+  // 生图模块把图片 markdown 用 <!-- WM_IMG_START -->...<!-- WM_IMG_END --> 包裹后写入楼层 message，
+  // 注入上下文时按此标记剔除整段图片块，保证「图片不进上下文」（用户核心诉求）。
+  const IMG_START_TAG = '<!-- WM_IMG_START -->';
+  const IMG_END_TAG = '<!-- WM_IMG_END -->';
+  // 剥离所有楼层 message 中的图片块（含标记本身与中间的 markdown 图片语法）
+  function stripImageBlocks(content) {
+    if (!content) return content;
+    let out = String(content);
+    // 优先按成对标记精确剔除（含中间任意内容，跨行）
+    out = out.replace(new RegExp(IMG_START_TAG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + IMG_END_TAG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '');
+    // 兜底：残留的单标记或裸 markdown 图片（![alt](url)）也清掉，避免 URL 进上下文
+    out = out.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
+    return out.replace(/\n{3,}/g, '\n\n').trim();
+  }
   function injectBlockIntoChat(chat, block) {
-    if (!Array.isArray(chat) || !chat.length || !block) return chat;
+    if (!Array.isArray(chat) || !chat.length) return chat;
+    // 先剥离所有楼层的图片块，确保「图片不进上下文」
+    for (const m of chat) {
+      if (m && typeof m.content === 'string' && (m.content.indexOf(IMG_START_TAG) >= 0 || m.content.indexOf('![') >= 0)) {
+        m.content = stripImageBlocks(m.content);
+      }
+    }
+    if (!block) return chat;
     const sys = chat.find((m) => m && m.role === 'system');
     const wrapped = WM_BLOCK_START + '\n' + block + '\n' + WM_BLOCK_END;
     if (sys) {
