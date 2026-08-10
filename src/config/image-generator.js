@@ -72,9 +72,14 @@
       // 给出有行动价值的报错信息（告诉用户开 CORS 或用代理）
       const netMsg = String(netErr && netErr.message ? netErr.message : netErr);
       const origHost = (function () { try { return (new URL(url)).host; } catch (_) { return url; } })();
+      const isComfy = /127\.0\.0\.1:8188|localhost:8188/.test(String(url));
+      const comfyExtra = isComfy
+        ? '\n  （ComfyUI 新版本还有 Host/Origin 校验 → 额外加参数 --disable-header-check）\n'
+          + '  完整启动参数示例（推荐）：python main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check'
+        : '';
       const hint = '浏览器无法直连 ' + origHost + '（可能是 ComfyUI/SD WebUI 未开启 CORS 或代理不通）。\n'
         + '解决方式（任选其一）：\n'
-        + '  ① 启动 ComfyUI 时加参数：python main.py --enable-cors-header "*"\n'
+        + '  ① 启动 ComfyUI 时加参数：python main.py --enable-cors-header "*"' + comfyExtra + '\n'
         + '     SD WebUI 启动时加参数：--api --cors-allow-origins=*\n'
         + '  ② 走温记同源代理（外网穿透场景）：在反代里把 "' + String((settings && settings.imageGen && settings.imageGen.imgProxyPath) || '/img')
         + '/*" 转发到 ' + origHost + '/*，温记已自动改写请求 URL。\n'
@@ -83,6 +88,58 @@
       err.name = 'ImageCorsError';
       throw err;
     }
+  }
+
+  // 提示词清洗：LLM 经常输出「叙事/解释/元思考」文字（"也许我们可以…""考虑到…""另一种可能…"），
+  // 这些根本不是画面描述，会被直接塞给生图模型的 CLIP，浪费 token 且污染提示词。
+  // 处理：
+  //  1) 先按 <ImagePrompt> 标签取内容（之前已做），这里是二次防御
+  //  2) 按句子/段落分句，分句里出现"思考/解释/旁白"类关键词的整个句子丢弃
+  //  3) 去真实换行/制表符/多余空白，合成一行纯 tag 式 prompt
+  //  4) —— 关键：过滤后若为空，直接返回空串（绝不回退到原文），让上层抛错并重试，
+  //     避免把 LLM 的整段分析废话塞进生图 prompt。
+  function sanitizePrompt(raw) {
+    if (!raw) return '';
+    let s = String(raw);
+    // 先剥掉 <ImagePrompt> 标签（保险）
+    s = s.replace(/<\/?ImagePrompt[^>]*>/gi, '');
+    // 剥掉 ``` 代码块包裹
+    s = s.replace(/^```[a-zA-Z]*\s*/gm, '').replace(/```\s*$/gm, '');
+    // 先去掉所有控制字符（0x00-0x1F、0x7F），只保留可见字符 + 常用空白
+    // 这是 JSON 解析安全的第一道防线——LLM 偶尔会输出零宽字符等奇怪东西
+    s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // 分句：按中文句号/问号/感叹号/换行/英文 .?! 切
+    const parts = s.split(/[\n\r。！？!?\.；;]+/).map((p) => p.trim()).filter(Boolean);
+    const NOISE_KEYWORDS = [
+      // 中文：LLM 自言自语/解释类关键词
+      '也许', '或许', '可能', '考虑到', '鉴于', '另一种可能', '另外', '此外',
+      '但是', '然而', '不过', '我们可以', '我们应该', '我可以', '如果', '假设',
+      '无法阅读', '无法识别', '生图模型', '不能理解', '无法理解', '注意', '提示',
+      '请', '要求', '输出', '如果我们', '对于', '关于', '这种', '那个', '一个抽象场景',
+      '比喻性', '示意的方式', '不是具体叙事', '抽象', 'welcome', '欢迎消息',
+      '画面元素', '肉眼可见', '提炼规范', '输出契约', '格式要求', '以下是',
+      '让我', '我们来', '首先', '其次', '最后', '总结一下', '综上所述',
+      // 英文
+      'maybe', 'perhaps', 'however', 'but', 'if we', 'consider', 'considering',
+      'note that', 'note:', 'prompt', 'output:', 'welcome', 'let me', 'i think',
+      'here are', 'first', 'second', 'finally', 'in conclusion', 'to summarize',
+    ];
+    const filtered = parts.filter((p) => {
+      if (p.length < 2) return false;
+      const lower = p.toLowerCase();
+      return !NOISE_KEYWORDS.some((kw) => p.indexOf(kw) >= 0 || lower.indexOf(kw.toLowerCase()) >= 0);
+    });
+    // —— 修复：过滤后为空就返回空，绝不回退到原文
+    // 回退原文等于把 LLM 的整段分析废话全塞进去，比不出图还糟糕
+    if (!filtered.length) return '';
+    const joined = filtered.join(', ');
+    // 标准化空白：所有 \r\n\t 多空格 → 单个空格；去首尾逗号/空格
+    return joined
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/[,，]{2,}/g, ',')
+      .replace(/^[,，\s]+|[,，\s]+$/g, '')
+      .trim();
   }
 
   // ── 标签提取（与 summary.js extractTag 同逻辑，独立实现避免循环依赖）──
@@ -137,8 +194,11 @@
     const tagged = extractTag(out, 'ImagePrompt');
     // 兜底：模型偶尔不按标签输出，直接用清洗后的全文
     const cleaned = String(out || '').replace(/^```[a-zA-Z]*\s*/gim, '').replace(/```\s*$/g, '').trim();
-    const result = (tagged || cleaned || '').trim();
-    if (!result) throw new Error('LLM 未生成有效画面提示词');
+    const raw = (tagged || cleaned || '').trim();
+    if (!raw) throw new Error('LLM 未生成有效画面提示词');
+    // 核心：最终做一次提示词清洗 → 去掉解释/废话/控制字符，得到纯 tag 列表
+    const result = sanitizePrompt(raw);
+    if (!result) throw new Error('LLM 画面提示词清洗后为空（模型输出的全是解释文字，请重试或降低 promptStyle 等级）');
     return result;
   }
 
@@ -242,6 +302,9 @@
       workflow = defaultComfyWorkflow();
     }
     const neg = buildFullNegative(settings);
+    // 所有占位符先洗一遍：去控制字符、去 LLM 叙事废话，确保塞进 JSON 字符串不会有语法错误
+    const cleanPrompt = sanitizePrompt(prompt);
+    const cleanNeg = sanitizePrompt(neg);
     const w = Number(ig.width) || 512;
     const h = Number(ig.height) || 768;
     const steps = Number(ig.steps) || 20;
@@ -254,23 +317,47 @@
       // 内置默认工作流且用户未选模型：报错明确提示让用户用"刷新模型列表"选一个
       throw new Error('ComfyUI：未选择 Checkpoint 模型。请点「模型/Checkpoint」输入框旁的「🔄 刷新列表」，从下拉框选一个你本地已有的模型名。');
     }
-    // 占位符替换
+    // 占位符替换：用 JSON.stringify(s).slice(1,-1) 得到合法 JSON 字符串字面量内容。
+    // JSON.stringify 自动正确转义：引号、反斜杠、\r、\n、\t、\b、\f、所有 0x00-0x1F 控制字符、U+2028/U+2029 行分隔符。
+    // —— 关键安全修复：replace 第二个参数用函数返回值，而不是字符串。
+    //    因为 String.replace(regex, string) 里 $ 有特殊含义（$&/$1/$'/ $`），prompt 含 $ 会破坏 JSON 结构。
+    //    用函数返回值则完全无特殊字符处理，值是什么就替换成什么。
     let workflowStr = JSON.stringify(workflow);
-    const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const esc = (anyVal) => {
+      const s = String(anyVal == null ? '' : anyVal);
+      const out = JSON.stringify(s);
+      return out.length >= 2 ? out.slice(1, -1) : out;
+    };
+    // 替换函数：每次匹配都返回转义后的值，避免 $ 特殊字符破坏 JSON
+    const rep = (val) => () => esc(val);
     workflowStr = workflowStr
-      .replace(/\{\{prompt\}\}/g, esc(prompt))
-      .replace(/\{\{negative\}\}/g, esc(neg))
-      .replace(/\{\{width\}\}/g, String(w))
-      .replace(/\{\{height\}\}/g, String(h))
-      .replace(/\{\{steps\}\}/g, String(steps))
-      .replace(/\{\{cfg\}\}/g, String(cfg))
-      .replace(/\{\{denoise\}\}/g, String(denoise))
-      .replace(/\{\{seed\}\}/g, String(seed))
-      .replace(/\{\{model\}\}/g, esc(model));
+      .replace(/\{\{prompt\}\}/g, rep(cleanPrompt))
+      .replace(/\{\{negative\}\}/g, rep(cleanNeg))
+      .replace(/\{\{width\}\}/g, rep(w))
+      .replace(/\{\{height\}\}/g, rep(h))
+      .replace(/\{\{steps\}\}/g, rep(steps))
+      .replace(/\{\{cfg\}\}/g, rep(cfg))
+      .replace(/\{\{denoise\}\}/g, rep(denoise))
+      .replace(/\{\{seed\}\}/g, rep(seed))
+      .replace(/\{\{model\}\}/g, rep(model));
     // —— 关键修复：ComfyUI /prompt 要求 body = { prompt: <nodes对象>, client_id: '唯一标识' }
     // 之前直接把 workflow JSON 当 body，服务器端拿不到 prompt 字段 → 要么 400 要么 CORS 预检失败后被浏览器吞成 ERR_FAILED
     let promptObj;
-    try { promptObj = JSON.parse(workflowStr); } catch (e) { throw new Error('工作流 JSON 占位符替换后解析失败：' + e.message); }
+    try { promptObj = JSON.parse(workflowStr); } catch (e) {
+      // 万一仍失败，把出错位置附近的片段打出来，便于定位是哪段提示词仍含异常字符
+      let posMatch = /position\s+(\d+)/i.exec(String(e && e.message ? e.message : e));
+      let snippet = '';
+      if (posMatch && posMatch[1]) {
+        const p = parseInt(posMatch[1], 10);
+        if (!isNaN(p)) {
+          const start = Math.max(0, p - 80);
+          const end = Math.min(workflowStr.length, p + 80);
+          snippet = '（上下文：…' + workflowStr.slice(start, end).replace(/[\r\n\t]/g, '↵') + '…）';
+        }
+      }
+      throw new Error('工作流 JSON 占位符替换后解析失败：' + (e.message || String(e)) + snippet
+        + '|提示词片段=' + String(cleanPrompt || '').slice(0, 120));
+    }
     const clientId = 'WarmMemo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
     const res = await wmFetch(base + '/prompt', {
@@ -386,31 +473,47 @@
       } catch (e) { return { ok: false, error: e.message || String(e) }; }
     }
     // ComfyUI：优先 /object_info/CheckpointLoaderSimple（兼容性最好）
+    // 失败兜底：/models/checkpoints（ComfyUI 新版支持）
+    // —— 关键修复：第一个请求无论是 HTTP !ok 还是网络异常（CORS 等），都要尝试兜底路径。
+    //   之前只有 !ok 时才兜底，CORS 错误直接进 catch 返回，导致用户以为只有 403。
+    let firstError = null;
     try {
       const res = await wmFetch(base + '/object_info/CheckpointLoaderSimple', { method: 'GET' }, settings);
       if (!res.ok) {
-        // 兜底：ComfyUI 新版本支持 GET /models/checkpoints
-        const res2 = await wmFetch(base + '/models/checkpoints', { method: 'GET' }, settings);
-        if (!res2.ok) {
-          const t = await res.text().catch(() => '');
-          return { ok: false, error: 'ComfyUI HTTP ' + res.status + '（object_info）：' + t.slice(0, 200) };
-        }
-        const arr = await res2.json();
-        const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
-          const val = typeof m === 'string' ? m : (m.name || m.filename || '');
-          return { value: val, label: val };
-        }).filter((m) => m.value);
+        firstError = 'ComfyUI HTTP ' + res.status + '（object_info）';
+      } else {
+        const j = await res.json();
+        // 结构：{ 'CheckpointLoaderSimple': { input: { required: { ckpt_name: [ [..文件列表], 'STRING' ] } } } }
+        const nodeInfo = j && (j.CheckpointLoaderSimple || j['CheckpointLoaderSimple']);
+        const list = nodeInfo && nodeInfo.input && nodeInfo.input.required
+          && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0])
+          ? nodeInfo.input.required.ckpt_name[0] : [];
+        const models = list.map((n) => ({ value: n, label: n }));
         return { ok: true, models };
       }
-      const j = await res.json();
-      // 结构：{ 'CheckpointLoaderSimple': { input: { required: { ckpt_name: [ [..文件列表], 'STRING' ] } } } }
-      const nodeInfo = j && (j.CheckpointLoaderSimple || j['CheckpointLoaderSimple']);
-      const list = nodeInfo && nodeInfo.input && nodeInfo.input.required
-        && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0])
-        ? nodeInfo.input.required.ckpt_name[0] : [];
-      const models = list.map((n) => ({ value: n, label: n }));
+    } catch (e) {
+      firstError = e.message || String(e);
+    }
+    // 兜底：/models/checkpoints
+    try {
+      const res2 = await wmFetch(base + '/models/checkpoints', { method: 'GET' }, settings);
+      if (!res2.ok) {
+        const t = await res2.text().catch(() => '');
+        return { ok: false, error: 'ComfyUI HTTP ' + res2.status + '（models/checkpoints）：' + t.slice(0, 200) + '（前一接口错误：' + String(firstError || '').slice(0, 80) + '）' };
+      }
+      const arr = await res2.json();
+      const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
+        const val = typeof m === 'string' ? m : (m.name || m.filename || '');
+        return { value: val, label: val };
+      }).filter((m) => m.value);
       return { ok: true, models };
-    } catch (e) { return { ok: false, error: e.message || String(e) }; }
+    } catch (e2) {
+      return { ok: false, error: 'ComfyUI 模型列表加载失败：' + (e2.message || String(e2)) + '\n（第一个接口：' + String(firstError || '').slice(0, 100) + '）'
+        + '\n\n解决方式（ComfyUI 启动参数缺一不可）：\n'
+        + '  python main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check\n\n'
+        + '--enable-cors-header 解决浏览器跨域拦截；\n'
+        + '--disable-header-check 解决 ComfyUI 新版的 Host/Origin 校验（即 403 错误）。' };
+    }
   }
 
   // 第二步：根据 backendType 分发到对应后端
@@ -475,11 +578,19 @@
   // 第四步：插入图片到对话
   //   append   → 追加到 AI 楼层 message 末尾（图片 markdown 用标记包裹，injection 时剔除）
   //   separate → 创建独立 system 楼层（同样用标记包裹，不进上下文）
+  // 视觉增强：
+  //   - 给图片外层包 <a href target="_blank">，点击新标签页看大图（像酒馆终端那样无限制查看原图）
+  //   - 给 <img> 加 inline style：取消 max-width/max-height 限制，保证显示完整且清晰
   async function insertImage(imageUrl, messageId, settings) {
     const ig = settings.imageGen || {};
     const alt = '温记生图 ' + new Date().toLocaleTimeString('zh-CN');
-    const markdown = '![' + alt + '](' + imageUrl + ')';
-    const wrapped = IMG_START + markdown + IMG_END;
+    const safeUrl = String(imageUrl || '').replace(/"/g, '%22').replace(/'/g, '%27');
+    // a 包 img：点击新标签页打开原图；img 样式去掉宽度限制、保持比例、加圆角视觉
+    const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="点击新标签页查看原图（无限制大小）">'
+      + '<img src="' + safeUrl + '" alt="' + alt + '"'
+      + ' style="max-width:100%!important;max-height:none!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1"'
+      + ' /></a>';
+    const wrapped = IMG_START + html + IMG_END;
     if (ig.displayMode === 'separate') {
       await createChatMessages([{ role: 'system', message: wrapped, is_hidden: false }], { refresh: 'affected' });
     } else {
@@ -494,22 +605,26 @@
   // ── 完整流程入口 ──
   // opts.messageId：指定对哪条 AI 消息生图（默认取最新 assistant 楼层）
   // opts.silent：静默模式（不弹 toast，仅返回结果）—— 自动触发时用
+  // opts.force：强制触发，忽略 autoTrigger（面板上「无限制立即生图」按钮用）
   // 返回 { ok, prompt, imageUrl, error }
-  let _generating = false; // 防重入锁
+  // —— 注意：已移除全局 _generating 防重入锁，允许连续点击多次排队生成 ——
+  //   SD WebUI/ComfyUI 本身有任务队列，连续请求会自动排队，终端会依次显示多批出图结果（像酒馆那样）
   async function triggerImageGeneration(opts) {
     opts = opts || {};
-    if (_generating) return { ok: false, error: '正在生图中，请稍候' };
     const settings = WM.Settings.load();
     const ig = settings.imageGen || {};
     if (ig.enabled === false) return { ok: false, error: '生图功能未开启（请在设置中开启）' };
+    // autoTrigger 校验：仅 opts.force=false 且走自动触发分支时检查 autoTrigger 开关
+    if (!opts.force && !ig.autoTrigger && opts.silent) {
+      // 静默+非强制：自动触发分支，开关未开 → 静默跳过（不要报错）
+      return { ok: false, error: 'autoTrigger 未开启，已跳过（可点「🎨 无限制立即生图」强制出图）', skipped: true };
+    }
 
-    _generating = true;
-    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 正在生成画面提示词…');
+    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 正在生成画面提示词…（可继续点击排队）');
 
     // 取目标 AI 楼层
     const aiMsg = getLastAIMessage(opts.messageId);
     if (!aiMsg || !aiMsg.message) {
-      _generating = false;
       return { ok: false, error: '没有可用的 AI 消息' };
     }
     const aiText = aiMsg.message;
@@ -519,7 +634,6 @@
     try {
       imagePrompt = await generateImagePrompt(aiText, settings);
     } catch (e) {
-      _generating = false;
       if (WM.ErrLog) await WM.ErrLog.add('image-prompt', e, { stage: 'prompt-gen', aiTextPreview: aiText.slice(0, 200) });
       const msg = '提示词生成失败：' + (e.message || e);
       if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 ' + msg);
@@ -529,14 +643,13 @@
     // 拼接完整生图 prompt
     const fullPrompt = buildFullPrompt(imagePrompt, settings);
 
-    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 提示词就绪，正在调用生图后端…');
+    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 提示词就绪，已送生图后端排队…（连续点击可追加多张）');
 
     // 第二步：调用生图后端
     let imageUrl;
     try {
       imageUrl = await generateImage(fullPrompt, settings);
     } catch (e) {
-      _generating = false;
       if (WM.ErrLog) await WM.ErrLog.add('image-gen', e, { stage: 'image-gen', backend: ig.backendType, prompt: fullPrompt.slice(0, 300) });
       const msg = '生图失败：' + (e.message || e);
       if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 ' + msg);
@@ -547,15 +660,13 @@
     try {
       await insertImage(imageUrl, aiMsg.message_id, settings);
     } catch (e) {
-      _generating = false;
       if (WM.ErrLog) await WM.ErrLog.add('image-insert', e, { stage: 'insert', displayMode: ig.displayMode });
       const msg = '图片插入失败：' + (e.message || e);
       if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 ' + msg);
       return { ok: false, error: msg, prompt: fullPrompt, imageUrl };
     }
 
-    _generating = false;
-    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 生图完成，已插入对话');
+    if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast('🎨 生图完成，已插入对话（继续点可生成更多）');
     return { ok: true, prompt: fullPrompt, imageUrl };
   }
 
@@ -575,16 +686,162 @@
     }
   }
 
+  // ── 楼层生图按钮注入：每条 AI 消息右上角加 🎨 按钮，点击就对该条消息生图 ──
+  // 这就是「无限制生成图」：对任意楼层都能生成，不受"只能对最新一条"限制，连点可排队。
+  let _floorBtnObserver = null;
+  const INJECTED_FLAG = 'wm-img-btn-injected';
+
+  // 从消息 DOM 元素提取 message_id（兼容多种酒馆版本/皮肤）
+  function getMessageIdFromEl(el) {
+    if (!el) return null;
+    // 常见属性：data-message-id / data-mid / id="mes_xxx"
+    const mid = el.getAttribute('data-message-id') || el.getAttribute('data-mid');
+    if (mid != null && mid !== '') return isNaN(Number(mid)) ? mid : Number(mid);
+    const idAttr = el.id || '';
+    if (idAttr && idAttr.indexOf('mes_') === 0) {
+      const n = idAttr.slice(4);
+      return isNaN(Number(n)) ? n : Number(n);
+    }
+    return null;
+  }
+
+  // 判断是否为 AI/assistant 消息
+  function isAIMessage(el) {
+    if (!el) return false;
+    // 常见类名：mes_assistant / assistant / ai-mes
+    if (el.classList && (el.classList.contains('mes_assistant') || el.classList.contains('assistant') || el.classList.contains('ai-mes'))) return true;
+    // 常见属性：data-role="assistant" / data-isuser="false"
+    const role = el.getAttribute('data-role');
+    if (role === 'assistant' || role === 'ai') return true;
+    const isUser = el.getAttribute('data-isuser');
+    if (isUser === 'false') return true;
+    return false;
+  }
+
+  // 给单个消息元素加生图按钮
+  function injectBtnToMessage(el) {
+    if (!el || !el.classList) return;
+    if (el.classList.contains(INJECTED_FLAG)) return;
+    if (!isAIMessage(el)) return;
+    const mid = getMessageIdFromEl(el);
+    if (mid == null) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'wm-floor-img-btn';
+    btn.title = '🎨 温记：对本楼层无限制生图（连点可排队）';
+    btn.textContent = '🎨';
+    btn.style.cssText = [
+      'position:absolute', 'top:6px', 'right:8px', 'z-index:10',
+      'width:28px', 'height:28px', 'border-radius:50%', 'border:none',
+      'background:linear-gradient(135deg,#6f5cff,#b347ff)', 'color:#fff',
+      'font-size:14px', 'cursor:pointer', 'opacity:0', 'transition:opacity .2s',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'box-shadow:0 2px 6px rgba(0,0,0,.2)', 'padding:0',
+    ].join(';');
+    // 鼠标悬停在消息上时显示按钮
+    el.style.position = el.style.position || 'relative';
+    el.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
+    el.addEventListener('mouseleave', () => { btn.style.opacity = '0'; });
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!WM.ImageGen || typeof WM.ImageGen.triggerUnlimited !== 'function') return;
+      btn.style.opacity = '0.5';
+      btn.style.pointerEvents = 'none';
+      try {
+        await WM.ImageGen.triggerUnlimited(mid);
+      } finally {
+        setTimeout(() => {
+          btn.style.opacity = '1';
+          btn.style.pointerEvents = '';
+        }, 500);
+      }
+    });
+    el.appendChild(btn);
+    el.classList.add(INJECTED_FLAG);
+  }
+
+  // 扫描整个聊天区，给所有 AI 消息加按钮
+  function scanAllMessages() {
+    const settings = WM.Settings ? WM.Settings.load() : {};
+    const ig = settings.imageGen || {};
+    if (ig.enabled === false) return;
+
+    // 常见聊天容器选择器（兼容多种酒馆版本/皮肤）
+    const selectors = ['#chat', '.chat_log', '#chat_log', '.chat', '[data-chat]'];
+    let chatEl = null;
+    for (const sel of selectors) {
+      chatEl = document.querySelector(sel);
+      if (chatEl) break;
+    }
+    if (!chatEl) return;
+
+    // 常见消息元素选择器
+    const msgSelectors = ['.mes', '.message', '.chat-message', '[data-message-id]'];
+    let msgEls = [];
+    for (const sel of msgSelectors) {
+      msgEls = chatEl.querySelectorAll(sel);
+      if (msgEls.length) break;
+    }
+    msgEls.forEach(injectBtnToMessage);
+  }
+
+  // 启动楼层按钮注入：先扫一遍已有的，然后用 MutationObserver 监听新增
+  function initFloorButtons() {
+    if (_floorBtnObserver) return; // 已启动
+    // 等 DOM 就绪
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initFloorButtons, { once: true });
+      return;
+    }
+    // 先扫一遍
+    try { scanAllMessages(); } catch (e) { console.warn('[WarmMemo][image-gen] 首次扫描楼层按钮失败：', e); }
+
+    // 监听聊天区 DOM 变化，新消息自动加按钮
+    const chatSelectors = ['#chat', '.chat_log', '#chat_log', '.chat', '[data-chat]'];
+    let chatEl = null;
+    for (const sel of chatSelectors) {
+      chatEl = document.querySelector(sel);
+      if (chatEl) break;
+    }
+    if (!chatEl) {
+      // 聊天区还没渲染出来，等 2 秒再试
+      setTimeout(initFloorButtons, 2000);
+      return;
+    }
+    _floorBtnObserver = new MutationObserver(() => {
+      try { scanAllMessages(); } catch (_) {}
+    });
+    _floorBtnObserver.observe(chatEl, { childList: true, subtree: true });
+    console.log('[WarmMemo][image-gen] 楼层生图按钮已启用');
+  }
+
   WM.ImageGen = {
     triggerImageGeneration,
+    // 简写：面板按钮调用，强制立即生成（忽略 autoTrigger 开关），允许连点排队
+    triggerUnlimited: (msgId) => triggerImageGeneration({ force: true, messageId: msgId, silent: false }),
     generateImage,
     generateImagePrompt,
     buildFullPrompt,
     insertImage,
     testConnection,
     fetchAvailableModels,
+    sanitizePrompt,
     IMG_START,
     IMG_END,
-    isGenerating: () => _generating,
+    // 已取消全局单锁（允许连点排队生成多张），这里保持返回 false 让旧调用方兼容不报错
+    isGenerating: () => false,
+    // 楼层生图按钮：外部可手动触发重新扫描（切换角色/刷新聊天后）
+    initFloorButtons,
+    scanAllMessages,
   };
+
+  // 自动启动楼层按钮注入（延迟到 DOM 就绪后）
+  if (typeof window !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(initFloorButtons, 1000), { once: true });
+    } else {
+      setTimeout(initFloorButtons, 1000);
+    }
+  }
 })();

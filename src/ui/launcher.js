@@ -1179,6 +1179,7 @@
       <div id="cfg-pane">${active === 'llm' ? renderPaneLlm(s) : active === 'mem' ? renderPaneMemory(s) : active === 'vec' ? renderPaneVector(s) : active === 'rerank' ? renderPaneRerank(s) : active === 'lore' ? renderPaneLore(s) : active === 'img' ? renderPaneImage(s) : active === 'err' ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">测试连接</button>
+        <button id="c-img-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:#fff;border:none">🎨 无限制立即生图（连点可排队生成多张）</button>
         <button id="c-save" class="wm-btn primary">保存设置</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>`;
@@ -1469,6 +1470,27 @@
     const modelRefreshBtn = body.querySelector('#ig-model-refresh');
     if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
 
+    // 无限制立即生图：面板顶部 + 底部按钮共用逻辑；force=true 忽略 autoTrigger 开关，允许连点排队
+    async function handleUnlimitedImageGen() {
+      if (!WM.ImageGen || typeof WM.ImageGen.triggerUnlimited !== 'function') {
+        toast('🎨 温记生图模块未加载（刷新页面再试）');
+        return;
+      }
+      // 先把当前面板值同步一下，确保用户刚改的 promptPrefix/模型/尺寸 生效
+      try { syncPaneToSettings(body, s, 'img'); } catch (_) {}
+      const r = await WM.ImageGen.triggerUnlimited();
+      if (r && r.ok) toast('🎨 已出图，已插入对话（继续点可继续排队）');
+      else if (r && r.skipped) {/* 不会发生，force=true */}
+      else if (r && r.error) {
+        // 已在 triggerUnlimited 里弹了，这里再给调试面板/日志打一份
+        if (WM.DebugLog) WM.DebugLog.logError('image-gen', { error: r.error, prompt: r.prompt ? String(r.prompt).slice(0, 300) : '' });
+      }
+    }
+    const igUnlimitedTop = body.querySelector('#ig-unlimited-top');
+    if (igUnlimitedTop) igUnlimitedTop.onclick = () => { handleUnlimitedImageGen(); };
+    const igUnlimitedFoot = body.querySelector('#c-img-gen');
+    if (igUnlimitedFoot) igUnlimitedFoot.onclick = () => { handleUnlimitedImageGen(); };
+
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
     if (saveBtn) saveBtn.onclick = async () => {
@@ -1654,6 +1676,9 @@
     return `<div class="wm-card">
       <div class="wm-h">🎨 生图配置</div>
       <div class="wm-hint">AI 每次回复后，自动调用 LLM 把回复整合成画面提示词，再送生图后端出图。<b>图片不进对话上下文</b>（用标记包裹，注入时剔除）。复用上方「LLM 调用」配置做提示词整合，无需额外配 LLM。</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
+        <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">🎨 无限制立即生图（对最新 AI 消息出图，连点可排队多张）</button>
+      </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled?'checked':''}/> 启用生图功能</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger?'checked':''}/> 自动触发（AI 回复落库后自动生图；关闭则仅手动点「🎨 立即生图」按钮）</label>
       <div class="wm-divider"></div>

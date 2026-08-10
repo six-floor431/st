@@ -3146,11 +3146,104 @@ ${p.summary || ""}`.trim() });
             return url;
           }
         }();
-        const hint = "\u6D4F\u89C8\u5668\u65E0\u6CD5\u76F4\u8FDE " + origHost + '\uFF08\u53EF\u80FD\u662F ComfyUI/SD WebUI \u672A\u5F00\u542F CORS \u6216\u4EE3\u7406\u4E0D\u901A\uFF09\u3002\n\u89E3\u51B3\u65B9\u5F0F\uFF08\u4EFB\u9009\u5176\u4E00\uFF09\uFF1A\n  \u2460 \u542F\u52A8 ComfyUI \u65F6\u52A0\u53C2\u6570\uFF1Apython main.py --enable-cors-header "*"\n     SD WebUI \u542F\u52A8\u65F6\u52A0\u53C2\u6570\uFF1A--api --cors-allow-origins=*\n  \u2461 \u8D70\u6E29\u8BB0\u540C\u6E90\u4EE3\u7406\uFF08\u5916\u7F51\u7A7F\u900F\u573A\u666F\uFF09\uFF1A\u5728\u53CD\u4EE3\u91CC\u628A "' + String(settings && settings.imageGen && settings.imageGen.imgProxyPath || "/img") + '/*" \u8F6C\u53D1\u5230 ' + origHost + "/*\uFF0C\u6E29\u8BB0\u5DF2\u81EA\u52A8\u6539\u5199\u8BF7\u6C42 URL\u3002\n\u539F\u59CB\u9519\u8BEF\uFF1A" + netMsg;
+        const isComfy = /127\.0\.0\.1:8188|localhost:8188/.test(String(url));
+        const comfyExtra = isComfy ? '\n  \uFF08ComfyUI \u65B0\u7248\u672C\u8FD8\u6709 Host/Origin \u6821\u9A8C \u2192 \u989D\u5916\u52A0\u53C2\u6570 --disable-header-check\uFF09\n  \u5B8C\u6574\u542F\u52A8\u53C2\u6570\u793A\u4F8B\uFF08\u63A8\u8350\uFF09\uFF1Apython main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check' : "";
+        const hint = "\u6D4F\u89C8\u5668\u65E0\u6CD5\u76F4\u8FDE " + origHost + '\uFF08\u53EF\u80FD\u662F ComfyUI/SD WebUI \u672A\u5F00\u542F CORS \u6216\u4EE3\u7406\u4E0D\u901A\uFF09\u3002\n\u89E3\u51B3\u65B9\u5F0F\uFF08\u4EFB\u9009\u5176\u4E00\uFF09\uFF1A\n  \u2460 \u542F\u52A8 ComfyUI \u65F6\u52A0\u53C2\u6570\uFF1Apython main.py --enable-cors-header "*"' + comfyExtra + '\n     SD WebUI \u542F\u52A8\u65F6\u52A0\u53C2\u6570\uFF1A--api --cors-allow-origins=*\n  \u2461 \u8D70\u6E29\u8BB0\u540C\u6E90\u4EE3\u7406\uFF08\u5916\u7F51\u7A7F\u900F\u573A\u666F\uFF09\uFF1A\u5728\u53CD\u4EE3\u91CC\u628A "' + String(settings && settings.imageGen && settings.imageGen.imgProxyPath || "/img") + '/*" \u8F6C\u53D1\u5230 ' + origHost + "/*\uFF0C\u6E29\u8BB0\u5DF2\u81EA\u52A8\u6539\u5199\u8BF7\u6C42 URL\u3002\n\u539F\u59CB\u9519\u8BEF\uFF1A" + netMsg;
         const err = new Error(hint);
         err.name = "ImageCorsError";
         throw err;
       }
+    }
+    function sanitizePrompt(raw) {
+      if (!raw) return "";
+      let s = String(raw);
+      s = s.replace(/<\/?ImagePrompt[^>]*>/gi, "");
+      s = s.replace(/^```[a-zA-Z]*\s*/gm, "").replace(/```\s*$/gm, "");
+      s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+      const parts = s.split(/[\n\r。！？!?\.；;]+/).map((p) => p.trim()).filter(Boolean);
+      const NOISE_KEYWORDS = [
+        // 中文：LLM 自言自语/解释类关键词
+        "\u4E5F\u8BB8",
+        "\u6216\u8BB8",
+        "\u53EF\u80FD",
+        "\u8003\u8651\u5230",
+        "\u9274\u4E8E",
+        "\u53E6\u4E00\u79CD\u53EF\u80FD",
+        "\u53E6\u5916",
+        "\u6B64\u5916",
+        "\u4F46\u662F",
+        "\u7136\u800C",
+        "\u4E0D\u8FC7",
+        "\u6211\u4EEC\u53EF\u4EE5",
+        "\u6211\u4EEC\u5E94\u8BE5",
+        "\u6211\u53EF\u4EE5",
+        "\u5982\u679C",
+        "\u5047\u8BBE",
+        "\u65E0\u6CD5\u9605\u8BFB",
+        "\u65E0\u6CD5\u8BC6\u522B",
+        "\u751F\u56FE\u6A21\u578B",
+        "\u4E0D\u80FD\u7406\u89E3",
+        "\u65E0\u6CD5\u7406\u89E3",
+        "\u6CE8\u610F",
+        "\u63D0\u793A",
+        "\u8BF7",
+        "\u8981\u6C42",
+        "\u8F93\u51FA",
+        "\u5982\u679C\u6211\u4EEC",
+        "\u5BF9\u4E8E",
+        "\u5173\u4E8E",
+        "\u8FD9\u79CD",
+        "\u90A3\u4E2A",
+        "\u4E00\u4E2A\u62BD\u8C61\u573A\u666F",
+        "\u6BD4\u55BB\u6027",
+        "\u793A\u610F\u7684\u65B9\u5F0F",
+        "\u4E0D\u662F\u5177\u4F53\u53D9\u4E8B",
+        "\u62BD\u8C61",
+        "welcome",
+        "\u6B22\u8FCE\u6D88\u606F",
+        "\u753B\u9762\u5143\u7D20",
+        "\u8089\u773C\u53EF\u89C1",
+        "\u63D0\u70BC\u89C4\u8303",
+        "\u8F93\u51FA\u5951\u7EA6",
+        "\u683C\u5F0F\u8981\u6C42",
+        "\u4EE5\u4E0B\u662F",
+        "\u8BA9\u6211",
+        "\u6211\u4EEC\u6765",
+        "\u9996\u5148",
+        "\u5176\u6B21",
+        "\u6700\u540E",
+        "\u603B\u7ED3\u4E00\u4E0B",
+        "\u7EFC\u4E0A\u6240\u8FF0",
+        // 英文
+        "maybe",
+        "perhaps",
+        "however",
+        "but",
+        "if we",
+        "consider",
+        "considering",
+        "note that",
+        "note:",
+        "prompt",
+        "output:",
+        "welcome",
+        "let me",
+        "i think",
+        "here are",
+        "first",
+        "second",
+        "finally",
+        "in conclusion",
+        "to summarize"
+      ];
+      const filtered = parts.filter((p) => {
+        if (p.length < 2) return false;
+        const lower = p.toLowerCase();
+        return !NOISE_KEYWORDS.some((kw) => p.indexOf(kw) >= 0 || lower.indexOf(kw.toLowerCase()) >= 0);
+      });
+      if (!filtered.length) return "";
+      const joined = filtered.join(", ");
+      return joined.replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").replace(/[,，]{2,}/g, ",").replace(/^[,，\s]+|[,，\s]+$/g, "").trim();
     }
     function extractTag(raw, tag) {
       if (raw == null) return "";
@@ -3195,8 +3288,10 @@ ${p.summary || ""}`.trim() });
       const out = await WM.LLMClient.complete(sys, user, settings, opts);
       const tagged = extractTag(out, "ImagePrompt");
       const cleaned = String(out || "").replace(/^```[a-zA-Z]*\s*/gim, "").replace(/```\s*$/g, "").trim();
-      const result = (tagged || cleaned || "").trim();
-      if (!result) throw new Error("LLM \u672A\u751F\u6210\u6709\u6548\u753B\u9762\u63D0\u793A\u8BCD");
+      const raw = (tagged || cleaned || "").trim();
+      if (!raw) throw new Error("LLM \u672A\u751F\u6210\u6709\u6548\u753B\u9762\u63D0\u793A\u8BCD");
+      const result = sanitizePrompt(raw);
+      if (!result) throw new Error("LLM \u753B\u9762\u63D0\u793A\u8BCD\u6E05\u6D17\u540E\u4E3A\u7A7A\uFF08\u6A21\u578B\u8F93\u51FA\u7684\u5168\u662F\u89E3\u91CA\u6587\u5B57\uFF0C\u8BF7\u91CD\u8BD5\u6216\u964D\u4F4E promptStyle \u7B49\u7EA7\uFF09");
       return result;
     }
     function buildFullPrompt(imagePrompt, settings) {
@@ -3284,6 +3379,8 @@ ${p.summary || ""}`.trim() });
         workflow = defaultComfyWorkflow();
       }
       const neg = buildFullNegative(settings);
+      const cleanPrompt = sanitizePrompt(prompt);
+      const cleanNeg = sanitizePrompt(neg);
       const w = Number(ig.width) || 512;
       const h = Number(ig.height) || 768;
       const steps = Number(ig.steps) || 20;
@@ -3295,13 +3392,28 @@ ${p.summary || ""}`.trim() });
         throw new Error("ComfyUI\uFF1A\u672A\u9009\u62E9 Checkpoint \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u6A21\u578B/Checkpoint\u300D\u8F93\u5165\u6846\u65C1\u7684\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\u4F60\u672C\u5730\u5DF2\u6709\u7684\u6A21\u578B\u540D\u3002");
       }
       let workflowStr = JSON.stringify(workflow);
-      const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, esc(prompt)).replace(/\{\{negative\}\}/g, esc(neg)).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg)).replace(/\{\{denoise\}\}/g, String(denoise)).replace(/\{\{seed\}\}/g, String(seed)).replace(/\{\{model\}\}/g, esc(model));
+      const esc = (anyVal) => {
+        const s = String(anyVal == null ? "" : anyVal);
+        const out = JSON.stringify(s);
+        return out.length >= 2 ? out.slice(1, -1) : out;
+      };
+      const rep = (val) => () => esc(val);
+      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{width\}\}/g, rep(w)).replace(/\{\{height\}\}/g, rep(h)).replace(/\{\{steps\}\}/g, rep(steps)).replace(/\{\{cfg\}\}/g, rep(cfg)).replace(/\{\{denoise\}\}/g, rep(denoise)).replace(/\{\{seed\}\}/g, rep(seed)).replace(/\{\{model\}\}/g, rep(model));
       let promptObj;
       try {
         promptObj = JSON.parse(workflowStr);
       } catch (e) {
-        throw new Error("\u5DE5\u4F5C\u6D41 JSON \u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + e.message);
+        let posMatch = /position\s+(\d+)/i.exec(String(e && e.message ? e.message : e));
+        let snippet = "";
+        if (posMatch && posMatch[1]) {
+          const p = parseInt(posMatch[1], 10);
+          if (!isNaN(p)) {
+            const start = Math.max(0, p - 80);
+            const end = Math.min(workflowStr.length, p + 80);
+            snippet = "\uFF08\u4E0A\u4E0B\u6587\uFF1A\u2026" + workflowStr.slice(start, end).replace(/[\r\n\t]/g, "\u21B5") + "\u2026\uFF09";
+          }
+        }
+        throw new Error("\u5DE5\u4F5C\u6D41 JSON \u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + (e.message || String(e)) + snippet + "|\u63D0\u793A\u8BCD\u7247\u6BB5=" + String(cleanPrompt || "").slice(0, 120));
       }
       const clientId = "WarmMemo_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
@@ -3407,28 +3519,35 @@ ${p.summary || ""}`.trim() });
           return { ok: false, error: e.message || String(e) };
         }
       }
+      let firstError = null;
       try {
         const res = await wmFetch(base + "/object_info/CheckpointLoaderSimple", { method: "GET" }, settings);
         if (!res.ok) {
-          const res2 = await wmFetch(base + "/models/checkpoints", { method: "GET" }, settings);
-          if (!res2.ok) {
-            const t = await res.text().catch(() => "");
-            return { ok: false, error: "ComfyUI HTTP " + res.status + "\uFF08object_info\uFF09\uFF1A" + t.slice(0, 200) };
-          }
-          const arr = await res2.json();
-          const models2 = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
-            const val = typeof m === "string" ? m : m.name || m.filename || "";
-            return { value: val, label: val };
-          }).filter((m) => m.value);
-          return { ok: true, models: models2 };
+          firstError = "ComfyUI HTTP " + res.status + "\uFF08object_info\uFF09";
+        } else {
+          const j = await res.json();
+          const nodeInfo = j && (j.CheckpointLoaderSimple || j["CheckpointLoaderSimple"]);
+          const list = nodeInfo && nodeInfo.input && nodeInfo.input.required && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0]) ? nodeInfo.input.required.ckpt_name[0] : [];
+          const models = list.map((n) => ({ value: n, label: n }));
+          return { ok: true, models };
         }
-        const j = await res.json();
-        const nodeInfo = j && (j.CheckpointLoaderSimple || j["CheckpointLoaderSimple"]);
-        const list = nodeInfo && nodeInfo.input && nodeInfo.input.required && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0]) ? nodeInfo.input.required.ckpt_name[0] : [];
-        const models = list.map((n) => ({ value: n, label: n }));
-        return { ok: true, models };
       } catch (e) {
-        return { ok: false, error: e.message || String(e) };
+        firstError = e.message || String(e);
+      }
+      try {
+        const res2 = await wmFetch(base + "/models/checkpoints", { method: "GET" }, settings);
+        if (!res2.ok) {
+          const t = await res2.text().catch(() => "");
+          return { ok: false, error: "ComfyUI HTTP " + res2.status + "\uFF08models/checkpoints\uFF09\uFF1A" + t.slice(0, 200) + "\uFF08\u524D\u4E00\u63A5\u53E3\u9519\u8BEF\uFF1A" + String(firstError || "").slice(0, 80) + "\uFF09" };
+        }
+        const arr = await res2.json();
+        const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
+          const val = typeof m === "string" ? m : m.name || m.filename || "";
+          return { value: val, label: val };
+        }).filter((m) => m.value);
+        return { ok: true, models };
+      } catch (e2) {
+        return { ok: false, error: "ComfyUI \u6A21\u578B\u5217\u8868\u52A0\u8F7D\u5931\u8D25\uFF1A" + (e2.message || String(e2)) + "\n\uFF08\u7B2C\u4E00\u4E2A\u63A5\u53E3\uFF1A" + String(firstError || "").slice(0, 100) + '\uFF09\n\n\u89E3\u51B3\u65B9\u5F0F\uFF08ComfyUI \u542F\u52A8\u53C2\u6570\u7F3A\u4E00\u4E0D\u53EF\uFF09\uFF1A\n  python main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check\n\n--enable-cors-header \u89E3\u51B3\u6D4F\u89C8\u5668\u8DE8\u57DF\u62E6\u622A\uFF1B\n--disable-header-check \u89E3\u51B3 ComfyUI \u65B0\u7248\u7684 Host/Origin \u6821\u9A8C\uFF08\u5373 403 \u9519\u8BEF\uFF09\u3002' };
       }
     }
     async function generateImage(prompt, settings) {
@@ -3486,8 +3605,9 @@ ${p.summary || ""}`.trim() });
     async function insertImage(imageUrl, messageId, settings) {
       const ig = settings.imageGen || {};
       const alt = "\u6E29\u8BB0\u751F\u56FE " + (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN");
-      const markdown = "![" + alt + "](" + imageUrl + ")";
-      const wrapped = IMG_START + markdown + IMG_END;
+      const safeUrl = String(imageUrl || "").replace(/"/g, "%22").replace(/'/g, "%27");
+      const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="\u70B9\u51FB\u65B0\u6807\u7B7E\u9875\u67E5\u770B\u539F\u56FE\uFF08\u65E0\u9650\u5236\u5927\u5C0F\uFF09"><img src="' + safeUrl + '" alt="' + alt + '" style="max-width:100%!important;max-height:none!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1" /></a>';
+      const wrapped = IMG_START + html + IMG_END;
       if (ig.displayMode === "separate") {
         await createChatMessages([{ role: "system", message: wrapped, is_hidden: false }], { refresh: "affected" });
       } else {
@@ -3497,18 +3617,17 @@ ${p.summary || ""}`.trim() });
         await setChatMessages([{ message_id: target.message_id, message: newMessage }], { refresh: "affected" });
       }
     }
-    let _generating = false;
     async function triggerImageGeneration(opts) {
       opts = opts || {};
-      if (_generating) return { ok: false, error: "\u6B63\u5728\u751F\u56FE\u4E2D\uFF0C\u8BF7\u7A0D\u5019" };
       const settings = WM.Settings.load();
       const ig = settings.imageGen || {};
       if (ig.enabled === false) return { ok: false, error: "\u751F\u56FE\u529F\u80FD\u672A\u5F00\u542F\uFF08\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u5F00\u542F\uFF09" };
-      _generating = true;
-      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u6B63\u5728\u751F\u6210\u753B\u9762\u63D0\u793A\u8BCD\u2026");
+      if (!opts.force && !ig.autoTrigger && opts.silent) {
+        return { ok: false, error: "autoTrigger \u672A\u5F00\u542F\uFF0C\u5DF2\u8DF3\u8FC7\uFF08\u53EF\u70B9\u300C\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\u300D\u5F3A\u5236\u51FA\u56FE\uFF09", skipped: true };
+      }
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u6B63\u5728\u751F\u6210\u753B\u9762\u63D0\u793A\u8BCD\u2026\uFF08\u53EF\u7EE7\u7EED\u70B9\u51FB\u6392\u961F\uFF09");
       const aiMsg = getLastAIMessage(opts.messageId);
       if (!aiMsg || !aiMsg.message) {
-        _generating = false;
         return { ok: false, error: "\u6CA1\u6709\u53EF\u7528\u7684 AI \u6D88\u606F" };
       }
       const aiText = aiMsg.message;
@@ -3516,19 +3635,17 @@ ${p.summary || ""}`.trim() });
       try {
         imagePrompt = await generateImagePrompt(aiText, settings);
       } catch (e) {
-        _generating = false;
         if (WM.ErrLog) await WM.ErrLog.add("image-prompt", e, { stage: "prompt-gen", aiTextPreview: aiText.slice(0, 200) });
         const msg = "\u63D0\u793A\u8BCD\u751F\u6210\u5931\u8D25\uFF1A" + (e.message || e);
         if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
         return { ok: false, error: msg };
       }
       const fullPrompt = buildFullPrompt(imagePrompt, settings);
-      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u63D0\u793A\u8BCD\u5C31\u7EEA\uFF0C\u6B63\u5728\u8C03\u7528\u751F\u56FE\u540E\u7AEF\u2026");
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u63D0\u793A\u8BCD\u5C31\u7EEA\uFF0C\u5DF2\u9001\u751F\u56FE\u540E\u7AEF\u6392\u961F\u2026\uFF08\u8FDE\u7EED\u70B9\u51FB\u53EF\u8FFD\u52A0\u591A\u5F20\uFF09");
       let imageUrl;
       try {
         imageUrl = await generateImage(fullPrompt, settings);
       } catch (e) {
-        _generating = false;
         if (WM.ErrLog) await WM.ErrLog.add("image-gen", e, { stage: "image-gen", backend: ig.backendType, prompt: fullPrompt.slice(0, 300) });
         const msg = "\u751F\u56FE\u5931\u8D25\uFF1A" + (e.message || e);
         if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
@@ -3537,14 +3654,12 @@ ${p.summary || ""}`.trim() });
       try {
         await insertImage(imageUrl, aiMsg.message_id, settings);
       } catch (e) {
-        _generating = false;
         if (WM.ErrLog) await WM.ErrLog.add("image-insert", e, { stage: "insert", displayMode: ig.displayMode });
         const msg = "\u56FE\u7247\u63D2\u5165\u5931\u8D25\uFF1A" + (e.message || e);
         if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} " + msg);
         return { ok: false, error: msg, prompt: fullPrompt, imageUrl };
       }
-      _generating = false;
-      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u751F\u56FE\u5B8C\u6210\uFF0C\u5DF2\u63D2\u5165\u5BF9\u8BDD");
+      if (!opts.silent && WM.Launcher && WM.Launcher.toast) WM.Launcher.toast("\u{1F3A8} \u751F\u56FE\u5B8C\u6210\uFF0C\u5DF2\u63D2\u5165\u5BF9\u8BDD\uFF08\u7EE7\u7EED\u70B9\u53EF\u751F\u6210\u66F4\u591A\uFF09");
       return { ok: true, prompt: fullPrompt, imageUrl };
     }
     async function testConnection(settings) {
@@ -3561,18 +3676,159 @@ ${p.summary || ""}`.trim() });
         return { success: false, error: e.message || String(e) };
       }
     }
+    let _floorBtnObserver = null;
+    const INJECTED_FLAG = "wm-img-btn-injected";
+    function getMessageIdFromEl(el) {
+      if (!el) return null;
+      const mid = el.getAttribute("data-message-id") || el.getAttribute("data-mid");
+      if (mid != null && mid !== "") return isNaN(Number(mid)) ? mid : Number(mid);
+      const idAttr = el.id || "";
+      if (idAttr && idAttr.indexOf("mes_") === 0) {
+        const n = idAttr.slice(4);
+        return isNaN(Number(n)) ? n : Number(n);
+      }
+      return null;
+    }
+    function isAIMessage(el) {
+      if (!el) return false;
+      if (el.classList && (el.classList.contains("mes_assistant") || el.classList.contains("assistant") || el.classList.contains("ai-mes"))) return true;
+      const role = el.getAttribute("data-role");
+      if (role === "assistant" || role === "ai") return true;
+      const isUser = el.getAttribute("data-isuser");
+      if (isUser === "false") return true;
+      return false;
+    }
+    function injectBtnToMessage(el) {
+      if (!el || !el.classList) return;
+      if (el.classList.contains(INJECTED_FLAG)) return;
+      if (!isAIMessage(el)) return;
+      const mid = getMessageIdFromEl(el);
+      if (mid == null) return;
+      const btn = document.createElement("button");
+      btn.className = "wm-floor-img-btn";
+      btn.title = "\u{1F3A8} \u6E29\u8BB0\uFF1A\u5BF9\u672C\u697C\u5C42\u65E0\u9650\u5236\u751F\u56FE\uFF08\u8FDE\u70B9\u53EF\u6392\u961F\uFF09";
+      btn.textContent = "\u{1F3A8}";
+      btn.style.cssText = [
+        "position:absolute",
+        "top:6px",
+        "right:8px",
+        "z-index:10",
+        "width:28px",
+        "height:28px",
+        "border-radius:50%",
+        "border:none",
+        "background:linear-gradient(135deg,#6f5cff,#b347ff)",
+        "color:#fff",
+        "font-size:14px",
+        "cursor:pointer",
+        "opacity:0",
+        "transition:opacity .2s",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+        "box-shadow:0 2px 6px rgba(0,0,0,.2)",
+        "padding:0"
+      ].join(";");
+      el.style.position = el.style.position || "relative";
+      el.addEventListener("mouseenter", () => {
+        btn.style.opacity = "1";
+      });
+      el.addEventListener("mouseleave", () => {
+        btn.style.opacity = "0";
+      });
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!WM.ImageGen || typeof WM.ImageGen.triggerUnlimited !== "function") return;
+        btn.style.opacity = "0.5";
+        btn.style.pointerEvents = "none";
+        try {
+          await WM.ImageGen.triggerUnlimited(mid);
+        } finally {
+          setTimeout(() => {
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "";
+          }, 500);
+        }
+      });
+      el.appendChild(btn);
+      el.classList.add(INJECTED_FLAG);
+    }
+    function scanAllMessages() {
+      const settings = WM.Settings ? WM.Settings.load() : {};
+      const ig = settings.imageGen || {};
+      if (ig.enabled === false) return;
+      const selectors = ["#chat", ".chat_log", "#chat_log", ".chat", "[data-chat]"];
+      let chatEl = null;
+      for (const sel of selectors) {
+        chatEl = document.querySelector(sel);
+        if (chatEl) break;
+      }
+      if (!chatEl) return;
+      const msgSelectors = [".mes", ".message", ".chat-message", "[data-message-id]"];
+      let msgEls = [];
+      for (const sel of msgSelectors) {
+        msgEls = chatEl.querySelectorAll(sel);
+        if (msgEls.length) break;
+      }
+      msgEls.forEach(injectBtnToMessage);
+    }
+    function initFloorButtons() {
+      if (_floorBtnObserver) return;
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initFloorButtons, { once: true });
+        return;
+      }
+      try {
+        scanAllMessages();
+      } catch (e) {
+        console.warn("[WarmMemo][image-gen] \u9996\u6B21\u626B\u63CF\u697C\u5C42\u6309\u94AE\u5931\u8D25\uFF1A", e);
+      }
+      const chatSelectors = ["#chat", ".chat_log", "#chat_log", ".chat", "[data-chat]"];
+      let chatEl = null;
+      for (const sel of chatSelectors) {
+        chatEl = document.querySelector(sel);
+        if (chatEl) break;
+      }
+      if (!chatEl) {
+        setTimeout(initFloorButtons, 2e3);
+        return;
+      }
+      _floorBtnObserver = new MutationObserver(() => {
+        try {
+          scanAllMessages();
+        } catch (_) {
+        }
+      });
+      _floorBtnObserver.observe(chatEl, { childList: true, subtree: true });
+      console.log("[WarmMemo][image-gen] \u697C\u5C42\u751F\u56FE\u6309\u94AE\u5DF2\u542F\u7528");
+    }
     WM.ImageGen = {
       triggerImageGeneration,
+      // 简写：面板按钮调用，强制立即生成（忽略 autoTrigger 开关），允许连点排队
+      triggerUnlimited: (msgId) => triggerImageGeneration({ force: true, messageId: msgId, silent: false }),
       generateImage,
       generateImagePrompt,
       buildFullPrompt,
       insertImage,
       testConnection,
       fetchAvailableModels,
+      sanitizePrompt,
       IMG_START,
       IMG_END,
-      isGenerating: () => _generating
+      // 已取消全局单锁（允许连点排队生成多张），这里保持返回 false 让旧调用方兼容不报错
+      isGenerating: () => false,
+      // 楼层生图按钮：外部可手动触发重新扫描（切换角色/刷新聊天后）
+      initFloorButtons,
+      scanAllMessages
     };
+    if (typeof window !== "undefined") {
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => setTimeout(initFloorButtons, 1e3), { once: true });
+      } else {
+        setTimeout(initFloorButtons, 1e3);
+      }
+    }
   })();
 
   // src/ui/rel-graph.js
@@ -5088,6 +5344,7 @@ ${p.summary || ""}`.trim() });
       <div id="cfg-pane">${active === "llm" ? renderPaneLlm(s) : active === "mem" ? renderPaneMemory(s) : active === "vec" ? renderPaneVector(s) : active === "rerank" ? renderPaneRerank(s) : active === "lore" ? renderPaneLore(s) : active === "img" ? renderPaneImage(s) : active === "err" ? renderPaneErrors(s) : renderPaneLlm(s)}</div>
       <div class="wm-actions" style="margin-top:12px">
         <button id="c-test" class="wm-btn">\u6D4B\u8BD5\u8FDE\u63A5</button>
+        <button id="c-img-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:#fff;border:none">\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\uFF08\u8FDE\u70B9\u53EF\u6392\u961F\u751F\u6210\u591A\u5F20\uFF09</button>
         <button id="c-save" class="wm-btn primary">\u4FDD\u5B58\u8BBE\u7F6E</button>
       </div>
       <div id="c-test-result" class="wm-test-box"></div>`;
@@ -5367,6 +5624,30 @@ ${p.summary || ""}`.trim() });
       }
       const modelRefreshBtn = body.querySelector("#ig-model-refresh");
       if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
+      async function handleUnlimitedImageGen() {
+        if (!WM.ImageGen || typeof WM.ImageGen.triggerUnlimited !== "function") {
+          toast("\u{1F3A8} \u6E29\u8BB0\u751F\u56FE\u6A21\u5757\u672A\u52A0\u8F7D\uFF08\u5237\u65B0\u9875\u9762\u518D\u8BD5\uFF09");
+          return;
+        }
+        try {
+          syncPaneToSettings(body, s, "img");
+        } catch (_) {
+        }
+        const r = await WM.ImageGen.triggerUnlimited();
+        if (r && r.ok) toast("\u{1F3A8} \u5DF2\u51FA\u56FE\uFF0C\u5DF2\u63D2\u5165\u5BF9\u8BDD\uFF08\u7EE7\u7EED\u70B9\u53EF\u7EE7\u7EED\u6392\u961F\uFF09");
+        else if (r && r.skipped) {
+        } else if (r && r.error) {
+          if (WM.DebugLog) WM.DebugLog.logError("image-gen", { error: r.error, prompt: r.prompt ? String(r.prompt).slice(0, 300) : "" });
+        }
+      }
+      const igUnlimitedTop = body.querySelector("#ig-unlimited-top");
+      if (igUnlimitedTop) igUnlimitedTop.onclick = () => {
+        handleUnlimitedImageGen();
+      };
+      const igUnlimitedFoot = body.querySelector("#c-img-gen");
+      if (igUnlimitedFoot) igUnlimitedFoot.onclick = () => {
+        handleUnlimitedImageGen();
+      };
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
@@ -5554,6 +5835,9 @@ ${p.summary || ""}`.trim() });
       return `<div class="wm-card">
       <div class="wm-h">\u{1F3A8} \u751F\u56FE\u914D\u7F6E</div>
       <div class="wm-hint">AI \u6BCF\u6B21\u56DE\u590D\u540E\uFF0C\u81EA\u52A8\u8C03\u7528 LLM \u628A\u56DE\u590D\u6574\u5408\u6210\u753B\u9762\u63D0\u793A\u8BCD\uFF0C\u518D\u9001\u751F\u56FE\u540E\u7AEF\u51FA\u56FE\u3002<b>\u56FE\u7247\u4E0D\u8FDB\u5BF9\u8BDD\u4E0A\u4E0B\u6587</b>\uFF08\u7528\u6807\u8BB0\u5305\u88F9\uFF0C\u6CE8\u5165\u65F6\u5254\u9664\uFF09\u3002\u590D\u7528\u4E0A\u65B9\u300CLLM \u8C03\u7528\u300D\u914D\u7F6E\u505A\u63D0\u793A\u8BCD\u6574\u5408\uFF0C\u65E0\u9700\u989D\u5916\u914D LLM\u3002</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
+        <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\uFF08\u5BF9\u6700\u65B0 AI \u6D88\u606F\u51FA\u56FE\uFF0C\u8FDE\u70B9\u53EF\u6392\u961F\u591A\u5F20\uFF09</button>
+      </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled ? "checked" : ""}/> \u542F\u7528\u751F\u56FE\u529F\u80FD</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger ? "checked" : ""}/> \u81EA\u52A8\u89E6\u53D1\uFF08AI \u56DE\u590D\u843D\u5E93\u540E\u81EA\u52A8\u751F\u56FE\uFF1B\u5173\u95ED\u5219\u4EC5\u624B\u52A8\u70B9\u300C\u{1F3A8} \u7ACB\u5373\u751F\u56FE\u300D\u6309\u94AE\uFF09</label>
       <div class="wm-divider"></div>
