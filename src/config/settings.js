@@ -141,7 +141,13 @@
       backendType: 'sd-webui',         // 'sd-webui' | 'comfyui' | 'cloud'
       apiUrl: 'http://127.0.0.1:7860', // 后端地址（SD WebUI 默认 7860 / ComfyUI 默认 8188 / 云端填完整 BaseURL）
       apiKey: '',                      // API Key（云端必填，本地通常留空）
-      model: '',                       // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
+      model: '',                       // 模型/checkpoint 名（SD WebUI sd_model_checkpoint / ComfyUI {{model}} 占位；建议用下拉选不要手填）
+      // 外网同源代理（跟向量服务一样的机制）：
+      //   本地访问酒馆(端口8000/8001) → 直连后端；
+      //   外网穿透访问 → 把 http://127.0.0.1:7860/xxx 改写成 window.location.origin + imgProxyPath + /xxx
+      //   ComfyUI 不配合开 CORS 时也可以靠这个代理绕浏览器跨域限制
+      imgProxyEnabled: true,           // 默认开（跟向量一致；本地访问不会改写，无副作用）
+      imgProxyPath: '/img',            // 代理路径；对应你反代里的转发规则（如 /img → http://127.0.0.1:7860）
       // 「常见提示词前缀」：对所有生图生效，拼在 LLM 提示词前面或包裹它。含 {{prompt}} 时替换，不含则前置。
       // 例：masterpiece, best quality, absurdres, {{prompt}}, detailed background
       promptPrefix: 'masterpiece, best quality, absurdres,',
@@ -167,6 +173,8 @@
       promptStyle: 'general',          // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
       // 兼容旧字段：老版本用 promptTemplate，新版本改名 promptPrefix（做一次迁移兜底）
       promptTemplate: '',
+      // 模型下拉缓存（刷新模型列表时写入，下次打开面板不重复请求）
+      models: [],
     },
   };
 

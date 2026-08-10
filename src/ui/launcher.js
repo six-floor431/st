@@ -1299,6 +1299,10 @@
         const sizeEl = q('#ig-size');
         const seedEl = q('#ig-seed');
         const denoiseEl = q('#ig-denoise');
+        const proxyEl = q('#ig-proxy');
+        const proxyPathEl = q('#ig-proxy-path');
+        // 保留之前刷新过的模型缓存（下拉选项），不要覆盖成空数组
+        const prevModels = (s.imageGen && Array.isArray(s.imageGen.models)) ? s.imageGen.models : [];
         s.imageGen = {
           enabled: q('#ig-on') ? q('#ig-on').checked : false,
           autoTrigger: q('#ig-auto') ? q('#ig-auto').checked : false,
@@ -1306,6 +1310,8 @@
           apiUrl: q('#ig-url') ? q('#ig-url').value.trim() : '',
           apiKey: q('#ig-key') ? q('#ig-key').value.trim() : '',
           model: q('#ig-model') ? q('#ig-model').value.trim() : '',
+          imgProxyEnabled: proxyEl ? proxyEl.checked : ((s.imageGen && s.imageGen.imgProxyEnabled !== false) ? true : false),
+          imgProxyPath: proxyPathEl ? proxyPathEl.value.trim() || '/img' : ((s.imageGen && s.imageGen.imgProxyPath) || '/img'),
           sizePreset: sizeEl ? sizeEl.value : '',
           width: parseInt(q('#ig-w') ? q('#ig-w').value : '512', 10) || 512,
           height: parseInt(q('#ig-h') ? q('#ig-h').value : '768', 10) || 768,
@@ -1323,6 +1329,7 @@
           promptStyle: q('#ig-style') ? q('#ig-style').value : 'general',
           // 兼容旧字段：旧版本 promptTemplate 也保留一份，防止老设置被误清空
           promptTemplate: q('#ig-tpl') ? q('#ig-tpl').value : '',
+          models: prevModels,
         };
       }
     }
@@ -1411,6 +1418,57 @@
       seedInput.addEventListener('dblclick', () => { seedInput.value = '-1'; syncPaneToSettings(body, s); });
     }
 
+    // 生图：刷新模型列表（下拉）—— 点按钮或"测试连接"后调用
+    async function refreshImageGenModels(opts) {
+      opts = opts || {};
+      const selectEl = body.querySelector('#ig-model');
+      const refreshBtn = body.querySelector('#ig-model-refresh');
+      if (!selectEl || !WM.ImageGen || typeof WM.ImageGen.fetchAvailableModels !== 'function') return;
+      // 先同步一次面板到 s，确保用刚填的后端地址
+      syncPaneToSettings(body, s);
+      const wasDisabled = refreshBtn ? refreshBtn.disabled : false;
+      if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = '⏳'; }
+      try {
+        const r = await WM.ImageGen.fetchAvailableModels(s);
+        if (!r.ok) {
+          if (!opts.silent) toast('🎨 刷新模型列表失败：' + (r.error || '未知错误'));
+          return { ok: false, error: r.error };
+        }
+        const list = Array.isArray(r.models) ? r.models : [];
+        // 写入设置缓存
+        if (s.imageGen) s.imageGen.models = list;
+        // 重填下拉选项
+        const curVal = (selectEl.value || (s.imageGen && s.imageGen.model) || '').trim();
+        const optList = [];
+        optList.push('<option value="">（请选择一个模型）</option>');
+        for (const m of list) {
+          const val = (typeof m === 'string') ? m : (m && m.value) ? m.value : '';
+          const lab = (typeof m === 'string') ? m : (m && m.label) ? m.label : val;
+          if (!val) continue;
+          optList.push(`<option value="${escapeHtml(val)}" ${curVal===val?'selected':''}>${escapeHtml(lab)}</option>`);
+        }
+        // 如果用户当前填的自定义值不在列表里，额外加一项避免丢失
+        if (curVal && !list.some((mm) => (typeof mm === 'string' ? mm : (mm && mm.value) || '') === curVal)) {
+          optList.push(`<option value="${escapeHtml(curVal)}" selected>${escapeHtml(curVal)}（自定义）</option>`);
+        }
+        selectEl.innerHTML = optList.join('');
+        if (!curVal && list.length) {
+          // 没有已选值 → 默认选第一个非空
+          const firstVal = (typeof list[0] === 'string') ? list[0] : list[0].value;
+          if (firstVal) { selectEl.value = firstVal; syncPaneToSettings(body, s); }
+        }
+        if (!opts.silent) toast('🎨 已刷新模型列表，共 ' + list.length + ' 个');
+        return { ok: true, count: list.length };
+      } catch (e) {
+        if (!opts.silent) toast('🎨 刷新模型列表异常：' + (e.message || String(e)));
+        return { ok: false, error: e.message || String(e) };
+      } finally {
+        if (refreshBtn) { refreshBtn.disabled = wasDisabled; refreshBtn.textContent = '🔄'; }
+      }
+    }
+    const modelRefreshBtn = body.querySelector('#ig-model-refresh');
+    if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
+
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
     if (saveBtn) saveBtn.onclick = async () => {
@@ -1479,10 +1537,21 @@
       else if (scope === 'vec') { await testEmb(); }
       else if (scope === 'rerank') { await testRk(); }
       else if (scope === 'lore') { await testWorld(); }
-      else if (scope === 'img') { // 生图：用极简 prompt 测一次后端连通性（会真的出一张图）
+      else if (scope === 'img') { // 生图：用极简 prompt 测一次后端连通性（会真的出一张图），顺带刷新模型列表
         try {
           const r = await WM.ImageGen.testConnection(tmp);
           add('生图(' + (tmp.imageGen && tmp.imageGen.backendType || 'sd-webui') + ')', r, r.success ? '已返回图片' : '');
+          // 测试连通且是本地后端 → 自动拉一次模型列表填下拉（用户就不用再手动点 🔄 了）
+          if (r && r.success && tmp.imageGen && tmp.imageGen.backendType !== 'cloud' && typeof refreshImageGenModels === 'function') {
+            try {
+              // 这里 refreshImageGenModels 定义在 bindPaneEvents 函数作用域里（上面），本分支就在同一作用域可直接调用
+              const mr = await refreshImageGenModels({ silent: true });
+              if (mr && mr.ok) rows.push('<div class="wm-test-item wm-ok">✅ 生图模型列表：已自动加载 ' + mr.count + ' 个（切换下拉即可选择）</div>');
+              else rows.push('<div class="wm-test-item ' + (tmp.imageGen.backendType==='cloud'?'wm-muted':'wm-bad') + '">⚠️ 生图模型列表：自动加载失败' + (mr && mr.error ? '（' + String(mr.error).slice(0, 120) + '）' : '') + '，请点「🔄」手动刷新</div>');
+            } catch (_e) {
+              rows.push('<div class="wm-test-item wm-muted">ℹ️ 生图模型列表：请点「🔄」手动刷新</div>');
+            }
+          }
         } catch (e) { add('生图', { success: false }, String(e.message || e)); }
         await testLlm(); // 生图提示词也依赖 LLM，顺带测一下
       }
@@ -1592,9 +1661,36 @@
         <select id="ig-backend">${backendOpts}</select>
       </label>
       <label class="wm-row">后端地址 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl||'')}" placeholder="${isCloud ? 'https://api.siliconflow.cn/v1' : 'http://127.0.0.1:' + portHint}"/></label>
-      <div class="wm-hint">${isCloud ? '云端 OpenAI 兼容端点的 BaseURL，自动拼接下方的 API 路径。' : (isComfy ? 'ComfyUI 服务地址，默认端口 8188。会调用 /prompt 提交、/history 轮询、/view 取图。' : 'SD WebUI (AUTOMATIC1111) 服务地址，默认端口 7860。调用 /sdapi/v1/txt2img。')}</div>
+      <div class="wm-hint">${isCloud ? '云端 OpenAI 兼容端点的 BaseURL，自动拼接下方的 API 路径。' : (isComfy ? 'ComfyUI 服务地址，默认端口 8188。会调用 /prompt 提交、/history 轮询、/view 取图。<b>如浏览器控制台报 CORS/ERR_FAILED，请启动 ComfyUI 时加参数：<code>python main.py --enable-cors-header "*"</code></b>。' : 'SD WebUI (AUTOMATIC1111) 服务地址，默认端口 7860。调用 /sdapi/v1/txt2img。<b>如报 CORS 请启动时加：<code>--api --cors-allow-origins=*</code></b>。')}</div>
       <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey||'')}" placeholder="${isCloud ? 'sk-...（云端必填）' : '本地通常留空'}"/></label>
-      <label class="wm-row">模型 / Checkpoint<input id="ig-model" value="${escapeHtml(ig.model||'')}" placeholder="${isCloud ? '如 Kwai-Kolors/Kolors' : '如 v1-5-pruned-emaonly.safetensors（留空用后端当前模型）'}"/></label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">模型 / Checkpoint
+        ${(isCloud)
+          ? `<input id="ig-model" value="${escapeHtml(ig.model||'')}" placeholder="如 Kwai-Kolors/Kolors"/>`
+          : `<div style="display:flex;gap:6px;width:100%;margin-top:4px">
+              <select id="ig-model" style="flex:1">
+                ${(Array.isArray(ig.models) && ig.models.length)
+                  ? `<option value="">（请选择一个模型）</option>`
+                    + ig.models.map((m) => {
+                        const val = (typeof m === 'string') ? m : (m && m.value) ? m.value : '';
+                        const lab = (typeof m === 'string') ? m : (m && m.label) ? m.label : val;
+                        return `<option value="${escapeHtml(val)}" ${ig.model===val?'selected':''}>${escapeHtml(lab)}</option>`;
+                      }).join('')
+                  : `<option value="">${escapeHtml(ig.model||'')}（点击右侧「🔄」刷新模型列表）</option>`
+                }
+                ${(ig.model && !(Array.isArray(ig.models) && ig.models.some((mm)=> (typeof mm==='string'?mm:mm.value)===ig.model)))
+                  ? `<option value="${escapeHtml(ig.model)}" selected>${escapeHtml(ig.model)}（自定义 / 本地未匹配）</option>`
+                  : ''}
+              </select>
+              <button id="ig-model-refresh" class="wm-btn small" title="从 ${isComfy?'ComfyUI (/object_info/CheckpointLoaderSimple)':'SD WebUI (/sdapi/v1/sd-models)'} 拉取可用 Checkpoint">🔄</button>
+            </div>
+            <div class="wm-hint">本地模型来自你${isComfy?'ComfyUI「models/checkpoints」目录下的文件（文件名即 CKPT 名）':'SD WebUI 已加载的模型列表'}。刷新失败通常是未开 CORS 或后端地址不对。下拉选中后会自动写入上方模型字段。</div>`
+        }
+      </label>
+      ${isCloud ? `` : `
+      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled!==false?'checked':''}/> 外网访问时启用同源代理（自动把请求改写到当前源 + 代理路径，绕开本地后端 CORS 限制）</label>
+      <label class="wm-row">同源代理路径<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath||'/img')}" placeholder="/img"/>
+      </label>
+      <div class="wm-hint">用于 frp/ngrok/云反代等外网访问温记的场景。把温记反代里 <code>/img/*</code> 转发到本地生图服务（ComfyUI/SD WebUI）即可。</div>`}
       ${isCloud ? `<label class="wm-row">云端 API 路径<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath||'/images/generations')}" placeholder="/images/generations"/></label>
       <div class="wm-hint">拼在 apiUrl 后。SiliconFlow / OpenAI 兼容端点都用 <code>/images/generations</code>。</div>` : ''}
       <div class="wm-divider"></div>

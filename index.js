@@ -165,7 +165,15 @@
         apiKey: "",
         // API Key（云端必填，本地通常留空）
         model: "",
-        // 模型/checkpoint 名（可选；SD WebUI 设 sd_model_checkpoint，云端设 model 字段）
+        // 模型/checkpoint 名（SD WebUI sd_model_checkpoint / ComfyUI {{model}} 占位；建议用下拉选不要手填）
+        // 外网同源代理（跟向量服务一样的机制）：
+        //   本地访问酒馆(端口8000/8001) → 直连后端；
+        //   外网穿透访问 → 把 http://127.0.0.1:7860/xxx 改写成 window.location.origin + imgProxyPath + /xxx
+        //   ComfyUI 不配合开 CORS 时也可以靠这个代理绕浏览器跨域限制
+        imgProxyEnabled: true,
+        // 默认开（跟向量一致；本地访问不会改写，无副作用）
+        imgProxyPath: "/img",
+        // 代理路径；对应你反代里的转发规则（如 /img → http://127.0.0.1:7860）
         // 「常见提示词前缀」：对所有生图生效，拼在 LLM 提示词前面或包裹它。含 {{prompt}} 时替换，不含则前置。
         // 例：masterpiece, best quality, absurdres, {{prompt}}, detailed background
         promptPrefix: "masterpiece, best quality, absurdres,",
@@ -198,7 +206,9 @@
         promptStyle: "general",
         // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨
         // 兼容旧字段：老版本用 promptTemplate，新版本改名 promptPrefix（做一次迁移兜底）
-        promptTemplate: ""
+        promptTemplate: "",
+        // 模型下拉缓存（刷新模型列表时写入，下次打开面板不重复请求）
+        models: []
       }
     };
     function load() {
@@ -3090,6 +3100,58 @@ ${p.summary || ""}`.trim() });
       if (typeof createChatMessages === "function") return createChatMessages(arr, opts);
       throw new Error("createChatMessages \u4E0D\u53EF\u7528\uFF08\u9700\u9152\u9986\u52A9\u624B\uFF09");
     }
+    function applyImgProxy(url, settings) {
+      if (!url) return url;
+      const ig = settings && settings.imageGen || {};
+      if (ig.imgProxyEnabled === false) return url;
+      if (!/^https?:\/\//i.test(url)) return url;
+      let origin = "";
+      try {
+        origin = window.top && window.top.location && window.top.location.origin || window.location.origin;
+      } catch (e) {
+        origin = window.location.origin;
+      }
+      if (!origin || origin === "null") return url;
+      let port = "";
+      try {
+        const u0 = new URL(origin);
+        port = u0.port || (u0.protocol === "https:" ? "443" : "80");
+      } catch (e) {
+      }
+      if (port === "8000" || port === "8001") return url;
+      const proxyPath = String(ig.imgProxyPath || "/img").replace(/\/+$/, "");
+      try {
+        const eu = new URL(url, origin);
+        const pathOnly = eu.pathname + (eu.search || "");
+        const rewritten = origin + proxyPath + pathOnly;
+        try {
+          console.log("[WarmMemo][image-gen] \u540C\u6E90\u4EE3\u7406\u6539\u5199\uFF1A", url, "\u2192", rewritten);
+        } catch (_) {
+        }
+        return rewritten;
+      } catch (e) {
+        return url;
+      }
+    }
+    async function wmFetch(url, opts, settings) {
+      const finalUrl = applyImgProxy(url, settings);
+      try {
+        return await fetch(finalUrl, opts);
+      } catch (netErr) {
+        const netMsg = String(netErr && netErr.message ? netErr.message : netErr);
+        const origHost = function() {
+          try {
+            return new URL(url).host;
+          } catch (_) {
+            return url;
+          }
+        }();
+        const hint = "\u6D4F\u89C8\u5668\u65E0\u6CD5\u76F4\u8FDE " + origHost + '\uFF08\u53EF\u80FD\u662F ComfyUI/SD WebUI \u672A\u5F00\u542F CORS \u6216\u4EE3\u7406\u4E0D\u901A\uFF09\u3002\n\u89E3\u51B3\u65B9\u5F0F\uFF08\u4EFB\u9009\u5176\u4E00\uFF09\uFF1A\n  \u2460 \u542F\u52A8 ComfyUI \u65F6\u52A0\u53C2\u6570\uFF1Apython main.py --enable-cors-header "*"\n     SD WebUI \u542F\u52A8\u65F6\u52A0\u53C2\u6570\uFF1A--api --cors-allow-origins=*\n  \u2461 \u8D70\u6E29\u8BB0\u540C\u6E90\u4EE3\u7406\uFF08\u5916\u7F51\u7A7F\u900F\u573A\u666F\uFF09\uFF1A\u5728\u53CD\u4EE3\u91CC\u628A "' + String(settings && settings.imageGen && settings.imageGen.imgProxyPath || "/img") + '/*" \u8F6C\u53D1\u5230 ' + origHost + "/*\uFF0C\u6E29\u8BB0\u5DF2\u81EA\u52A8\u6539\u5199\u8BF7\u6C42 URL\u3002\n\u539F\u59CB\u9519\u8BEF\uFF1A" + netMsg;
+        const err = new Error(hint);
+        err.name = "ImageCorsError";
+        throw err;
+      }
+    }
     function extractTag(raw, tag) {
       if (raw == null) return "";
       const s = String(raw).replace(/^```[a-zA-Z]*\s*/gim, "").replace(/```\s*$/g, "").trim();
@@ -3184,11 +3246,11 @@ ${p.summary || ""}`.trim() });
         sampler_name: ig.sampler || "Euler a"
       };
       if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
-      const res = await fetch(url, {
+      const res = await wmFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
-      });
+      }, settings);
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         throw new Error("SD WebUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
@@ -3200,7 +3262,7 @@ ${p.summary || ""}`.trim() });
     function defaultComfyWorkflow() {
       return {
         "3": { class_type: "KSampler", inputs: { seed: "{{seed}}", steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "euler", scheduler: "normal", denoise: "{{denoise}}", model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
-        "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "v1-5-pruned-emaonly.safetensors" } },
+        "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "{{model}}" } },
         "5": { class_type: "EmptyLatentImage", inputs: { width: "{{width}}", height: "{{height}}", batch_size: 1 } },
         "6": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}", clip: ["4", 1] } },
         "7": { class_type: "CLIPTextEncode", inputs: { text: "{{negative}}", clip: ["4", 1] } },
@@ -3228,28 +3290,40 @@ ${p.summary || ""}`.trim() });
       const cfg = Number(ig.cfgScale) || 7;
       const denoise = ig.denoisingStrength == null ? 1 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
       const seed = resolveSeed(ig.seed);
+      const model = ig.model && ig.model.trim() ? ig.model.trim() : "";
+      if (!model && !ig.comfyWorkflow) {
+        throw new Error("ComfyUI\uFF1A\u672A\u9009\u62E9 Checkpoint \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u6A21\u578B/Checkpoint\u300D\u8F93\u5165\u6846\u65C1\u7684\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\u4F60\u672C\u5730\u5DF2\u6709\u7684\u6A21\u578B\u540D\u3002");
+      }
       let workflowStr = JSON.stringify(workflow);
       const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, esc(prompt)).replace(/\{\{negative\}\}/g, esc(neg)).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg)).replace(/\{\{denoise\}\}/g, String(denoise)).replace(/\{\{seed\}\}/g, String(seed));
-      const res = await fetch(base + "/prompt", {
+      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, esc(prompt)).replace(/\{\{negative\}\}/g, esc(neg)).replace(/\{\{width\}\}/g, String(w)).replace(/\{\{height\}\}/g, String(h)).replace(/\{\{steps\}\}/g, String(steps)).replace(/\{\{cfg\}\}/g, String(cfg)).replace(/\{\{denoise\}\}/g, String(denoise)).replace(/\{\{seed\}\}/g, String(seed)).replace(/\{\{model\}\}/g, esc(model));
+      let promptObj;
+      try {
+        promptObj = JSON.parse(workflowStr);
+      } catch (e) {
+        throw new Error("\u5DE5\u4F5C\u6D41 JSON \u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + e.message);
+      }
+      const clientId = "WarmMemo_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
+      const res = await wmFetch(base + "/prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: workflowStr
-      });
+        body: payload
+      }, settings);
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         throw new Error("ComfyUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
       }
       const j = await res.json();
       const promptId = j && j.prompt_id;
-      if (!promptId) throw new Error("ComfyUI \u672A\u8FD4\u56DE prompt_id");
-      return await pollComfyuiResult(promptId, base);
+      if (!promptId) throw new Error("ComfyUI \u672A\u8FD4\u56DE prompt_id\uFF08\u54CD\u5E94\uFF1A" + JSON.stringify(j).slice(0, 200) + "\uFF09");
+      return await pollComfyuiResult(promptId, base, settings);
     }
-    async function pollComfyuiResult(promptId, base) {
+    async function pollComfyuiResult(promptId, base, settings) {
       for (let i = 0; i < 90; i++) {
         await new Promise((r) => setTimeout(r, 1e3));
         try {
-          const res = await fetch(base + "/history/" + encodeURIComponent(promptId));
+          const res = await wmFetch(base + "/history/" + encodeURIComponent(promptId), { method: "GET" }, settings);
           if (!res.ok) continue;
           const j = await res.json();
           const item = j[promptId];
@@ -3264,7 +3338,7 @@ ${p.summary || ""}`.trim() });
                 subfolder: img.subfolder || "",
                 type: img.type || "output"
               });
-              return base + "/view?" + params.toString();
+              return applyImgProxy(base + "/view?" + params.toString(), settings);
             }
           }
         } catch (e) {
@@ -3279,7 +3353,7 @@ ${p.summary || ""}`.trim() });
       const path = ig.cloudPath || "/images/generations";
       const url = base + path;
       const w = Number(ig.width) || 512;
-      const h = Number(ig.height) || 512;
+      const h = Number(ig.height) || 768;
       const body = {
         prompt,
         n: 1,
@@ -3295,7 +3369,7 @@ ${p.summary || ""}`.trim() });
       if (neg) body.negative_prompt = neg;
       const headers = { "Content-Type": "application/json" };
       if (ig.apiKey) headers["Authorization"] = "Bearer " + ig.apiKey;
-      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+      const res = await wmFetch(url, { method: "POST", headers, body: JSON.stringify(body) }, settings);
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         throw new Error("\u4E91\u7AEF API HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
@@ -3306,6 +3380,56 @@ ${p.summary || ""}`.trim() });
         if (j.data[0].url) return j.data[0].url;
       }
       throw new Error("\u4E91\u7AEF API \u672A\u8FD4\u56DE\u56FE\u7247\u6570\u636E");
+    }
+    async function fetchAvailableModels(settings) {
+      const ig = settings && settings.imageGen || WM.Settings.load().imageGen || {};
+      const base = (ig.apiUrl || "").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
+      const type = ig.backendType || "sd-webui";
+      if (type === "cloud") {
+        return { ok: true, models: [] };
+      }
+      if (!base) return { ok: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740" };
+      if (type === "sd-webui") {
+        try {
+          const res = await wmFetch(base + "/sdapi/v1/sd-models", { method: "GET" }, settings);
+          if (!res.ok) {
+            const t = await res.text().catch(() => "");
+            return { ok: false, error: "SD WebUI HTTP " + res.status + "\uFF1A" + t.slice(0, 200) };
+          }
+          const arr = await res.json();
+          if (!Array.isArray(arr)) return { ok: false, error: "SD WebUI \u8FD4\u56DE\u7ED3\u6784\u5F02\u5E38" };
+          const models = arr.map((m) => ({
+            value: m.title || m.model_name || m.filename || "",
+            label: (m.model_name || m.title || m.filename || "") + (m.hash ? " [" + String(m.hash).slice(0, 8) + "]" : "")
+          })).filter((m) => m.value);
+          return { ok: true, models };
+        } catch (e) {
+          return { ok: false, error: e.message || String(e) };
+        }
+      }
+      try {
+        const res = await wmFetch(base + "/object_info/CheckpointLoaderSimple", { method: "GET" }, settings);
+        if (!res.ok) {
+          const res2 = await wmFetch(base + "/models/checkpoints", { method: "GET" }, settings);
+          if (!res2.ok) {
+            const t = await res.text().catch(() => "");
+            return { ok: false, error: "ComfyUI HTTP " + res.status + "\uFF08object_info\uFF09\uFF1A" + t.slice(0, 200) };
+          }
+          const arr = await res2.json();
+          const models2 = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
+            const val = typeof m === "string" ? m : m.name || m.filename || "";
+            return { value: val, label: val };
+          }).filter((m) => m.value);
+          return { ok: true, models: models2 };
+        }
+        const j = await res.json();
+        const nodeInfo = j && (j.CheckpointLoaderSimple || j["CheckpointLoaderSimple"]);
+        const list = nodeInfo && nodeInfo.input && nodeInfo.input.required && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0]) ? nodeInfo.input.required.ckpt_name[0] : [];
+        const models = list.map((n) => ({ value: n, label: n }));
+        return { ok: true, models };
+      } catch (e) {
+        return { ok: false, error: e.message || String(e) };
+      }
     }
     async function generateImage(prompt, settings) {
       const ig = settings.imageGen || {};
@@ -3444,6 +3568,7 @@ ${p.summary || ""}`.trim() });
       buildFullPrompt,
       insertImage,
       testConnection,
+      fetchAvailableModels,
       IMG_START,
       IMG_END,
       isGenerating: () => _generating
@@ -5076,6 +5201,9 @@ ${p.summary || ""}`.trim() });
           const sizeEl = q("#ig-size");
           const seedEl = q("#ig-seed");
           const denoiseEl = q("#ig-denoise");
+          const proxyEl = q("#ig-proxy");
+          const proxyPathEl = q("#ig-proxy-path");
+          const prevModels = s.imageGen && Array.isArray(s.imageGen.models) ? s.imageGen.models : [];
           s.imageGen = {
             enabled: q("#ig-on") ? q("#ig-on").checked : false,
             autoTrigger: q("#ig-auto") ? q("#ig-auto").checked : false,
@@ -5083,6 +5211,8 @@ ${p.summary || ""}`.trim() });
             apiUrl: q("#ig-url") ? q("#ig-url").value.trim() : "",
             apiKey: q("#ig-key") ? q("#ig-key").value.trim() : "",
             model: q("#ig-model") ? q("#ig-model").value.trim() : "",
+            imgProxyEnabled: proxyEl ? proxyEl.checked : s.imageGen && s.imageGen.imgProxyEnabled !== false ? true : false,
+            imgProxyPath: proxyPathEl ? proxyPathEl.value.trim() || "/img" : s.imageGen && s.imageGen.imgProxyPath || "/img",
             sizePreset: sizeEl ? sizeEl.value : "",
             width: parseInt(q("#ig-w") ? q("#ig-w").value : "512", 10) || 512,
             height: parseInt(q("#ig-h") ? q("#ig-h").value : "768", 10) || 768,
@@ -5099,7 +5229,8 @@ ${p.summary || ""}`.trim() });
             displayMode: q("#ig-display") ? q("#ig-display").value : "append",
             promptStyle: q("#ig-style") ? q("#ig-style").value : "general",
             // 兼容旧字段：旧版本 promptTemplate 也保留一份，防止老设置被误清空
-            promptTemplate: q("#ig-tpl") ? q("#ig-tpl").value : ""
+            promptTemplate: q("#ig-tpl") ? q("#ig-tpl").value : "",
+            models: prevModels
           };
         }
       }
@@ -5183,6 +5314,59 @@ ${p.summary || ""}`.trim() });
           syncPaneToSettings(body, s);
         });
       }
+      async function refreshImageGenModels(opts) {
+        opts = opts || {};
+        const selectEl = body.querySelector("#ig-model");
+        const refreshBtn = body.querySelector("#ig-model-refresh");
+        if (!selectEl || !WM.ImageGen || typeof WM.ImageGen.fetchAvailableModels !== "function") return;
+        syncPaneToSettings(body, s);
+        const wasDisabled = refreshBtn ? refreshBtn.disabled : false;
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.textContent = "\u23F3";
+        }
+        try {
+          const r = await WM.ImageGen.fetchAvailableModels(s);
+          if (!r.ok) {
+            if (!opts.silent) toast("\u{1F3A8} \u5237\u65B0\u6A21\u578B\u5217\u8868\u5931\u8D25\uFF1A" + (r.error || "\u672A\u77E5\u9519\u8BEF"));
+            return { ok: false, error: r.error };
+          }
+          const list = Array.isArray(r.models) ? r.models : [];
+          if (s.imageGen) s.imageGen.models = list;
+          const curVal = (selectEl.value || s.imageGen && s.imageGen.model || "").trim();
+          const optList = [];
+          optList.push('<option value="">\uFF08\u8BF7\u9009\u62E9\u4E00\u4E2A\u6A21\u578B\uFF09</option>');
+          for (const m of list) {
+            const val = typeof m === "string" ? m : m && m.value ? m.value : "";
+            const lab = typeof m === "string" ? m : m && m.label ? m.label : val;
+            if (!val) continue;
+            optList.push(`<option value="${escapeHtml(val)}" ${curVal === val ? "selected" : ""}>${escapeHtml(lab)}</option>`);
+          }
+          if (curVal && !list.some((mm) => (typeof mm === "string" ? mm : mm && mm.value || "") === curVal)) {
+            optList.push(`<option value="${escapeHtml(curVal)}" selected>${escapeHtml(curVal)}\uFF08\u81EA\u5B9A\u4E49\uFF09</option>`);
+          }
+          selectEl.innerHTML = optList.join("");
+          if (!curVal && list.length) {
+            const firstVal = typeof list[0] === "string" ? list[0] : list[0].value;
+            if (firstVal) {
+              selectEl.value = firstVal;
+              syncPaneToSettings(body, s);
+            }
+          }
+          if (!opts.silent) toast("\u{1F3A8} \u5DF2\u5237\u65B0\u6A21\u578B\u5217\u8868\uFF0C\u5171 " + list.length + " \u4E2A");
+          return { ok: true, count: list.length };
+        } catch (e) {
+          if (!opts.silent) toast("\u{1F3A8} \u5237\u65B0\u6A21\u578B\u5217\u8868\u5F02\u5E38\uFF1A" + (e.message || String(e)));
+          return { ok: false, error: e.message || String(e) };
+        } finally {
+          if (refreshBtn) {
+            refreshBtn.disabled = wasDisabled;
+            refreshBtn.textContent = "\u{1F504}";
+          }
+        }
+      }
+      const modelRefreshBtn = body.querySelector("#ig-model-refresh");
+      if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
@@ -5266,6 +5450,15 @@ ${p.summary || ""}`.trim() });
           try {
             const r = await WM.ImageGen.testConnection(tmp);
             add("\u751F\u56FE(" + (tmp.imageGen && tmp.imageGen.backendType || "sd-webui") + ")", r, r.success ? "\u5DF2\u8FD4\u56DE\u56FE\u7247" : "");
+            if (r && r.success && tmp.imageGen && tmp.imageGen.backendType !== "cloud" && typeof refreshImageGenModels === "function") {
+              try {
+                const mr = await refreshImageGenModels({ silent: true });
+                if (mr && mr.ok) rows.push('<div class="wm-test-item wm-ok">\u2705 \u751F\u56FE\u6A21\u578B\u5217\u8868\uFF1A\u5DF2\u81EA\u52A8\u52A0\u8F7D ' + mr.count + " \u4E2A\uFF08\u5207\u6362\u4E0B\u62C9\u5373\u53EF\u9009\u62E9\uFF09</div>");
+                else rows.push('<div class="wm-test-item ' + (tmp.imageGen.backendType === "cloud" ? "wm-muted" : "wm-bad") + '">\u26A0\uFE0F \u751F\u56FE\u6A21\u578B\u5217\u8868\uFF1A\u81EA\u52A8\u52A0\u8F7D\u5931\u8D25' + (mr && mr.error ? "\uFF08" + String(mr.error).slice(0, 120) + "\uFF09" : "") + "\uFF0C\u8BF7\u70B9\u300C\u{1F504}\u300D\u624B\u52A8\u5237\u65B0</div>");
+              } catch (_e) {
+                rows.push('<div class="wm-test-item wm-muted">\u2139\uFE0F \u751F\u56FE\u6A21\u578B\u5217\u8868\uFF1A\u8BF7\u70B9\u300C\u{1F504}\u300D\u624B\u52A8\u5237\u65B0</div>');
+              }
+            }
           } catch (e) {
             add("\u751F\u56FE", { success: false }, String(e.message || e));
           }
@@ -5368,9 +5561,27 @@ ${p.summary || ""}`.trim() });
         <select id="ig-backend">${backendOpts}</select>
       </label>
       <label class="wm-row">\u540E\u7AEF\u5730\u5740 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl || "")}" placeholder="${isCloud ? "https://api.siliconflow.cn/v1" : "http://127.0.0.1:" + portHint}"/></label>
-      <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? "ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u4F1A\u8C03\u7528 /prompt \u63D0\u4EA4\u3001/history \u8F6E\u8BE2\u3001/view \u53D6\u56FE\u3002" : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u8C03\u7528 /sdapi/v1/txt2img\u3002"}</div>
+      <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? 'ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u4F1A\u8C03\u7528 /prompt \u63D0\u4EA4\u3001/history \u8F6E\u8BE2\u3001/view \u53D6\u56FE\u3002<b>\u5982\u6D4F\u89C8\u5668\u63A7\u5236\u53F0\u62A5 CORS/ERR_FAILED\uFF0C\u8BF7\u542F\u52A8 ComfyUI \u65F6\u52A0\u53C2\u6570\uFF1A<code>python main.py --enable-cors-header "*"</code></b>\u3002' : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u8C03\u7528 /sdapi/v1/txt2img\u3002<b>\u5982\u62A5 CORS \u8BF7\u542F\u52A8\u65F6\u52A0\uFF1A<code>--api --cors-allow-origins=*</code></b>\u3002"}</div>
       <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey || "")}" placeholder="${isCloud ? "sk-...\uFF08\u4E91\u7AEF\u5FC5\u586B\uFF09" : "\u672C\u5730\u901A\u5E38\u7559\u7A7A"}"/></label>
-      <label class="wm-row">\u6A21\u578B / Checkpoint<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="${isCloud ? "\u5982 Kwai-Kolors/Kolors" : "\u5982 v1-5-pruned-emaonly.safetensors\uFF08\u7559\u7A7A\u7528\u540E\u7AEF\u5F53\u524D\u6A21\u578B\uFF09"}"/></label>
+      <label class="wm-row" style="flex-direction:column;align-items:stretch">\u6A21\u578B / Checkpoint
+        ${isCloud ? `<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="\u5982 Kwai-Kolors/Kolors"/>` : `<div style="display:flex;gap:6px;width:100%;margin-top:4px">
+              <select id="ig-model" style="flex:1">
+                ${Array.isArray(ig.models) && ig.models.length ? `<option value="">\uFF08\u8BF7\u9009\u62E9\u4E00\u4E2A\u6A21\u578B\uFF09</option>` + ig.models.map((m) => {
+        const val = typeof m === "string" ? m : m && m.value ? m.value : "";
+        const lab = typeof m === "string" ? m : m && m.label ? m.label : val;
+        return `<option value="${escapeHtml(val)}" ${ig.model === val ? "selected" : ""}>${escapeHtml(lab)}</option>`;
+      }).join("") : `<option value="">${escapeHtml(ig.model || "")}\uFF08\u70B9\u51FB\u53F3\u4FA7\u300C\u{1F504}\u300D\u5237\u65B0\u6A21\u578B\u5217\u8868\uFF09</option>`}
+                ${ig.model && !(Array.isArray(ig.models) && ig.models.some((mm) => (typeof mm === "string" ? mm : mm.value) === ig.model)) ? `<option value="${escapeHtml(ig.model)}" selected>${escapeHtml(ig.model)}\uFF08\u81EA\u5B9A\u4E49 / \u672C\u5730\u672A\u5339\u914D\uFF09</option>` : ""}
+              </select>
+              <button id="ig-model-refresh" class="wm-btn small" title="\u4ECE ${isComfy ? "ComfyUI (/object_info/CheckpointLoaderSimple)" : "SD WebUI (/sdapi/v1/sd-models)"} \u62C9\u53D6\u53EF\u7528 Checkpoint">\u{1F504}</button>
+            </div>
+            <div class="wm-hint">\u672C\u5730\u6A21\u578B\u6765\u81EA\u4F60${isComfy ? "ComfyUI\u300Cmodels/checkpoints\u300D\u76EE\u5F55\u4E0B\u7684\u6587\u4EF6\uFF08\u6587\u4EF6\u540D\u5373 CKPT \u540D\uFF09" : "SD WebUI \u5DF2\u52A0\u8F7D\u7684\u6A21\u578B\u5217\u8868"}\u3002\u5237\u65B0\u5931\u8D25\u901A\u5E38\u662F\u672A\u5F00 CORS \u6216\u540E\u7AEF\u5730\u5740\u4E0D\u5BF9\u3002\u4E0B\u62C9\u9009\u4E2D\u540E\u4F1A\u81EA\u52A8\u5199\u5165\u4E0A\u65B9\u6A21\u578B\u5B57\u6BB5\u3002</div>`}
+      </label>
+      ${isCloud ? `` : `
+      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled !== false ? "checked" : ""}/> \u5916\u7F51\u8BBF\u95EE\u65F6\u542F\u7528\u540C\u6E90\u4EE3\u7406\uFF08\u81EA\u52A8\u628A\u8BF7\u6C42\u6539\u5199\u5230\u5F53\u524D\u6E90 + \u4EE3\u7406\u8DEF\u5F84\uFF0C\u7ED5\u5F00\u672C\u5730\u540E\u7AEF CORS \u9650\u5236\uFF09</label>
+      <label class="wm-row">\u540C\u6E90\u4EE3\u7406\u8DEF\u5F84<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath || "/img")}" placeholder="/img"/>
+      </label>
+      <div class="wm-hint">\u7528\u4E8E frp/ngrok/\u4E91\u53CD\u4EE3\u7B49\u5916\u7F51\u8BBF\u95EE\u6E29\u8BB0\u7684\u573A\u666F\u3002\u628A\u6E29\u8BB0\u53CD\u4EE3\u91CC <code>/img/*</code> \u8F6C\u53D1\u5230\u672C\u5730\u751F\u56FE\u670D\u52A1\uFF08ComfyUI/SD WebUI\uFF09\u5373\u53EF\u3002</div>`}
       ${isCloud ? `<label class="wm-row">\u4E91\u7AEF API \u8DEF\u5F84<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath || "/images/generations")}" placeholder="/images/generations"/></label>
       <div class="wm-hint">\u62FC\u5728 apiUrl \u540E\u3002SiliconFlow / OpenAI \u517C\u5BB9\u7AEF\u70B9\u90FD\u7528 <code>/images/generations</code>\u3002</div>` : ""}
       <div class="wm-divider"></div>

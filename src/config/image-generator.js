@@ -36,6 +36,55 @@
     throw new Error('createChatMessages 不可用（需酒馆助手）');
   }
 
+  // ── 外网同源代理改写（跟向量服务 applyVecProxy 一模一样的逻辑）──
+  //   本地访问酒馆（端口 8000/8001）→ 直连（不会被跨域拦截）
+  //   外网穿透访问 → 把 http://127.0.0.1:7860/path 改写成 window.location.origin + imgProxyPath + /path
+  //   解决 ComfyUI/SD WebUI 没开 CORS 导致浏览器跨域拦成 ERR_FAILED 的问题
+  function applyImgProxy(url, settings) {
+    if (!url) return url;
+    const ig = (settings && settings.imageGen) || {};
+    if (ig.imgProxyEnabled === false) return url; // 显式关闭：直连
+    if (!/^https?:\/\//i.test(url)) return url; // 相对路径/非 http 已是同源，放行
+    let origin = '';
+    try { origin = (window.top && window.top.location && window.top.location.origin) || window.location.origin; } catch (e) { origin = window.location.origin; }
+    if (!origin || origin === 'null') return url;
+    // 本地端口：直连，跳过改写
+    let port = '';
+    try { const u0 = new URL(origin); port = u0.port || (u0.protocol === 'https:' ? '443' : '80'); } catch (e) {}
+    if (port === '8000' || port === '8001') return url;
+    const proxyPath = String(ig.imgProxyPath || '/img').replace(/\/+$/, '');
+    try {
+      const eu = new URL(url, origin);
+      const pathOnly = eu.pathname + (eu.search || '');
+      const rewritten = origin + proxyPath + pathOnly;
+      try { console.log('[WarmMemo][image-gen] 同源代理改写：', url, '→', rewritten); } catch (_) {}
+      return rewritten;
+    } catch (e) { return url; }
+  }
+
+  // 统一 fetch 包装：自动改写 URL + 错误增强
+  async function wmFetch(url, opts, settings) {
+    const finalUrl = applyImgProxy(url, settings);
+    try {
+      return await fetch(finalUrl, opts);
+    } catch (netErr) {
+      // 典型情况：浏览器跨域预检 CORS 失败 → TypeError: Failed to fetch
+      // 给出有行动价值的报错信息（告诉用户开 CORS 或用代理）
+      const netMsg = String(netErr && netErr.message ? netErr.message : netErr);
+      const origHost = (function () { try { return (new URL(url)).host; } catch (_) { return url; } })();
+      const hint = '浏览器无法直连 ' + origHost + '（可能是 ComfyUI/SD WebUI 未开启 CORS 或代理不通）。\n'
+        + '解决方式（任选其一）：\n'
+        + '  ① 启动 ComfyUI 时加参数：python main.py --enable-cors-header "*"\n'
+        + '     SD WebUI 启动时加参数：--api --cors-allow-origins=*\n'
+        + '  ② 走温记同源代理（外网穿透场景）：在反代里把 "' + String((settings && settings.imageGen && settings.imageGen.imgProxyPath) || '/img')
+        + '/*" 转发到 ' + origHost + '/*，温记已自动改写请求 URL。\n'
+        + '原始错误：' + netMsg;
+      const err = new Error(hint);
+      err.name = 'ImageCorsError';
+      throw err;
+    }
+  }
+
   // ── 标签提取（与 summary.js extractTag 同逻辑，独立实现避免循环依赖）──
   // 容错：标签名大小写不敏感；开标签可带属性；自闭合 <Tag/> 视为空；闭标签缺失取其后全部。
   function extractTag(raw, tag) {
@@ -154,11 +203,11 @@
       sampler_name: ig.sampler || 'Euler a',
     };
     if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
-    const res = await fetch(url, {
+    const res = await wmFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, settings);
     if (!res.ok) {
       const t = await res.text().catch(() => '');
       throw new Error('SD WebUI HTTP ' + res.status + '：' + t.slice(0, 300));
@@ -169,12 +218,12 @@
   }
 
   // ── 后端适配 2：ComfyUI /prompt + /history 轮询 ──
-  // 占位符列表：{{prompt}} {{negative}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
-  // 留空则用内置 txt2img 默认工作流（含 KSampler/CheckpointLoader/VAEDecode/SaveImage）
+  // 占位符列表：{{prompt}} {{negative}} {{model}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
+  // 留空则用内置 txt2img 默认工作流（含 KSampler/CheckpointLoaderSimple/EmptyLatent/CLIP/VAEDecode/SaveImage）
   function defaultComfyWorkflow() {
     return {
       '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: '{{cfg}}', sampler_name: 'euler', scheduler: 'normal', denoise: '{{denoise}}', model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
-      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'v1-5-pruned-emaonly.safetensors' } },
+      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: '{{model}}' } },
       '5': { class_type: 'EmptyLatentImage', inputs: { width: '{{width}}', height: '{{height}}', batch_size: 1 } },
       '6': { class_type: 'CLIPTextEncode', inputs: { text: '{{prompt}}', clip: ['4', 1] } },
       '7': { class_type: 'CLIPTextEncode', inputs: { text: '{{negative}}', clip: ['4', 1] } },
@@ -199,6 +248,12 @@
     const cfg = Number(ig.cfgScale) || 7;
     const denoise = ig.denoisingStrength == null ? 1.0 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
     const seed = resolveSeed(ig.seed);
+    // {{model}}：用户没选时给一个兜底值（避免 CheckpointLoaderSimple 提交空 ckpt_name，ComfyUI 会直接 400）
+    const model = (ig.model && ig.model.trim()) ? ig.model.trim() : '';
+    if (!model && !ig.comfyWorkflow) {
+      // 内置默认工作流且用户未选模型：报错明确提示让用户用"刷新模型列表"选一个
+      throw new Error('ComfyUI：未选择 Checkpoint 模型。请点「模型/Checkpoint」输入框旁的「🔄 刷新列表」，从下拉框选一个你本地已有的模型名。');
+    }
     // 占位符替换
     let workflowStr = JSON.stringify(workflow);
     const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -210,26 +265,33 @@
       .replace(/\{\{steps\}\}/g, String(steps))
       .replace(/\{\{cfg\}\}/g, String(cfg))
       .replace(/\{\{denoise\}\}/g, String(denoise))
-      .replace(/\{\{seed\}\}/g, String(seed));
-    const res = await fetch(base + '/prompt', {
+      .replace(/\{\{seed\}\}/g, String(seed))
+      .replace(/\{\{model\}\}/g, esc(model));
+    // —— 关键修复：ComfyUI /prompt 要求 body = { prompt: <nodes对象>, client_id: '唯一标识' }
+    // 之前直接把 workflow JSON 当 body，服务器端拿不到 prompt 字段 → 要么 400 要么 CORS 预检失败后被浏览器吞成 ERR_FAILED
+    let promptObj;
+    try { promptObj = JSON.parse(workflowStr); } catch (e) { throw new Error('工作流 JSON 占位符替换后解析失败：' + e.message); }
+    const clientId = 'WarmMemo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
+    const res = await wmFetch(base + '/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: workflowStr,
-    });
+      body: payload,
+    }, settings);
     if (!res.ok) {
       const t = await res.text().catch(() => '');
       throw new Error('ComfyUI HTTP ' + res.status + '：' + t.slice(0, 300));
     }
     const j = await res.json();
     const promptId = j && j.prompt_id;
-    if (!promptId) throw new Error('ComfyUI 未返回 prompt_id');
-    return await pollComfyuiResult(promptId, base);
+    if (!promptId) throw new Error('ComfyUI 未返回 prompt_id（响应：' + JSON.stringify(j).slice(0, 200) + '）');
+    return await pollComfyuiResult(promptId, base, settings);
   }
-  async function pollComfyuiResult(promptId, base) {
+  async function pollComfyuiResult(promptId, base, settings) {
     for (let i = 0; i < 90; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       try {
-        const res = await fetch(base + '/history/' + encodeURIComponent(promptId));
+        const res = await wmFetch(base + '/history/' + encodeURIComponent(promptId), { method: 'GET' }, settings);
         if (!res.ok) continue;
         const j = await res.json();
         const item = j[promptId];
@@ -245,7 +307,8 @@
               subfolder: img.subfolder || '',
               type: img.type || 'output',
             });
-            return base + '/view?' + params.toString();
+            // /view 也是同域，需要走代理
+            return applyImgProxy(base + '/view?' + params.toString(), settings);
           }
         }
       } catch (e) { /* 轮询中网络抖动忽略 */ }
@@ -262,7 +325,7 @@
     const path = ig.cloudPath || '/images/generations';
     const url = base + path;
     const w = Number(ig.width) || 512;
-    const h = Number(ig.height) || 512;
+    const h = Number(ig.height) || 768;
     const body = {
       prompt: prompt,
       n: 1,
@@ -273,7 +336,7 @@
     // seed：用户填了非 -1 非负的才传；一些兼容端点支持，官方 OpenAI 忽略未知字段也不报错
     const seed = Number(ig.seed);
     if (seed > 0) body.seed = Math.floor(seed);
-    // steps / cfg：兼容端点普遍支持通过 extra_body / query 参数；OpenAI 官方忽略未知字段不影响
+    // steps / cfg：兼容端点普遍支持；OpenAI 官方忽略未知字段不影响
     if (ig.steps) body.steps = Number(ig.steps) || 20;
     if (ig.cfgScale) body.cfg_scale = Number(ig.cfgScale) || 7;
     // negative_prompt：Kolors 等兼容端点支持；官方 OpenAI 忽略
@@ -281,7 +344,7 @@
     if (neg) body.negative_prompt = neg;
     const headers = { 'Content-Type': 'application/json' };
     if (ig.apiKey) headers['Authorization'] = 'Bearer ' + ig.apiKey;
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const res = await wmFetch(url, { method: 'POST', headers, body: JSON.stringify(body) }, settings);
     if (!res.ok) {
       const t = await res.text().catch(() => '');
       throw new Error('云端 API HTTP ' + res.status + '：' + t.slice(0, 300));
@@ -292,6 +355,62 @@
       if (j.data[0].url) return j.data[0].url;
     }
     throw new Error('云端 API 未返回图片数据');
+  }
+
+  // ── 模型列表查询（下拉框选项） ──
+  //   SD WebUI：GET /sdapi/v1/sd-models → [{title, model_name, filename, hash}]
+  //   ComfyUI：  GET /object_info/CheckpointLoaderSimple → 返回 .input.required.ckpt_name[0] = [文件名数组]
+  async function fetchAvailableModels(settings) {
+    const ig = (settings && settings.imageGen) || WM.Settings.load().imageGen || {};
+    const base = (ig.apiUrl || '').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
+    const type = ig.backendType || 'sd-webui';
+    if (type === 'cloud') {
+      // 云端：模型列表是各家独立的，不拉了，让用户手填
+      return { ok: true, models: [] };
+    }
+    if (!base) return { ok: false, error: '未配置后端地址' };
+    if (type === 'sd-webui') {
+      try {
+        const res = await wmFetch(base + '/sdapi/v1/sd-models', { method: 'GET' }, settings);
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          return { ok: false, error: 'SD WebUI HTTP ' + res.status + '：' + t.slice(0, 200) };
+        }
+        const arr = await res.json();
+        if (!Array.isArray(arr)) return { ok: false, error: 'SD WebUI 返回结构异常' };
+        const models = arr.map((m) => ({
+          value: m.title || m.model_name || m.filename || '',
+          label: (m.model_name || m.title || m.filename || '') + (m.hash ? ' [' + String(m.hash).slice(0, 8) + ']' : ''),
+        })).filter((m) => m.value);
+        return { ok: true, models };
+      } catch (e) { return { ok: false, error: e.message || String(e) }; }
+    }
+    // ComfyUI：优先 /object_info/CheckpointLoaderSimple（兼容性最好）
+    try {
+      const res = await wmFetch(base + '/object_info/CheckpointLoaderSimple', { method: 'GET' }, settings);
+      if (!res.ok) {
+        // 兜底：ComfyUI 新版本支持 GET /models/checkpoints
+        const res2 = await wmFetch(base + '/models/checkpoints', { method: 'GET' }, settings);
+        if (!res2.ok) {
+          const t = await res.text().catch(() => '');
+          return { ok: false, error: 'ComfyUI HTTP ' + res.status + '（object_info）：' + t.slice(0, 200) };
+        }
+        const arr = await res2.json();
+        const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
+          const val = typeof m === 'string' ? m : (m.name || m.filename || '');
+          return { value: val, label: val };
+        }).filter((m) => m.value);
+        return { ok: true, models };
+      }
+      const j = await res.json();
+      // 结构：{ 'CheckpointLoaderSimple': { input: { required: { ckpt_name: [ [..文件列表], 'STRING' ] } } } }
+      const nodeInfo = j && (j.CheckpointLoaderSimple || j['CheckpointLoaderSimple']);
+      const list = nodeInfo && nodeInfo.input && nodeInfo.input.required
+        && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0])
+        ? nodeInfo.input.required.ckpt_name[0] : [];
+      const models = list.map((n) => ({ value: n, label: n }));
+      return { ok: true, models };
+    } catch (e) { return { ok: false, error: e.message || String(e) }; }
   }
 
   // 第二步：根据 backendType 分发到对应后端
@@ -463,6 +582,7 @@
     buildFullPrompt,
     insertImage,
     testConnection,
+    fetchAvailableModels,
     IMG_START,
     IMG_END,
     isGenerating: () => _generating,
