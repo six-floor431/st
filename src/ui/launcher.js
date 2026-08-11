@@ -1325,6 +1325,8 @@
           negativePrefix: negPreEl ? negPreEl.value : '',
           negativePrompt: q('#ig-neg') ? q('#ig-neg').value : '',
           comfyWorkflow: q('#ig-comfy') ? q('#ig-comfy').value : '',
+          comfyWorkflowName: q('#ig-comfy-wf') ? q('#ig-comfy-wf').value : '',
+          comfyWorkflowList: (s.imageGen && Array.isArray(s.imageGen.comfyWorkflowList)) ? s.imageGen.comfyWorkflowList : [],
           cloudPath: q('#ig-cloud-path') ? q('#ig-cloud-path').value.trim() : '/images/generations',
           displayMode: q('#ig-display') ? q('#ig-display').value : 'append',
           promptStyle: q('#ig-style') ? q('#ig-style').value : 'general',
@@ -1469,6 +1471,225 @@
     }
     const modelRefreshBtn = body.querySelector('#ig-model-refresh');
     if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
+
+    // ── ComfyUI 工作流管理 ──
+    // 刷新工作流列表：从酒馆后端拉取已保存的工作流文件名，填入下拉框
+    async function refreshComfyWorkflows() {
+      const wfSelect = body.querySelector('#ig-comfy-wf');
+      if (!wfSelect) return;
+      if (!WM.ImageGen || typeof WM.ImageGen.listComfyWorkflows !== 'function') return;
+      try {
+        const list = await WM.ImageGen.listComfyWorkflows();
+        const names = Array.isArray(list) ? list : [];
+        // 写入设置缓存
+        if (s.imageGen) s.imageGen.comfyWorkflowList = names;
+        // 重填下拉选项
+        const curVal = (s.imageGen && s.imageGen.comfyWorkflowName) || '';
+        const opts = ['<option value="">（内置默认工作流·自动检测模型类型）</option>'];
+        for (const name of names) {
+          opts.push(`<option value="${escapeHtml(name)}" ${curVal===name?'selected':''}>${escapeHtml(name)}</option>`);
+        }
+        wfSelect.innerHTML = opts.join('');
+        toast('🎨 工作流列表已刷新，共 ' + names.length + ' 个');
+      } catch (e) {
+        toast('🎨 刷新工作流列表失败：' + (e.message || String(e)));
+      }
+    }
+
+    // 工作流编辑器弹窗：textarea + 占位符检测
+    async function openComfyWorkflowEditor(workflowName) {
+      const ig = WM.ImageGen;
+      if (!ig) return;
+      // 加载工作流内容
+      let workflowJson = '';
+      let title = '新建工作流';
+      if (workflowName) {
+        title = workflowName;
+        const loaded = await ig.loadComfyWorkflow(workflowName);
+        if (loaded) workflowJson = loaded;
+        else { toast('🎨 加载工作流失败：' + workflowName); return; }
+      } else {
+        // 内置默认工作流
+        const s2 = WM.Settings.load();
+        const model = (s2.imageGen && s2.imageGen.model) || '';
+        const useZ = ig.isUnetModel(model);
+        workflowJson = JSON.stringify(useZ ? ig.defaultComfyWorkflowZImage() : ig.defaultComfyWorkflow(), null, 2);
+        title = '内置默认工作流（' + (useZ ? 'UNet' : 'Checkpoint') + '）';
+      }
+      // 构建弹窗 HTML
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      const popup = document.createElement('div');
+      popup.style.cssText = 'background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:90%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+      // 占位符检测 HTML
+      const phStatus = ig.PLACEHOLDER_DEFS.map((p) =>
+        `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">❌ <code>{{${p.key}}}</code> ${p.label}</span>`
+      ).join('');
+      popup.innerHTML = `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:14px">✏️ 工作流编辑器 — ${escapeHtml(title)}</span>
+          <button id="wf-close" style="background:none;border:none;color:var(--SmartThemeBodyColor,#ccc);font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:8px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);max-height:80px;overflow-y:auto">
+          <div style="font-size:11px;color:var(--SmartThemeBodyColor,#aaa);margin-bottom:4px">占位符状态（✅=已使用 ❌=未使用）：</div>
+          <div id="wf-ph-status">${phStatus}</div>
+        </div>
+        <div style="padding:12px 16px;flex:1;overflow:hidden;display:flex;flex-direction:column">
+          <textarea id="wf-editor" style="flex:1;width:100%;min-height:300px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical">${escapeHtml(workflowJson)}</textarea>
+          <div style="font-size:11px;color:var(--SmartThemeBodyColor,#888);margin-top:6px">
+            💡 把需要动态替换的值改成占位符，如 <code>"seed": "{{seed}}"</code> 或 <code>"text": "%prompt%"</code>。两种格式等价。
+          </div>
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end">
+          <input id="wf-name" placeholder="文件名（如 my_workflow）" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, '') : '')}" style="flex:1;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px"/>
+          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">💾 保存</button>
+          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px">取消</button>
+        </div>`;
+      overlay.appendChild(popup);
+      document.body.appendChild(overlay);
+
+      // 占位符检测：实时更新 ✅/❌
+      const textarea = popup.querySelector('#wf-editor');
+      const phContainer = popup.querySelector('#wf-ph-status');
+      function updatePhStatus() {
+        const text = textarea.value;
+        const checks = ig.checkPlaceholdersInWorkflow(text);
+        phContainer.innerHTML = checks.map((p) => {
+          const color = p.found ? '#4caf50' : '#888';
+          const bg = p.found ? 'rgba(76,175,80,.1)' : 'rgba(255,255,255,.05)';
+          const icon = p.found ? '✅' : '❌';
+          return `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:${bg};color:${color}">${icon} <code>{{${p.key}}}</code> ${p.label}</span>`;
+        }).join('');
+      }
+      textarea.addEventListener('input', updatePhStatus);
+      updatePhStatus();
+
+      // 关闭
+      const closePopup = () => { document.body.removeChild(overlay); };
+      popup.querySelector('#wf-close').onclick = closePopup;
+      popup.querySelector('#wf-cancel').onclick = closePopup;
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopup(); });
+
+      // 保存
+      popup.querySelector('#wf-save').onclick = async () => {
+        const nameInput = popup.querySelector('#wf-name');
+        const fname = (nameInput.value || '').trim();
+        if (!fname) { toast('🎨 请填写工作流文件名'); return; }
+        const content = textarea.value.trim();
+        // 验证 JSON 合法性
+        try { JSON.parse(content); }
+        catch (e) { toast('🎨 JSON 格式错误：' + e.message); return; }
+        try {
+          await ig.saveComfyWorkflow(fname, content);
+          toast('🎨 工作流已保存：' + (fname.endsWith('.json') ? fname : fname + '.json'));
+          // 刷新下拉列表
+          await refreshComfyWorkflows();
+          // 选中新保存的工作流
+          const fullName = fname.toLowerCase().endsWith('.json') ? fname : fname + '.json';
+          const wfSelect = body.querySelector('#ig-comfy-wf');
+          if (wfSelect) wfSelect.value = fullName;
+          if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+          closePopup();
+        } catch (e) {
+          toast('🎨 保存失败：' + (e.message || String(e)));
+        }
+      };
+    }
+
+    // 工作流下拉框 change
+    const wfSelect = body.querySelector('#ig-comfy-wf');
+    if (wfSelect) wfSelect.onchange = () => {
+      if (s.imageGen) s.imageGen.comfyWorkflowName = wfSelect.value;
+    };
+
+    // 编辑按钮
+    const wfEditBtn = body.querySelector('#ig-comfy-edit');
+    if (wfEditBtn) wfEditBtn.onclick = () => {
+      const name = wfSelect ? wfSelect.value : '';
+      openComfyWorkflowEditor(name || null);
+    };
+
+    // 新建按钮
+    const wfNewBtn = body.querySelector('#ig-comfy-new');
+    if (wfNewBtn) wfNewBtn.onclick = () => openComfyWorkflowEditor(null);
+
+    // 导入文件按钮
+    const wfImportBtn = body.querySelector('#ig-comfy-import');
+    const wfFileInput = body.querySelector('#ig-comfy-file');
+    if (wfImportBtn && wfFileInput) {
+      wfImportBtn.onclick = () => wfFileInput.click();
+      wfFileInput.onchange = async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          // 验证 JSON
+          JSON.parse(text);
+          // 用文件名（去掉 .json）作为工作流名
+          const baseName = file.name.replace(/\.json$/i, '');
+          // 打开编辑器让用户确认/修改
+          const ig = WM.ImageGen;
+          if (!ig) return;
+          // 先保存到后端
+          await ig.saveComfyWorkflow(baseName, text);
+          toast('🎨 已导入工作流：' + file.name);
+          await refreshComfyWorkflows();
+          const fullName = baseName.toLowerCase().endsWith('.json') ? baseName : baseName + '.json';
+          if (wfSelect) wfSelect.value = fullName;
+          if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+          // 打开编辑器让用户调整占位符
+          openComfyWorkflowEditor(fullName);
+        } catch (e) {
+          toast('🎨 导入失败：' + (e.message || String(e)));
+        }
+        // 清空 file input 允许重复导入同一文件
+        wfFileInput.value = '';
+      };
+    }
+
+    // 重命名按钮
+    const wfRenameBtn = body.querySelector('#ig-comfy-rename');
+    if (wfRenameBtn) wfRenameBtn.onclick = async () => {
+      const oldName = wfSelect ? wfSelect.value : '';
+      if (!oldName) { toast('🎨 请先选择一个工作流'); return; }
+      const newName = prompt('输入新名称（不含 .json 后缀）：', oldName.replace(/\.json$/i, ''));
+      if (!newName || newName.trim() === oldName.replace(/\.json$/i, '')) return;
+      try {
+        await WM.ImageGen.renameComfyWorkflow(oldName, newName.trim());
+        toast('🎨 已重命名为 ' + newName.trim() + '.json');
+        await refreshComfyWorkflows();
+        const fullName = newName.trim().toLowerCase().endsWith('.json') ? newName.trim() : newName.trim() + '.json';
+        if (wfSelect) wfSelect.value = fullName;
+        if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+      } catch (e) {
+        toast('🎨 重命名失败：' + (e.message || String(e)));
+      }
+    };
+
+    // 删除按钮
+    const wfDeleteBtn = body.querySelector('#ig-comfy-delete');
+    if (wfDeleteBtn) wfDeleteBtn.onclick = async () => {
+      const name = wfSelect ? wfSelect.value : '';
+      if (!name) { toast('🎨 请先选择一个工作流'); return; }
+      if (!confirm('确认删除工作流「' + name + '」？此操作不可撤销。')) return;
+      try {
+        await WM.ImageGen.deleteComfyWorkflow(name);
+        toast('🎨 已删除工作流：' + name);
+        if (s.imageGen) s.imageGen.comfyWorkflowName = '';
+        await refreshComfyWorkflows();
+      } catch (e) {
+        toast('🎨 删除失败：' + (e.message || String(e)));
+      }
+    };
+
+    // 刷新列表按钮
+    const wfRefreshBtn = body.querySelector('#ig-comfy-refresh');
+    if (wfRefreshBtn) wfRefreshBtn.onclick = () => refreshComfyWorkflows();
+
+    // 打开面板时自动刷新一次工作流列表（异步，不阻塞）
+    if (body.querySelector('#ig-comfy-wf')) {
+      refreshComfyWorkflows().catch(() => {});
+    }
 
     // 无限制立即生图：面板顶部 + 底部按钮共用逻辑；force=true 忽略 autoTrigger 开关，允许连点排队
     async function handleUnlimitedImageGen() {
@@ -1754,10 +1975,31 @@
       </label>
       <div class="wm-hint">「追加到 AI 楼层末尾」：图片紧跟 AI 回复下方。「独立 system 楼层」：单独一层显示。两种方式均不进上下文。</div>
       ${isComfy ? `<div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">ComfyUI 工作流（可选）</div>
-      <div class="wm-hint">粘贴 ComfyUI <b>prompt API 格式</b>的工作流 JSON（在 ComfyUI 里「保存(Ctrl+S)」得到的 .json 即此格式）。用占位符标记关键参数位置，生图时自动替换。<br/>
-        占位符列表：<code>{{prompt}}</code> 正向 / <code>{{negative}}</code> 负面（含前缀+本次特定） / <code>{{width}}</code> <code>{{height}}</code> 尺寸 / <code>{{steps}}</code> <code>{{cfg}}</code> <code>{{denoise}}</code> 采样 / <code>{{seed}}</code> 种子。留空用内置默认 txt2img 工作流。</div>
-      <textarea id="ig-comfy" rows="7" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}","steps":"{{steps}}","cfg":"{{cfg}}","denoise":"{{denoise}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>` : ''}
+      <div class="wm-h" style="margin-top:0">ComfyUI 工作流</div>
+      <div class="wm-hint">从 ComfyUI 里「保存(Ctrl+S)」或「Save (API Format)」导出的 JSON 即可用。<br/>
+        支持两种占位符格式（等价）：<code>{{prompt}}</code> 或 <code>"%prompt%"</code>。在编辑器里把需要动态替换的值改成占位符即可。留空用内置默认工作流。</div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+        <select id="ig-comfy-wf" style="flex:1;min-width:180px">
+          <option value="">（内置默认工作流·自动检测模型类型）</option>
+          ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
+            const name = typeof wf === 'string' ? wf : (wf && wf.name) ? wf.name : '';
+            return `<option value="${escapeHtml(name)}" ${ig.comfyWorkflowName===name?'selected':''}>${escapeHtml(name)}</option>`;
+          }).join('')}
+        </select>
+        <button id="ig-comfy-edit" class="wm-btn small" title="编辑当前工作流（弹出编辑器，支持占位符检测）">✏️ 编辑</button>
+        <button id="ig-comfy-new" class="wm-btn small" title="新建空白工作流">➕ 新建</button>
+        <button id="ig-comfy-import" class="wm-btn small" title="从 .json 文件导入工作流">📥 导入</button>
+        <button id="ig-comfy-rename" class="wm-btn small" title="重命名当前工作流">改名</button>
+        <button id="ig-comfy-delete" class="wm-btn small" title="删除当前工作流">🗑️</button>
+        <button id="ig-comfy-refresh" class="wm-btn small" title="刷新工作流列表">🔄</button>
+      </div>
+      <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
+      <div class="wm-hint" style="margin-top:4px">工作流文件通过酒馆后端管理，与酒馆原生 SD 模块互通。选「内置默认」会根据模型名自动切换 Checkpoint/UNet 工作流。</div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">📝 高级：内联工作流 JSON（直接粘贴，优先级高于上方下拉框）</summary>
+        <textarea id="ig-comfy" rows="5" style="width:100%;font-family:monospace;font-size:11px;margin-top:6px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>
+        <div class="wm-hint">粘贴在这里的工作流会直接使用，不经过文件管理。适合临时测试。</div>
+      </details>` : ''}
       <div class="wm-divider"></div>
       <div class="wm-hint">💡 提示：点上方「测试连接」会真的出一张测试图，验证后端连通性+参数。生图提示词复用「LLM 调用」标签页配置，无需在此重复填。</div>
     </div>`;

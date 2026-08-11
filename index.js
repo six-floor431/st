@@ -193,12 +193,20 @@
         // 种子，-1 表示每次随机
         sampler: "",
         // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
-        // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
-        // 占位符列表：
-        //   {{prompt}} 正向 / {{negative}} 负面（含前缀+负面前缀）
-        //   {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
-        // 生图时自动替换。留空则用内置 txt2img 默认工作流。
+        // ComfyUI 工作流管理：
+        //   comfyWorkflowName: 已保存的工作流文件名（通过酒馆后端 /api/sd/comfy/* 管理，与酒馆原生 SD 模块互通）
+        //   comfyWorkflow: 内联工作流 JSON（直接粘贴，优先级高于 comfyWorkflowName）
+        //   留空则用内置默认工作流（自动检测模型类型选 checkpoint/unet 工作流）
+        // 占位符支持两种格式（等价）：
+        //   {{prompt}} 或 "%prompt%" — 正向提示词
+        //   {{negative}} 或 "%negative_prompt%" — 负面提示词
+        //   {{model}} {{vae}} {{clip}} {{sampler}} {{scheduler}} — 字符串型
+        //   {{seed}} {{steps}} {{cfg}} {{width}} {{height}} {{denoise}} {{clip_skip}} — 数字型
         comfyWorkflow: "",
+        comfyWorkflowName: "",
+        // 已保存的工作流文件名（如 'my_workflow.json'）
+        comfyWorkflowList: [],
+        // 工作流文件名列表缓存（UI 下拉框用）
         cloudPath: "/images/generations",
         // 云端 API 路径（拼在 apiUrl 后；SiliconFlow/OpenAI 兼容端点都用此默认值）
         displayMode: "append",
@@ -3363,14 +3371,14 @@ ${p.summary || ""}`.trim() });
       }
       return Math.floor(n);
     }
-    async function callSdWebui(prompt, settings) {
+    async function callSdWebui(prompt2, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "http://127.0.0.1:7860").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
       const negative = buildFullNegative(settings);
       const body = {
         url: base,
         auth: "",
-        prompt,
+        prompt: prompt2,
         negative_prompt: negative,
         steps: Number(ig.steps) || 20,
         cfg_scale: Number(ig.cfgScale) || 7,
@@ -3390,9 +3398,32 @@ ${p.summary || ""}`.trim() });
       if (!j.images || !j.images.length) throw new Error("SD WebUI \u672A\u8FD4\u56DE\u56FE\u7247");
       return "data:image/png;base64," + j.images[0];
     }
+    const PLACEHOLDER_DEFS = [
+      { key: "prompt", label: "\u6B63\u5411\u63D0\u793A\u8BCD", type: "string", desc: "LLM \u6574\u5408\u51FA\u7684\u753B\u9762\u63CF\u8FF0\uFF08\u542B\u98CE\u683C\u524D\u7F00\uFF09" },
+      { key: "negative", label: "\u8D1F\u9762\u63D0\u793A\u8BCD", type: "string", desc: "\u8D1F\u9762\u63D0\u793A\u8BCD\uFF08\u542B\u524D\u7F00+\u672C\u6B21\u7279\u5B9A\uFF09" },
+      { key: "negative_prompt", label: "\u8D1F\u9762\u63D0\u793A\u8BCD(\u9152\u9986\u683C\u5F0F)", type: "string", desc: "\u540C negative\uFF0C\u517C\u5BB9\u9152\u9986\u5BFC\u51FA\u5DE5\u4F5C\u6D41" },
+      { key: "model", label: "\u6A21\u578B\u540D", type: "string", desc: "Checkpoint / UNet / GGUF \u6A21\u578B\u6587\u4EF6\u540D" },
+      { key: "vae", label: "VAE \u540D", type: "string", desc: "VAELoader \u7684 vae_name" },
+      { key: "clip", label: "CLIP \u540D", type: "string", desc: "CLIPLoader \u7684 clip_name" },
+      { key: "sampler", label: "\u91C7\u6837\u5668", type: "string", desc: "KSampler \u7684 sampler_name" },
+      { key: "scheduler", label: "\u8C03\u5EA6\u5668", type: "string", desc: "KSampler \u7684 scheduler" },
+      { key: "seed", label: "\u79CD\u5B50", type: "number", desc: "-1=\u968F\u673A\uFF0C\u5426\u5219\u7528\u56FA\u5B9A\u503C" },
+      { key: "steps", label: "\u91C7\u6837\u6B65\u6570", type: "number", desc: "KSampler \u7684 steps" },
+      { key: "cfg", label: "CFG \u7F29\u653E", type: "number", desc: "KSampler \u7684 cfg\uFF08\u4E5F\u53EB scale\uFF09" },
+      { key: "scale", label: "CFG \u7F29\u653E(\u9152\u9986\u683C\u5F0F)", type: "number", desc: "\u540C cfg\uFF0C\u517C\u5BB9\u9152\u9986\u5BFC\u51FA\u5DE5\u4F5C\u6D41" },
+      { key: "width", label: "\u56FE\u7247\u5BBD\u5EA6", type: "number", desc: "EmptyLatentImage \u7684 width" },
+      { key: "height", label: "\u56FE\u7247\u9AD8\u5EA6", type: "number", desc: "EmptyLatentImage \u7684 height" },
+      { key: "denoise", label: "\u53BB\u566A\u5F3A\u5EA6", type: "number", desc: "KSampler \u7684 denoise\uFF080~1\uFF09" },
+      { key: "clip_skip", label: "CLIP\u8DF3\u8FC7\u5C42", type: "number", desc: "CLIPSetLastLayer \u7684 stop_at_clip_layer\uFF08\u8D1F\u503C\uFF09" }
+    ];
+    const NUMERIC_KEYS = new Set(PLACEHOLDER_DEFS.filter((p) => p.type === "number").map((p) => p.key));
+    const PLACEHOLDER_ALIASES = {
+      "negative_prompt": "negative",
+      "scale": "cfg"
+    };
     function defaultComfyWorkflow() {
       return {
-        "3": { class_type: "KSampler", inputs: { seed: "{{seed}}", steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "euler", scheduler: "normal", denoise: "{{denoise}}", model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
+        "3": { class_type: "KSampler", inputs: { seed: "{{seed}}", steps: "{{steps}}", cfg: "{{cfg}}", sampler_name: "{{sampler}}", scheduler: "{{scheduler}}", denoise: "{{denoise}}", model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
         "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "{{model}}" } },
         "5": { class_type: "EmptyLatentImage", inputs: { width: "{{width}}", height: "{{height}}", batch_size: 1 } },
         "6": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}", clip: ["4", 1] } },
@@ -3418,25 +3449,195 @@ ${p.summary || ""}`.trim() });
     function isUnetModel(modelName) {
       if (!modelName) return false;
       const lower = modelName.toLowerCase();
-      return lower.includes("z_image") || lower.includes("z-image") || lower.includes("flux") || lower.includes("sdxl_unet") || lower.includes("diffusion_model");
+      return lower.includes("z_image") || lower.includes("z-image") || lower.includes("flux") || lower.includes("sdxl_unet") || lower.includes("diffusion_model") || lower.includes("_unet") || lower.includes(".gguf");
     }
-    async function callComfyui(prompt, settings) {
+    function detectWorkflowNodes(workflowObj) {
+      const result = {
+        modelType: "unknown",
+        loaders: [],
+        placeholders: [],
+        nodeCount: 0,
+        hasKSampler: false,
+        hasSaveImage: false,
+        hasVAEDecode: false
+      };
+      if (!workflowObj || typeof workflowObj !== "object") return result;
+      const nodes = workflowObj;
+      let hasCheckpoint = false, hasUNET = false, hasGGUF = false;
+      const usedPlaceholders = /* @__PURE__ */ new Set();
+      for (const nodeId of Object.keys(nodes)) {
+        const node = nodes[nodeId];
+        if (!node || !node.class_type) continue;
+        result.nodeCount++;
+        const ct = node.class_type;
+        const inputs = node.inputs || {};
+        if (ct === "CheckpointLoaderSimple") {
+          hasCheckpoint = true;
+          result.loaders.push({ nodeId, class_type: ct, inputField: "ckpt_name" });
+        } else if (ct === "UNETLoader") {
+          hasUNET = true;
+          result.loaders.push({ nodeId, class_type: ct, inputField: "unet_name" });
+        } else if (ct === "UnetLoaderGGUF") {
+          hasGGUF = true;
+          result.loaders.push({ nodeId, class_type: ct, inputField: "unet_name" });
+        } else if (ct === "CLIPLoader" || ct === "DualCLIPLoader") {
+          result.loaders.push({ nodeId, class_type: ct, inputField: ct === "DualCLIPLoader" ? "clip_name1" : "clip_name" });
+        } else if (ct === "VAELoader") {
+          result.loaders.push({ nodeId, class_type: ct, inputField: "vae_name" });
+        } else if (ct === "KSampler" || ct === "KSamplerAdvanced" || ct === "SamplerCustom") {
+          result.hasKSampler = true;
+        } else if (ct === "SaveImage" || ct === "PreviewImage") {
+          result.hasSaveImage = true;
+        } else if (ct === "VAEDecode") {
+          result.hasVAEDecode = true;
+        }
+        for (const inputKey of Object.keys(inputs)) {
+          const val = inputs[inputKey];
+          if (typeof val === "string") {
+            const matches = val.match(/\{\{(\w+)\}\}/g) || [];
+            for (const m of matches) usedPlaceholders.add(m.replace(/[{}]/g, ""));
+            const pctMatches = val.match(/%(\w+)%/g) || [];
+            for (const m of pctMatches) usedPlaceholders.add(m.replace(/%/g, ""));
+          }
+        }
+      }
+      if (hasGGUF) result.modelType = "gguf";
+      else if (hasUNET) result.modelType = "unet";
+      else if (hasCheckpoint) result.modelType = "checkpoint";
+      result.placeholders = PLACEHOLDER_DEFS.map((p) => ({
+        key: p.key,
+        label: p.label,
+        type: p.type,
+        found: usedPlaceholders.has(p.key)
+      }));
+      return result;
+    }
+    function checkPlaceholdersInWorkflow(workflowStr) {
+      const found = /* @__PURE__ */ new Set();
+      if (!workflowStr) return PLACEHOLDER_DEFS.map((p) => ({ ...p, found: false }));
+      for (const p of PLACEHOLDER_DEFS) {
+        const re1 = new RegExp("\\{\\{" + p.key + "\\}\\}", "g");
+        const re2 = new RegExp('%"?' + p.key + '"?%', "g");
+        if (re1.test(workflowStr) || re2.test(workflowStr)) {
+          found.add(p.key);
+        }
+      }
+      return PLACEHOLDER_DEFS.map((p) => ({ ...p, found: found.has(p.key) }));
+    }
+    function replaceWorkflowPlaceholders(workflowStr, values) {
+      let s = workflowStr;
+      const esc = (anyVal) => {
+        const str = String(anyVal == null ? "" : anyVal);
+        const out = JSON.stringify(str);
+        return out.length >= 2 ? out.slice(1, -1) : out;
+      };
+      const repStr = (val) => () => esc(val);
+      for (const p of PLACEHOLDER_DEFS) {
+        const val = values[p.key];
+        if (val == null) continue;
+        if (p.type === "number") {
+          const numVal = String(val);
+          s = s.replace(new RegExp('"\\{\\{' + p.key + '\\}\\}"', "g"), numVal);
+          s = s.replace(new RegExp('"%' + p.key + '%"', "g"), numVal);
+        } else {
+          s = s.replace(new RegExp("\\{\\{" + p.key + "\\}\\}", "g"), repStr(val));
+          s = s.replace(new RegExp("%" + p.key + "%", "g"), repStr(val));
+        }
+      }
+      return s;
+    }
+    async function listComfyWorkflows() {
+      try {
+        const res = await stFetch("/api/sd/comfy/workflows", { url: "" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const arr = await res.json();
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        console.warn("[WarmMemo][comfy] \u5217\u51FA\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF08\u9152\u9986\u540E\u7AEF\uFF09\uFF0C\u56DE\u9000\u5185\u5D4C\u5B58\u50A8\uFF1A", e.message);
+        return null;
+      }
+    }
+    async function loadComfyWorkflow(name) {
+      if (!name) return null;
+      try {
+        const res = await stFetch("/api/sd/comfy/workflow", { file_name: name });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const raw = await res.json();
+        return typeof raw === "string" ? raw : JSON.stringify(raw);
+      } catch (e) {
+        console.warn("[WarmMemo][comfy] \u52A0\u8F7D\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF1A", e.message);
+        return null;
+      }
+    }
+    async function saveComfyWorkflow(name, workflowJson) {
+      if (!name) throw new Error("\u5DE5\u4F5C\u6D41\u6587\u4EF6\u540D\u4E0D\u80FD\u4E3A\u7A7A");
+      const fname = name.toLowerCase().endsWith(".json") ? name : name + ".json";
+      try {
+        const res = await stFetch("/api/sd/comfy/save-workflow", { file_name: fname, workflow: workflowJson });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const arr = await res.json();
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        throw new Error("\u4FDD\u5B58\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF1A" + (e.message || String(e)));
+      }
+    }
+    async function deleteComfyWorkflow(name) {
+      if (!name) throw new Error("\u5DE5\u4F5C\u6D41\u6587\u4EF6\u540D\u4E0D\u80FD\u4E3A\u7A7A");
+      try {
+        const res = await stFetch("/api/sd/comfy/delete-workflow", { file_name: name });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return true;
+      } catch (e) {
+        throw new Error("\u5220\u9664\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF1A" + (e.message || String(e)));
+      }
+    }
+    async function renameComfyWorkflow(oldName, newName) {
+      if (!oldName || !newName) throw new Error("\u6587\u4EF6\u540D\u4E0D\u80FD\u4E3A\u7A7A");
+      const oldF = oldName.toLowerCase().endsWith(".json") ? oldName : oldName + ".json";
+      const newF = newName.toLowerCase().endsWith(".json") ? newName : newName + ".json";
+      try {
+        const res = await stFetch("/api/sd/comfy/rename-workflow", { old_name: oldF, new_name: newF });
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          throw new Error("HTTP " + res.status + (t ? ": " + t.slice(0, 200) : ""));
+        }
+        return true;
+      } catch (e) {
+        throw new Error("\u91CD\u547D\u540D\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF1A" + (e.message || String(e)));
+      }
+    }
+    async function callComfyui(prompt2, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "http://127.0.0.1:8188").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
       const model = ig.model && ig.model.trim() ? ig.model.trim() : "";
       const useZImageWorkflow = ig.comfyWorkflowPreset === "z-image-turbo" || ig.comfyWorkflowPreset !== "checkpoint" && isUnetModel(model);
-      let workflow;
+      let workflowStr;
+      let workflowSource = "default";
       if (ig.comfyWorkflow && ig.comfyWorkflow.trim()) {
-        try {
-          workflow = JSON.parse(ig.comfyWorkflow);
-        } catch (e) {
-          throw new Error("ComfyUI \u5DE5\u4F5C\u6D41 JSON \u89E3\u6790\u5931\u8D25\uFF1A" + e.message);
+        workflowStr = ig.comfyWorkflow.trim();
+        workflowSource = "inline";
+      } else if (ig.comfyWorkflowName) {
+        const loaded = await loadComfyWorkflow(ig.comfyWorkflowName);
+        if (loaded) {
+          workflowStr = loaded;
+          workflowSource = "file:" + ig.comfyWorkflowName;
+        } else {
+          workflowStr = JSON.stringify(useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow());
+          workflowSource = "default(fallback)";
         }
       } else {
-        workflow = useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow();
+        workflowStr = JSON.stringify(useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow());
+        workflowSource = "default";
       }
+      let workflowObj;
+      try {
+        workflowObj = JSON.parse(workflowStr);
+      } catch (e) {
+        throw new Error("ComfyUI \u5DE5\u4F5C\u6D41 JSON \u89E3\u6790\u5931\u8D25\uFF1A" + e.message + "\n\uFF08\u6765\u6E90\uFF1A" + workflowSource + "\uFF09");
+      }
+      const detection = detectWorkflowNodes(workflowObj);
       const neg = buildFullNegative(settings);
-      const cleanPrompt = sanitizePrompt(prompt);
+      const cleanPrompt = sanitizePrompt(prompt2);
       const cleanNeg = sanitizePrompt(neg);
       const w = Number(ig.width) || (useZImageWorkflow ? 1024 : 512);
       const h = Number(ig.height) || (useZImageWorkflow ? 1024 : 768);
@@ -3446,20 +3647,36 @@ ${p.summary || ""}`.trim() });
       const seed = resolveSeed(ig.seed);
       const clipName = ig.comfyClip && ig.comfyClip.trim() ? ig.comfyClip.trim() : "qwen_3_4b.safetensors";
       const vaeName = ig.comfyVae && ig.comfyVae.trim() ? ig.comfyVae.trim() : "ae.safetensors";
-      if (!model && !ig.comfyWorkflow) {
+      const samplerName = ig.sampler && ig.sampler.trim() ? ig.sampler.trim() : useZImageWorkflow ? "res_multistep" : "euler";
+      const schedulerName = ig.comfyScheduler && ig.comfyScheduler.trim() ? ig.comfyScheduler.trim() : useZImageWorkflow ? "simple" : "normal";
+      const clipSkip = Number(ig.clipSkip) || 0;
+      if (!model && workflowSource === "default") {
         throw new Error(useZImageWorkflow ? "ComfyUI\uFF1A\u672A\u9009\u62E9 UNet \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\uFF08\u5982 z_image_turbo_bf16.safetensors\uFF09\u3002" : "ComfyUI\uFF1A\u672A\u9009\u62E9 Checkpoint \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\u4F60\u672C\u5730\u5DF2\u6709\u7684\u6A21\u578B\u540D\u3002");
       }
-      let workflowStr = JSON.stringify(workflow);
-      const esc = (anyVal) => {
-        const s = String(anyVal == null ? "" : anyVal);
-        const out = JSON.stringify(s);
-        return out.length >= 2 ? out.slice(1, -1) : out;
+      const values = {
+        prompt: cleanPrompt,
+        negative: cleanNeg,
+        negative_prompt: cleanNeg,
+        // 酒馆格式别名
+        model,
+        vae: vaeName,
+        clip: clipName,
+        sampler: samplerName,
+        scheduler: schedulerName,
+        seed,
+        steps,
+        cfg,
+        scale: cfg,
+        // 酒馆格式别名
+        width: w,
+        height: h,
+        denoise,
+        clip_skip: clipSkip > 0 ? -clipSkip : -1
       };
-      const rep = (val) => () => esc(val);
-      workflowStr = workflowStr.replace(/"\{\{seed\}\}"/g, String(seed)).replace(/"\{\{steps\}\}"/g, String(steps)).replace(/"\{\{cfg\}\}"/g, String(cfg)).replace(/"\{\{width\}\}"/g, String(w)).replace(/"\{\{height\}\}"/g, String(h)).replace(/"\{\{denoise\}\}"/g, String(denoise)).replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{model\}\}/g, rep(model)).replace(/\{\{clip\}\}/g, rep(clipName)).replace(/\{\{vae\}\}/g, rep(vaeName));
+      let replacedStr = replaceWorkflowPlaceholders(workflowStr, values);
       let promptObj;
       try {
-        promptObj = JSON.parse(workflowStr);
+        promptObj = JSON.parse(replacedStr);
       } catch (e) {
         let posMatch = /position\s+(\d+)/i.exec(String(e && e.message ? e.message : e));
         let snippet = "";
@@ -3467,11 +3684,11 @@ ${p.summary || ""}`.trim() });
           const p = parseInt(posMatch[1], 10);
           if (!isNaN(p)) {
             const start = Math.max(0, p - 80);
-            const end = Math.min(workflowStr.length, p + 80);
-            snippet = "\uFF08\u4E0A\u4E0B\u6587\uFF1A\u2026" + workflowStr.slice(start, end).replace(/[\r\n\t]/g, "\u21B5") + "\u2026\uFF09";
+            const end = Math.min(replacedStr.length, p + 80);
+            snippet = "\uFF08\u4E0A\u4E0B\u6587\uFF1A\u2026" + replacedStr.slice(start, end).replace(/[\r\n\t]/g, "\u21B5") + "\u2026\uFF09";
           }
         }
-        throw new Error("\u5DE5\u4F5C\u6D41 JSON \u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + (e.message || String(e)) + snippet + "|\u63D0\u793A\u8BCD\u7247\u6BB5=" + String(cleanPrompt || "").slice(0, 120));
+        throw new Error("\u5DE5\u4F5C\u6D41\u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + (e.message || String(e)) + snippet + "|\u63D0\u793A\u8BCD\u7247\u6BB5=" + String(cleanPrompt || "").slice(0, 120));
       }
       const clientId = "WarmMemo_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       const res = await stFetch("/api/sd/comfy/generate", {
@@ -3487,7 +3704,7 @@ ${p.summary || ""}`.trim() });
       if (!j.data) throw new Error("ComfyUI\uFF08\u9152\u9986\u4EE3\u7406\uFF09\u672A\u8FD4\u56DE\u56FE\u7247\u6570\u636E");
       return "data:image/" + (j.format || "png") + ";base64," + j.data;
     }
-    async function callCloudApi(prompt, settings) {
+    async function callCloudApi(prompt2, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "").replace(/\/+$/, "");
       if (!base) throw new Error("\u4E91\u7AEF API \u672A\u914D\u7F6E apiUrl");
@@ -3496,7 +3713,7 @@ ${p.summary || ""}`.trim() });
       const w = Number(ig.width) || 512;
       const h = Number(ig.height) || 768;
       const body = {
-        prompt,
+        prompt: prompt2,
         n: 1,
         size: w + "x" + h,
         response_format: "b64_json"
@@ -3558,17 +3775,17 @@ ${p.summary || ""}`.trim() });
         return { ok: false, error: "ComfyUI \u6A21\u578B\u5217\u8868\u52A0\u8F7D\u5931\u8D25\uFF08\u9152\u9986\u4EE3\u7406\uFF09\uFF1A" + (e.message || String(e)) + "\n\n\u8BF7\u786E\u8BA4\u9152\u9986\u6B63\u5728\u8FD0\u884C\uFF0C\u4E14 ComfyUI \u5730\u5740\u6B63\u786E\uFF08" + base + "\uFF09\u3002" };
       }
     }
-    async function generateImage(prompt, settings) {
+    async function generateImage(prompt2, settings) {
       const ig = settings.imageGen || {};
       const type = ig.backendType || "sd-webui";
       if (WM.DebugLog) {
-        WM.DebugLog.logRequest("llm", { url: "[image-gen:" + type + "]", model: ig.model || "", messages: [{ role: "user", content: prompt.slice(0, 500) }], max_tokens: 0, temperature: 0, deepThinking: false, reasoningEffort: false, note: "\u751F\u56FE\u8BF7\u6C42" });
+        WM.DebugLog.logRequest("llm", { url: "[image-gen:" + type + "]", model: ig.model || "", messages: [{ role: "user", content: prompt2.slice(0, 500) }], max_tokens: 0, temperature: 0, deepThinking: false, reasoningEffort: false, note: "\u751F\u56FE\u8BF7\u6C42" });
       }
       let imageUrl;
       try {
-        if (type === "sd-webui") imageUrl = await callSdWebui(prompt, settings);
-        else if (type === "comfyui") imageUrl = await callComfyui(prompt, settings);
-        else if (type === "cloud" || type === "cloud-openai") imageUrl = await callCloudApi(prompt, settings);
+        if (type === "sd-webui") imageUrl = await callSdWebui(prompt2, settings);
+        else if (type === "comfyui") imageUrl = await callComfyui(prompt2, settings);
+        else if (type === "cloud" || type === "cloud-openai") imageUrl = await callCloudApi(prompt2, settings);
         else throw new Error("\u4E0D\u652F\u6301\u7684\u751F\u56FE\u540E\u7AEF\u7C7B\u578B\uFF1A" + type);
         if (WM.DebugLog) WM.DebugLog.logResponse("llm", { url: "[image-gen:" + type + "]", model: ig.model || "", output: imageUrl.slice(0, 80) + (imageUrl.length > 80 ? "..." : ""), usage: null, finish_reason: "image-ok", rawPreview: "imageUrl length=" + imageUrl.length });
         return imageUrl;
@@ -3840,7 +4057,20 @@ ${p.summary || ""}`.trim() });
       isGenerating: () => false,
       // 楼层生图按钮：外部可手动触发重新扫描（切换角色/刷新聊天后）
       initFloorButtons,
-      scanAllMessages
+      scanAllMessages,
+      // ── ComfyUI 工作流管理 ──
+      PLACEHOLDER_DEFS,
+      listComfyWorkflows,
+      loadComfyWorkflow,
+      saveComfyWorkflow,
+      deleteComfyWorkflow,
+      renameComfyWorkflow,
+      detectWorkflowNodes,
+      checkPlaceholdersInWorkflow,
+      replaceWorkflowPlaceholders,
+      defaultComfyWorkflow,
+      defaultComfyWorkflowZImage,
+      isUnetModel
     };
     if (typeof window !== "undefined") {
       if (document.readyState === "loading") {
@@ -5502,6 +5732,8 @@ ${p.summary || ""}`.trim() });
             negativePrefix: negPreEl ? negPreEl.value : "",
             negativePrompt: q("#ig-neg") ? q("#ig-neg").value : "",
             comfyWorkflow: q("#ig-comfy") ? q("#ig-comfy").value : "",
+            comfyWorkflowName: q("#ig-comfy-wf") ? q("#ig-comfy-wf").value : "",
+            comfyWorkflowList: s.imageGen && Array.isArray(s.imageGen.comfyWorkflowList) ? s.imageGen.comfyWorkflowList : [],
             cloudPath: q("#ig-cloud-path") ? q("#ig-cloud-path").value.trim() : "/images/generations",
             displayMode: q("#ig-display") ? q("#ig-display").value : "append",
             promptStyle: q("#ig-style") ? q("#ig-style").value : "general",
@@ -5644,6 +5876,204 @@ ${p.summary || ""}`.trim() });
       }
       const modelRefreshBtn = body.querySelector("#ig-model-refresh");
       if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
+      async function refreshComfyWorkflows() {
+        const wfSelect2 = body.querySelector("#ig-comfy-wf");
+        if (!wfSelect2) return;
+        if (!WM.ImageGen || typeof WM.ImageGen.listComfyWorkflows !== "function") return;
+        try {
+          const list = await WM.ImageGen.listComfyWorkflows();
+          const names = Array.isArray(list) ? list : [];
+          if (s.imageGen) s.imageGen.comfyWorkflowList = names;
+          const curVal = s.imageGen && s.imageGen.comfyWorkflowName || "";
+          const opts = ['<option value="">\uFF08\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\xB7\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09</option>'];
+          for (const name of names) {
+            opts.push(`<option value="${escapeHtml(name)}" ${curVal === name ? "selected" : ""}>${escapeHtml(name)}</option>`);
+          }
+          wfSelect2.innerHTML = opts.join("");
+          toast("\u{1F3A8} \u5DE5\u4F5C\u6D41\u5217\u8868\u5DF2\u5237\u65B0\uFF0C\u5171 " + names.length + " \u4E2A");
+        } catch (e) {
+          toast("\u{1F3A8} \u5237\u65B0\u5DE5\u4F5C\u6D41\u5217\u8868\u5931\u8D25\uFF1A" + (e.message || String(e)));
+        }
+      }
+      async function openComfyWorkflowEditor(workflowName) {
+        const ig = WM.ImageGen;
+        if (!ig) return;
+        let workflowJson = "";
+        let title = "\u65B0\u5EFA\u5DE5\u4F5C\u6D41";
+        if (workflowName) {
+          title = workflowName;
+          const loaded = await ig.loadComfyWorkflow(workflowName);
+          if (loaded) workflowJson = loaded;
+          else {
+            toast("\u{1F3A8} \u52A0\u8F7D\u5DE5\u4F5C\u6D41\u5931\u8D25\uFF1A" + workflowName);
+            return;
+          }
+        } else {
+          const s2 = WM.Settings.load();
+          const model = s2.imageGen && s2.imageGen.model || "";
+          const useZ = ig.isUnetModel(model);
+          workflowJson = JSON.stringify(useZ ? ig.defaultComfyWorkflowZImage() : ig.defaultComfyWorkflow(), null, 2);
+          title = "\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\uFF08" + (useZ ? "UNet" : "Checkpoint") + "\uFF09";
+        }
+        const overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px";
+        const popup = document.createElement("div");
+        popup.style.cssText = "background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:90%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)";
+        const phStatus = ig.PLACEHOLDER_DEFS.map(
+          (p) => `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">\u274C <code>{{${p.key}}}</code> ${p.label}</span>`
+        ).join("");
+        popup.innerHTML = `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:14px">\u270F\uFE0F \u5DE5\u4F5C\u6D41\u7F16\u8F91\u5668 \u2014 ${escapeHtml(title)}</span>
+          <button id="wf-close" style="background:none;border:none;color:var(--SmartThemeBodyColor,#ccc);font-size:18px;cursor:pointer">\u2715</button>
+        </div>
+        <div style="padding:8px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);max-height:80px;overflow-y:auto">
+          <div style="font-size:11px;color:var(--SmartThemeBodyColor,#aaa);margin-bottom:4px">\u5360\u4F4D\u7B26\u72B6\u6001\uFF08\u2705=\u5DF2\u4F7F\u7528 \u274C=\u672A\u4F7F\u7528\uFF09\uFF1A</div>
+          <div id="wf-ph-status">${phStatus}</div>
+        </div>
+        <div style="padding:12px 16px;flex:1;overflow:hidden;display:flex;flex-direction:column">
+          <textarea id="wf-editor" style="flex:1;width:100%;min-height:300px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical">${escapeHtml(workflowJson)}</textarea>
+          <div style="font-size:11px;color:var(--SmartThemeBodyColor,#888);margin-top:6px">
+            \u{1F4A1} \u628A\u9700\u8981\u52A8\u6001\u66FF\u6362\u7684\u503C\u6539\u6210\u5360\u4F4D\u7B26\uFF0C\u5982 <code>"seed": "{{seed}}"</code> \u6216 <code>"text": "%prompt%"</code>\u3002\u4E24\u79CD\u683C\u5F0F\u7B49\u4EF7\u3002
+          </div>
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end">
+          <input id="wf-name" placeholder="\u6587\u4EF6\u540D\uFF08\u5982 my_workflow\uFF09" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, "") : "")}" style="flex:1;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px"/>
+          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">\u{1F4BE} \u4FDD\u5B58</button>
+          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px">\u53D6\u6D88</button>
+        </div>`;
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+        const textarea = popup.querySelector("#wf-editor");
+        const phContainer = popup.querySelector("#wf-ph-status");
+        function updatePhStatus() {
+          const text = textarea.value;
+          const checks = ig.checkPlaceholdersInWorkflow(text);
+          phContainer.innerHTML = checks.map((p) => {
+            const color = p.found ? "#4caf50" : "#888";
+            const bg = p.found ? "rgba(76,175,80,.1)" : "rgba(255,255,255,.05)";
+            const icon = p.found ? "\u2705" : "\u274C";
+            return `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:${bg};color:${color}">${icon} <code>{{${p.key}}}</code> ${p.label}</span>`;
+          }).join("");
+        }
+        textarea.addEventListener("input", updatePhStatus);
+        updatePhStatus();
+        const closePopup = () => {
+          document.body.removeChild(overlay);
+        };
+        popup.querySelector("#wf-close").onclick = closePopup;
+        popup.querySelector("#wf-cancel").onclick = closePopup;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) closePopup();
+        });
+        popup.querySelector("#wf-save").onclick = async () => {
+          const nameInput = popup.querySelector("#wf-name");
+          const fname = (nameInput.value || "").trim();
+          if (!fname) {
+            toast("\u{1F3A8} \u8BF7\u586B\u5199\u5DE5\u4F5C\u6D41\u6587\u4EF6\u540D");
+            return;
+          }
+          const content = textarea.value.trim();
+          try {
+            JSON.parse(content);
+          } catch (e) {
+            toast("\u{1F3A8} JSON \u683C\u5F0F\u9519\u8BEF\uFF1A" + e.message);
+            return;
+          }
+          try {
+            await ig.saveComfyWorkflow(fname, content);
+            toast("\u{1F3A8} \u5DE5\u4F5C\u6D41\u5DF2\u4FDD\u5B58\uFF1A" + (fname.endsWith(".json") ? fname : fname + ".json"));
+            await refreshComfyWorkflows();
+            const fullName = fname.toLowerCase().endsWith(".json") ? fname : fname + ".json";
+            const wfSelect2 = body.querySelector("#ig-comfy-wf");
+            if (wfSelect2) wfSelect2.value = fullName;
+            if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+            closePopup();
+          } catch (e) {
+            toast("\u{1F3A8} \u4FDD\u5B58\u5931\u8D25\uFF1A" + (e.message || String(e)));
+          }
+        };
+      }
+      const wfSelect = body.querySelector("#ig-comfy-wf");
+      if (wfSelect) wfSelect.onchange = () => {
+        if (s.imageGen) s.imageGen.comfyWorkflowName = wfSelect.value;
+      };
+      const wfEditBtn = body.querySelector("#ig-comfy-edit");
+      if (wfEditBtn) wfEditBtn.onclick = () => {
+        const name = wfSelect ? wfSelect.value : "";
+        openComfyWorkflowEditor(name || null);
+      };
+      const wfNewBtn = body.querySelector("#ig-comfy-new");
+      if (wfNewBtn) wfNewBtn.onclick = () => openComfyWorkflowEditor(null);
+      const wfImportBtn = body.querySelector("#ig-comfy-import");
+      const wfFileInput = body.querySelector("#ig-comfy-file");
+      if (wfImportBtn && wfFileInput) {
+        wfImportBtn.onclick = () => wfFileInput.click();
+        wfFileInput.onchange = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            JSON.parse(text);
+            const baseName = file.name.replace(/\.json$/i, "");
+            const ig = WM.ImageGen;
+            if (!ig) return;
+            await ig.saveComfyWorkflow(baseName, text);
+            toast("\u{1F3A8} \u5DF2\u5BFC\u5165\u5DE5\u4F5C\u6D41\uFF1A" + file.name);
+            await refreshComfyWorkflows();
+            const fullName = baseName.toLowerCase().endsWith(".json") ? baseName : baseName + ".json";
+            if (wfSelect) wfSelect.value = fullName;
+            if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+            openComfyWorkflowEditor(fullName);
+          } catch (e2) {
+            toast("\u{1F3A8} \u5BFC\u5165\u5931\u8D25\uFF1A" + (e2.message || String(e2)));
+          }
+          wfFileInput.value = "";
+        };
+      }
+      const wfRenameBtn = body.querySelector("#ig-comfy-rename");
+      if (wfRenameBtn) wfRenameBtn.onclick = async () => {
+        const oldName = wfSelect ? wfSelect.value : "";
+        if (!oldName) {
+          toast("\u{1F3A8} \u8BF7\u5148\u9009\u62E9\u4E00\u4E2A\u5DE5\u4F5C\u6D41");
+          return;
+        }
+        const newName = prompt("\u8F93\u5165\u65B0\u540D\u79F0\uFF08\u4E0D\u542B .json \u540E\u7F00\uFF09\uFF1A", oldName.replace(/\.json$/i, ""));
+        if (!newName || newName.trim() === oldName.replace(/\.json$/i, "")) return;
+        try {
+          await WM.ImageGen.renameComfyWorkflow(oldName, newName.trim());
+          toast("\u{1F3A8} \u5DF2\u91CD\u547D\u540D\u4E3A " + newName.trim() + ".json");
+          await refreshComfyWorkflows();
+          const fullName = newName.trim().toLowerCase().endsWith(".json") ? newName.trim() : newName.trim() + ".json";
+          if (wfSelect) wfSelect.value = fullName;
+          if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+        } catch (e) {
+          toast("\u{1F3A8} \u91CD\u547D\u540D\u5931\u8D25\uFF1A" + (e.message || String(e)));
+        }
+      };
+      const wfDeleteBtn = body.querySelector("#ig-comfy-delete");
+      if (wfDeleteBtn) wfDeleteBtn.onclick = async () => {
+        const name = wfSelect ? wfSelect.value : "";
+        if (!name) {
+          toast("\u{1F3A8} \u8BF7\u5148\u9009\u62E9\u4E00\u4E2A\u5DE5\u4F5C\u6D41");
+          return;
+        }
+        if (!confirm("\u786E\u8BA4\u5220\u9664\u5DE5\u4F5C\u6D41\u300C" + name + "\u300D\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\u3002")) return;
+        try {
+          await WM.ImageGen.deleteComfyWorkflow(name);
+          toast("\u{1F3A8} \u5DF2\u5220\u9664\u5DE5\u4F5C\u6D41\uFF1A" + name);
+          if (s.imageGen) s.imageGen.comfyWorkflowName = "";
+          await refreshComfyWorkflows();
+        } catch (e) {
+          toast("\u{1F3A8} \u5220\u9664\u5931\u8D25\uFF1A" + (e.message || String(e)));
+        }
+      };
+      const wfRefreshBtn = body.querySelector("#ig-comfy-refresh");
+      if (wfRefreshBtn) wfRefreshBtn.onclick = () => refreshComfyWorkflows();
+      if (body.querySelector("#ig-comfy-wf")) {
+        refreshComfyWorkflows().catch(() => {
+        });
+      }
       async function handleUnlimitedImageGen() {
         if (!WM.ImageGen || typeof WM.ImageGen.triggerUnlimited !== "function") {
           toast("\u{1F3A8} \u6E29\u8BB0\u751F\u56FE\u6A21\u5757\u672A\u52A0\u8F7D\uFF08\u5237\u65B0\u9875\u9762\u518D\u8BD5\uFF09");
@@ -5924,10 +6354,31 @@ ${p.summary || ""}`.trim() });
       </label>
       <div class="wm-hint">\u300C\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\u300D\uFF1A\u56FE\u7247\u7D27\u8DDF AI \u56DE\u590D\u4E0B\u65B9\u3002\u300C\u72EC\u7ACB system \u697C\u5C42\u300D\uFF1A\u5355\u72EC\u4E00\u5C42\u663E\u793A\u3002\u4E24\u79CD\u65B9\u5F0F\u5747\u4E0D\u8FDB\u4E0A\u4E0B\u6587\u3002</div>
       ${isComfy ? `<div class="wm-divider"></div>
-      <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41\uFF08\u53EF\u9009\uFF09</div>
-      <div class="wm-hint">\u7C98\u8D34 ComfyUI <b>prompt API \u683C\u5F0F</b>\u7684\u5DE5\u4F5C\u6D41 JSON\uFF08\u5728 ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u5F97\u5230\u7684 .json \u5373\u6B64\u683C\u5F0F\uFF09\u3002\u7528\u5360\u4F4D\u7B26\u6807\u8BB0\u5173\u952E\u53C2\u6570\u4F4D\u7F6E\uFF0C\u751F\u56FE\u65F6\u81EA\u52A8\u66FF\u6362\u3002<br/>
-        \u5360\u4F4D\u7B26\u5217\u8868\uFF1A<code>{{prompt}}</code> \u6B63\u5411 / <code>{{negative}}</code> \u8D1F\u9762\uFF08\u542B\u524D\u7F00+\u672C\u6B21\u7279\u5B9A\uFF09 / <code>{{width}}</code> <code>{{height}}</code> \u5C3A\u5BF8 / <code>{{steps}}</code> <code>{{cfg}}</code> <code>{{denoise}}</code> \u91C7\u6837 / <code>{{seed}}</code> \u79CD\u5B50\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4 txt2img \u5DE5\u4F5C\u6D41\u3002</div>
-      <textarea id="ig-comfy" rows="7" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}","steps":"{{steps}}","cfg":"{{cfg}}","denoise":"{{denoise}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>` : ""}
+      <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41</div>
+      <div class="wm-hint">\u4ECE ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u6216\u300CSave (API Format)\u300D\u5BFC\u51FA\u7684 JSON \u5373\u53EF\u7528\u3002<br/>
+        \u652F\u6301\u4E24\u79CD\u5360\u4F4D\u7B26\u683C\u5F0F\uFF08\u7B49\u4EF7\uFF09\uFF1A<code>{{prompt}}</code> \u6216 <code>"%prompt%"</code>\u3002\u5728\u7F16\u8F91\u5668\u91CC\u628A\u9700\u8981\u52A8\u6001\u66FF\u6362\u7684\u503C\u6539\u6210\u5360\u4F4D\u7B26\u5373\u53EF\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\u3002</div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+        <select id="ig-comfy-wf" style="flex:1;min-width:180px">
+          <option value="">\uFF08\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\xB7\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09</option>
+          ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
+        const name = typeof wf === "string" ? wf : wf && wf.name ? wf.name : "";
+        return `<option value="${escapeHtml(name)}" ${ig.comfyWorkflowName === name ? "selected" : ""}>${escapeHtml(name)}</option>`;
+      }).join("")}
+        </select>
+        <button id="ig-comfy-edit" class="wm-btn small" title="\u7F16\u8F91\u5F53\u524D\u5DE5\u4F5C\u6D41\uFF08\u5F39\u51FA\u7F16\u8F91\u5668\uFF0C\u652F\u6301\u5360\u4F4D\u7B26\u68C0\u6D4B\uFF09">\u270F\uFE0F \u7F16\u8F91</button>
+        <button id="ig-comfy-new" class="wm-btn small" title="\u65B0\u5EFA\u7A7A\u767D\u5DE5\u4F5C\u6D41">\u2795 \u65B0\u5EFA</button>
+        <button id="ig-comfy-import" class="wm-btn small" title="\u4ECE .json \u6587\u4EF6\u5BFC\u5165\u5DE5\u4F5C\u6D41">\u{1F4E5} \u5BFC\u5165</button>
+        <button id="ig-comfy-rename" class="wm-btn small" title="\u91CD\u547D\u540D\u5F53\u524D\u5DE5\u4F5C\u6D41">\u6539\u540D</button>
+        <button id="ig-comfy-delete" class="wm-btn small" title="\u5220\u9664\u5F53\u524D\u5DE5\u4F5C\u6D41">\u{1F5D1}\uFE0F</button>
+        <button id="ig-comfy-refresh" class="wm-btn small" title="\u5237\u65B0\u5DE5\u4F5C\u6D41\u5217\u8868">\u{1F504}</button>
+      </div>
+      <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
+      <div class="wm-hint" style="margin-top:4px">\u5DE5\u4F5C\u6D41\u6587\u4EF6\u901A\u8FC7\u9152\u9986\u540E\u7AEF\u7BA1\u7406\uFF0C\u4E0E\u9152\u9986\u539F\u751F SD \u6A21\u5757\u4E92\u901A\u3002\u9009\u300C\u5185\u7F6E\u9ED8\u8BA4\u300D\u4F1A\u6839\u636E\u6A21\u578B\u540D\u81EA\u52A8\u5207\u6362 Checkpoint/UNet \u5DE5\u4F5C\u6D41\u3002</div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">\u{1F4DD} \u9AD8\u7EA7\uFF1A\u5185\u8054\u5DE5\u4F5C\u6D41 JSON\uFF08\u76F4\u63A5\u7C98\u8D34\uFF0C\u4F18\u5148\u7EA7\u9AD8\u4E8E\u4E0A\u65B9\u4E0B\u62C9\u6846\uFF09</summary>
+        <textarea id="ig-comfy" rows="5" style="width:100%;font-family:monospace;font-size:11px;margin-top:6px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>
+        <div class="wm-hint">\u7C98\u8D34\u5728\u8FD9\u91CC\u7684\u5DE5\u4F5C\u6D41\u4F1A\u76F4\u63A5\u4F7F\u7528\uFF0C\u4E0D\u7ECF\u8FC7\u6587\u4EF6\u7BA1\u7406\u3002\u9002\u5408\u4E34\u65F6\u6D4B\u8BD5\u3002</div>
+      </details>` : ""}
       <div class="wm-divider"></div>
       <div class="wm-hint">\u{1F4A1} \u63D0\u793A\uFF1A\u70B9\u4E0A\u65B9\u300C\u6D4B\u8BD5\u8FDE\u63A5\u300D\u4F1A\u771F\u7684\u51FA\u4E00\u5F20\u6D4B\u8BD5\u56FE\uFF0C\u9A8C\u8BC1\u540E\u7AEF\u8FDE\u901A\u6027+\u53C2\u6570\u3002\u751F\u56FE\u63D0\u793A\u8BCD\u590D\u7528\u300CLLM \u8C03\u7528\u300D\u6807\u7B7E\u9875\u914D\u7F6E\uFF0C\u65E0\u9700\u5728\u6B64\u91CD\u590D\u586B\u3002</div>
     </div>`;

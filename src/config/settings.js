@@ -162,12 +162,18 @@
       denoisingStrength: 1.0,          // 去噪强度（txt2img 默认 1.0，范围 0~1）
       seed: -1,                        // 种子，-1 表示每次随机
       sampler: '',                     // 采样器名（可选；SD WebUI 用 sampler_name，留空走默认 Euler a）
-      // ComfyUI 工作流 JSON（可选）：粘贴完整 prompt API 格式工作流。
-      // 占位符列表：
-      //   {{prompt}} 正向 / {{negative}} 负面（含前缀+负面前缀）
-      //   {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
-      // 生图时自动替换。留空则用内置 txt2img 默认工作流。
+      // ComfyUI 工作流管理：
+      //   comfyWorkflowName: 已保存的工作流文件名（通过酒馆后端 /api/sd/comfy/* 管理，与酒馆原生 SD 模块互通）
+      //   comfyWorkflow: 内联工作流 JSON（直接粘贴，优先级高于 comfyWorkflowName）
+      //   留空则用内置默认工作流（自动检测模型类型选 checkpoint/unet 工作流）
+      // 占位符支持两种格式（等价）：
+      //   {{prompt}} 或 "%prompt%" — 正向提示词
+      //   {{negative}} 或 "%negative_prompt%" — 负面提示词
+      //   {{model}} {{vae}} {{clip}} {{sampler}} {{scheduler}} — 字符串型
+      //   {{seed}} {{steps}} {{cfg}} {{width}} {{height}} {{denoise}} {{clip_skip}} — 数字型
       comfyWorkflow: '',
+      comfyWorkflowName: '',           // 已保存的工作流文件名（如 'my_workflow.json'）
+      comfyWorkflowList: [],           // 工作流文件名列表缓存（UI 下拉框用）
       cloudPath: '/images/generations',// 云端 API 路径（拼在 apiUrl 后；SiliconFlow/OpenAI 兼容端点都用此默认值）
       displayMode: 'append',           // 'append' 追加到 AI 楼层末尾 | 'separate' 独立 system 楼层
       promptStyle: 'general',          // 'general' 通用 | 'anime' 动漫 | 'realistic' 写实 | 'ink' 水墨

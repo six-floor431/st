@@ -307,12 +307,49 @@
     return 'data:image/png;base64,' + j.images[0];
   }
 
-  // ── 后端适配 2：ComfyUI /prompt + /history 轮询 ──
-  // 占位符列表：{{prompt}} {{negative}} {{model}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}} {{clip}} {{vae}}
-  // 留空则用内置 txt2img 默认工作流（含 KSampler/CheckpointLoaderSimple/EmptyLatent/CLIP/VAEDecode/SaveImage）
+  // ════════════════════════════════════════════════════════════════════════
+  //  ComfyUI 工作流管理系统
+  //  ─ 借鉴酒馆原生 SD 模块，通过 /api/sd/comfy/* REST 端点管理工作流文件
+  //  ─ 支持 {{xxx}}（温记格式）和 "%xxx%"（酒馆格式）两种占位符
+  //  ─ 自动节点类型检测：CheckpointLoaderSimple / UNETLoader / GGUF / CLIPLoader / VAELoader 等
+  //  ─ 兼容任意 ComfyUI 整合包和所有模型架构
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── 占位符定义 ──
+  // 两种格式等价：{{prompt}} ≡ "%prompt%"
+  // 字符串型：替换引号内的内容（保留 JSON 引号）
+  // 数字型：连引号一起替换为裸数字（ComfyUI API 要求 INT/FLOAT 不能是字符串）
+  const PLACEHOLDER_DEFS = [
+    { key: 'prompt',           label: '正向提示词',           type: 'string', desc: 'LLM 整合出的画面描述（含风格前缀）' },
+    { key: 'negative',         label: '负面提示词',           type: 'string', desc: '负面提示词（含前缀+本次特定）' },
+    { key: 'negative_prompt',  label: '负面提示词(酒馆格式)',  type: 'string', desc: '同 negative，兼容酒馆导出工作流' },
+    { key: 'model',            label: '模型名',               type: 'string', desc: 'Checkpoint / UNet / GGUF 模型文件名' },
+    { key: 'vae',              label: 'VAE 名',               type: 'string', desc: 'VAELoader 的 vae_name' },
+    { key: 'clip',             label: 'CLIP 名',              type: 'string', desc: 'CLIPLoader 的 clip_name' },
+    { key: 'sampler',          label: '采样器',               type: 'string', desc: 'KSampler 的 sampler_name' },
+    { key: 'scheduler',        label: '调度器',               type: 'string', desc: 'KSampler 的 scheduler' },
+    { key: 'seed',             label: '种子',                 type: 'number', desc: '-1=随机，否则用固定值' },
+    { key: 'steps',            label: '采样步数',             type: 'number', desc: 'KSampler 的 steps' },
+    { key: 'cfg',              label: 'CFG 缩放',             type: 'number', desc: 'KSampler 的 cfg（也叫 scale）' },
+    { key: 'scale',            label: 'CFG 缩放(酒馆格式)',   type: 'number', desc: '同 cfg，兼容酒馆导出工作流' },
+    { key: 'width',            label: '图片宽度',             type: 'number', desc: 'EmptyLatentImage 的 width' },
+    { key: 'height',           label: '图片高度',             type: 'number', desc: 'EmptyLatentImage 的 height' },
+    { key: 'denoise',          label: '去噪强度',             type: 'number', desc: 'KSampler 的 denoise（0~1）' },
+    { key: 'clip_skip',        label: 'CLIP跳过层',           type: 'number', desc: 'CLIPSetLastLayer 的 stop_at_clip_layer（负值）' },
+  ];
+  // 数字型占位符集合（替换时连引号一起消掉，产出裸数字）
+  const NUMERIC_KEYS = new Set(PLACEHOLDER_DEFS.filter((p) => p.type === 'number').map((p) => p.key));
+  // 别名映射：酒馆格式 key → 温记格式 key（统一内部处理）
+  const PLACEHOLDER_ALIASES = {
+    'negative_prompt': 'negative',
+    'scale': 'cfg',
+  };
+
+  // ── 内置默认工作流 ──
+  // 占位符用 {{xxx}} 格式；同时兼容 "%xxx%" 格式的导入工作流
   function defaultComfyWorkflow() {
     return {
-      '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: '{{cfg}}', sampler_name: 'euler', scheduler: 'normal', denoise: '{{denoise}}', model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
+      '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: '{{cfg}}', sampler_name: '{{sampler}}', scheduler: '{{scheduler}}', denoise: '{{denoise}}', model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: '{{model}}' } },
       '5': { class_type: 'EmptyLatentImage', inputs: { width: '{{width}}', height: '{{height}}', batch_size: 1 } },
       '6': { class_type: 'CLIPTextEncode', inputs: { text: '{{prompt}}', clip: ['4', 1] } },
@@ -321,16 +358,7 @@
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'WarmMemo', images: ['8', 0] } },
     };
   }
-  // Z-Image-Turbo 专用工作流：UNETLoader + CLIPLoader + VAELoader + ModelSamplingAuraFlow + ConditioningZeroOut
-  // 参考 ComfyUI 官方蓝图 Text to Image (Z-Image-Turbo).json
-  // 与普通 checkpoint 工作流的区别：
-  //   1) 用 UNETLoader（从 unet/diffusion_models 目录加载）而非 CheckpointLoaderSimple
-  //   2) 用独立 CLIPLoader 加载 qwen_3_4b.safetensors（type=lumina2）
-  //   3) 用独立 VAELoader 加载 ae.safetensors
-  //   4) 加 ModelSamplingAuraFlow（shift=3）调整采样分布
-  //   5) 用 ConditioningZeroOut 生成空负面（Z-Image-Turbo 是蒸馏模型，不需要负面提示词）
-  //   6) KSampler 用 cfg=1, sampler=res_multistep, scheduler=simple（蒸馏模型专用参数）
-  //   7) 用 EmptySD3LatentImage 而非 EmptyLatentImage
+  // Z-Image-Turbo / Flux 等 UNet 模型专用工作流
   function defaultComfyWorkflowZImage() {
     return {
       '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: 1, sampler_name: 'res_multistep', scheduler: 'simple', denoise: '{{denoise}}', model: ['11', 0], positive: ['27', 0], negative: ['33', 0], latent_image: ['13', 0] } },
@@ -345,32 +373,256 @@
       '33': { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['27', 0] } },
     };
   }
-  // 自动检测模型类型：根据模型名判断是否为 UNet/diffusion 模型
+
+  // ── 自动检测模型类型：根据模型名判断是否为 UNet/diffusion 模型 ──
   function isUnetModel(modelName) {
     if (!modelName) return false;
     const lower = modelName.toLowerCase();
     return lower.includes('z_image') || lower.includes('z-image') ||
            lower.includes('flux') || lower.includes('sdxl_unet') ||
-           lower.includes('diffusion_model');
+           lower.includes('diffusion_model') || lower.includes('_unet') ||
+           lower.includes('.gguf');
   }
+
+  // ── 工作流节点检测：解析 JSON，识别节点类型和建议占位符 ──
+  // 返回 { modelType, loaders, placeholders, nodeCount }
+  //   modelType: 'checkpoint' | 'unet' | 'gguf' | 'unknown'
+  //   loaders: 检测到的加载器节点列表 [{ nodeId, class_type, inputField }]
+  //   placeholders: 工作流中已使用的占位符列表 [{ key, found: boolean }]
+  //   nodeCount: 总节点数
+  function detectWorkflowNodes(workflowObj) {
+    const result = {
+      modelType: 'unknown',
+      loaders: [],
+      placeholders: [],
+      nodeCount: 0,
+      hasKSampler: false,
+      hasSaveImage: false,
+      hasVAEDecode: false,
+    };
+    if (!workflowObj || typeof workflowObj !== 'object') return result;
+    const nodes = workflowObj;
+    let hasCheckpoint = false, hasUNET = false, hasGGUF = false;
+    const usedPlaceholders = new Set();
+    for (const nodeId of Object.keys(nodes)) {
+      const node = nodes[nodeId];
+      if (!node || !node.class_type) continue;
+      result.nodeCount++;
+      const ct = node.class_type;
+      const inputs = node.inputs || {};
+      // 检测模型加载器类型
+      if (ct === 'CheckpointLoaderSimple') {
+        hasCheckpoint = true;
+        result.loaders.push({ nodeId, class_type: ct, inputField: 'ckpt_name' });
+      } else if (ct === 'UNETLoader') {
+        hasUNET = true;
+        result.loaders.push({ nodeId, class_type: ct, inputField: 'unet_name' });
+      } else if (ct === 'UnetLoaderGGUF') {
+        hasGGUF = true;
+        result.loaders.push({ nodeId, class_type: ct, inputField: 'unet_name' });
+      } else if (ct === 'CLIPLoader' || ct === 'DualCLIPLoader') {
+        result.loaders.push({ nodeId, class_type: ct, inputField: ct === 'DualCLIPLoader' ? 'clip_name1' : 'clip_name' });
+      } else if (ct === 'VAELoader') {
+        result.loaders.push({ nodeId, class_type: ct, inputField: 'vae_name' });
+      } else if (ct === 'KSampler' || ct === 'KSamplerAdvanced' || ct === 'SamplerCustom') {
+        result.hasKSampler = true;
+      } else if (ct === 'SaveImage' || ct === 'PreviewImage') {
+        result.hasSaveImage = true;
+      } else if (ct === 'VAEDecode') {
+        result.hasVAEDecode = true;
+      }
+      // 扫描所有输入值，收集已使用的占位符
+      for (const inputKey of Object.keys(inputs)) {
+        const val = inputs[inputKey];
+        if (typeof val === 'string') {
+          // 匹配 {{xxx}} 和 %xxx% 两种格式
+          const matches = val.match(/\{\{(\w+)\}\}/g) || [];
+          for (const m of matches) usedPlaceholders.add(m.replace(/[{}]/g, ''));
+          const pctMatches = val.match(/%(\w+)%/g) || [];
+          for (const m of pctMatches) usedPlaceholders.add(m.replace(/%/g, ''));
+        }
+      }
+    }
+    // 确定模型类型优先级：GGUF > UNET > Checkpoint
+    if (hasGGUF) result.modelType = 'gguf';
+    else if (hasUNET) result.modelType = 'unet';
+    else if (hasCheckpoint) result.modelType = 'checkpoint';
+    // 检查每个已定义占位符是否在工作流中使用
+    result.placeholders = PLACEHOLDER_DEFS.map((p) => ({
+      key: p.key,
+      label: p.label,
+      type: p.type,
+      found: usedPlaceholders.has(p.key),
+    }));
+    return result;
+  }
+
+  // ── 检查工作流字符串中的占位符使用情况（给 UI 用）──
+  function checkPlaceholdersInWorkflow(workflowStr) {
+    const found = new Set();
+    if (!workflowStr) return PLACEHOLDER_DEFS.map((p) => ({ ...p, found: false }));
+    // 搜索 "{{key}}" 和 "%key%" 两种格式
+    for (const p of PLACEHOLDER_DEFS) {
+      const re1 = new RegExp('\\{\\{' + p.key + '\\}\\}', 'g');
+      const re2 = new RegExp('%"?' + p.key + '"?%', 'g');
+      if (re1.test(workflowStr) || re2.test(workflowStr)) {
+        found.add(p.key);
+      }
+    }
+    return PLACEHOLDER_DEFS.map((p) => ({ ...p, found: found.has(p.key) }));
+  }
+
+  // ── 统一占位符替换引擎 ──
+  // 同时处理 {{xxx}} 和 "%xxx%" 两种格式
+  // values: { prompt: "...", seed: 12345, model: "...", ... }
+  // 字符串型：替换引号内的占位符文本（保留 JSON 引号）
+  // 数字型：连引号一起替换为裸数字
+  function replaceWorkflowPlaceholders(workflowStr, values) {
+    let s = workflowStr;
+    // 安全转义函数：JSON.stringify 后去掉外层引号，得到合法 JSON 字符串内容
+    const esc = (anyVal) => {
+      const str = String(anyVal == null ? '' : anyVal);
+      const out = JSON.stringify(str);
+      return out.length >= 2 ? out.slice(1, -1) : out;
+    };
+    // 替换函数：用函数返回值避免 $ 特殊字符破坏 JSON
+    const repStr = (val) => () => esc(val);
+    for (const p of PLACEHOLDER_DEFS) {
+      const val = values[p.key];
+      if (val == null) continue;
+      if (p.type === 'number') {
+        // 数字型：连引号一起替换为裸数字
+        // 匹配 "{{key}}" 和 "%key%"（都被引号包裹的字符串值）
+        const numVal = String(val);
+        s = s.replace(new RegExp('"\\{\\{' + p.key + '\\}\\}"', 'g'), numVal);
+        s = s.replace(new RegExp('"%' + p.key + '%"', 'g'), numVal);
+      } else {
+        // 字符串型：只替换占位符文本，保留 JSON 引号
+        s = s.replace(new RegExp('\\{\\{' + p.key + '\\}\\}', 'g'), repStr(val));
+        s = s.replace(new RegExp('%' + p.key + '%', 'g'), repStr(val));
+      }
+    }
+    return s;
+  }
+
+  // ── 工作流文件管理 API（通过酒馆后端 REST 端点）──
+  //   复用酒馆原生 SD 模块的 /api/sd/comfy/* 端点，工作流文件存在 data/<user>/user/workflows/
+  //   与酒馆原生 SD 模块完全互通：在酒馆 SD 模块里创建/编辑的工作流，温记也能用，反之亦然
+  //   如果酒馆后端不可用（极旧版本），回退到设置内嵌存储
+
+  // 列出所有已保存的工作流文件名
+  async function listComfyWorkflows() {
+    try {
+      const res = await stFetch('/api/sd/comfy/workflows', { url: '' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arr = await res.json();
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      console.warn('[WarmMemo][comfy] 列出工作流失败（酒馆后端），回退内嵌存储：', e.message);
+      return null; // null 表示回退模式
+    }
+  }
+  // 加载单个工作流 JSON
+  async function loadComfyWorkflow(name) {
+    if (!name) return null;
+    try {
+      const res = await stFetch('/api/sd/comfy/workflow', { file_name: name });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // 后端返回 JSON.stringify(jsonString)，需要二次解析
+      const raw = await res.json();
+      // raw 是 string 类型的工作流 JSON
+      return typeof raw === 'string' ? raw : JSON.stringify(raw);
+    } catch (e) {
+      console.warn('[WarmMemo][comfy] 加载工作流失败：', e.message);
+      return null;
+    }
+  }
+  // 保存工作流（新建或覆盖）
+  async function saveComfyWorkflow(name, workflowJson) {
+    if (!name) throw new Error('工作流文件名不能为空');
+    // 确保以 .json 结尾
+    const fname = name.toLowerCase().endsWith('.json') ? name : name + '.json';
+    try {
+      const res = await stFetch('/api/sd/comfy/save-workflow', { file_name: fname, workflow: workflowJson });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arr = await res.json();
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      throw new Error('保存工作流失败：' + (e.message || String(e)));
+    }
+  }
+  // 删除工作流
+  async function deleteComfyWorkflow(name) {
+    if (!name) throw new Error('工作流文件名不能为空');
+    try {
+      const res = await stFetch('/api/sd/comfy/delete-workflow', { file_name: name });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return true;
+    } catch (e) {
+      throw new Error('删除工作流失败：' + (e.message || String(e)));
+    }
+  }
+  // 重命名工作流
+  async function renameComfyWorkflow(oldName, newName) {
+    if (!oldName || !newName) throw new Error('文件名不能为空');
+    const oldF = oldName.toLowerCase().endsWith('.json') ? oldName : oldName + '.json';
+    const newF = newName.toLowerCase().endsWith('.json') ? newName : newName + '.json';
+    try {
+      const res = await stFetch('/api/sd/comfy/rename-workflow', { old_name: oldF, new_name: newF });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error('HTTP ' + res.status + (t ? ': ' + t.slice(0, 200) : ''));
+      }
+      return true;
+    } catch (e) {
+      throw new Error('重命名工作流失败：' + (e.message || String(e)));
+    }
+  }
+
+  // ── 后端适配 2：ComfyUI /prompt + /history 轮询 ──
   async function callComfyui(prompt, settings) {
     const ig = settings.imageGen || {};
     const base = (ig.apiUrl || 'http://127.0.0.1:8188').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
-    // {{model}}：用户没选时给一个兜底值（避免 CheckpointLoaderSimple/UNETLoader 提交空名称，ComfyUI 会直接 400）
     const model = (ig.model && ig.model.trim()) ? ig.model.trim() : '';
-    // 自动检测模型类型：Z-Image-Turbo 等 diffusion 模型需要完全不同的工作流
-    // 用户也可通过 ig.comfyWorkflowPreset 手动指定 ('auto' | 'checkpoint' | 'z-image-turbo')
+    // 自动检测模型类型
     const useZImageWorkflow = ig.comfyWorkflowPreset === 'z-image-turbo' ||
       (ig.comfyWorkflowPreset !== 'checkpoint' && isUnetModel(model));
-    let workflow;
+
+    // ── 获取工作流 JSON ──
+    // 优先级：1) 内联工作流(ig.comfyWorkflow) 2) 已保存的工作流文件(ig.comfyWorkflowName) 3) 内置默认
+    let workflowStr;
+    let workflowSource = 'default';
     if (ig.comfyWorkflow && ig.comfyWorkflow.trim()) {
-      try { workflow = JSON.parse(ig.comfyWorkflow); }
-      catch (e) { throw new Error('ComfyUI 工作流 JSON 解析失败：' + e.message); }
+      // 内联工作流：直接用
+      workflowStr = ig.comfyWorkflow.trim();
+      workflowSource = 'inline';
+    } else if (ig.comfyWorkflowName) {
+      // 已保存的工作流文件：从酒馆后端加载
+      const loaded = await loadComfyWorkflow(ig.comfyWorkflowName);
+      if (loaded) {
+        workflowStr = loaded;
+        workflowSource = 'file:' + ig.comfyWorkflowName;
+      } else {
+        // 加载失败，回退默认
+        workflowStr = JSON.stringify(useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow());
+        workflowSource = 'default(fallback)';
+      }
     } else {
-      workflow = useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow();
+      // 内置默认工作流
+      workflowStr = JSON.stringify(useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow());
+      workflowSource = 'default';
     }
+
+    // 验证工作流 JSON 合法性
+    let workflowObj;
+    try { workflowObj = JSON.parse(workflowStr); }
+    catch (e) { throw new Error('ComfyUI 工作流 JSON 解析失败：' + e.message + '\n（来源：' + workflowSource + '）'); }
+
+    // 节点检测：如果工作流没有用户手填占位符，自动检测节点类型
+    const detection = detectWorkflowNodes(workflowObj);
+
+    // 准备占位符值
     const neg = buildFullNegative(settings);
-    // 所有占位符先洗一遍：去控制字符、去 LLM 叙事废话，确保塞进 JSON 字符串不会有语法错误
     const cleanPrompt = sanitizePrompt(prompt);
     const cleanNeg = sanitizePrompt(neg);
     const w = Number(ig.width) || (useZImageWorkflow ? 1024 : 512);
@@ -379,67 +631,59 @@
     const cfg = Number(ig.cfgScale) || (useZImageWorkflow ? 1 : 7);
     const denoise = ig.denoisingStrength == null ? 1.0 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
     const seed = resolveSeed(ig.seed);
-    // Z-Image-Turbo 配套模型：CLIP 和 VAE 文件名（用户可在设置中覆盖）
     const clipName = (ig.comfyClip && ig.comfyClip.trim()) ? ig.comfyClip.trim() : 'qwen_3_4b.safetensors';
     const vaeName = (ig.comfyVae && ig.comfyVae.trim()) ? ig.comfyVae.trim() : 'ae.safetensors';
-    if (!model && !ig.comfyWorkflow) {
+    const samplerName = (ig.sampler && ig.sampler.trim()) ? ig.sampler.trim() : (useZImageWorkflow ? 'res_multistep' : 'euler');
+    const schedulerName = (ig.comfyScheduler && ig.comfyScheduler.trim()) ? ig.comfyScheduler.trim() : (useZImageWorkflow ? 'simple' : 'normal');
+    const clipSkip = Number(ig.clipSkip) || 0;
+
+    // 检查是否必须选模型
+    if (!model && workflowSource === 'default') {
       throw new Error(useZImageWorkflow
         ? 'ComfyUI：未选择 UNet 模型。请点「🔄 刷新列表」，从下拉框选一个（如 z_image_turbo_bf16.safetensors）。'
         : 'ComfyUI：未选择 Checkpoint 模型。请点「🔄 刷新列表」，从下拉框选一个你本地已有的模型名。');
     }
-    // 占位符替换：用 JSON.stringify(s).slice(1,-1) 得到合法 JSON 字符串字面量内容。
-    // JSON.stringify 自动正确转义：引号、反斜杠、\r、\n、\t、\b、\f、所有 0x00-0x1F 控制字符、U+2028/U+2029 行分隔符。
-    // —— 关键安全修复：replace 第二个参数用函数返回值，而不是字符串。
-    //    因为 String.replace(regex, string) 里 $ 有特殊含义（$&/$1/$'/ $`），prompt 含 $ 会破坏 JSON 结构。
-    //    用函数返回值则完全无特殊字符处理，值是什么就替换成什么。
-    let workflowStr = JSON.stringify(workflow);
-    const esc = (anyVal) => {
-      const s = String(anyVal == null ? '' : anyVal);
-      const out = JSON.stringify(s);
-      return out.length >= 2 ? out.slice(1, -1) : out;
+
+    // 统一占位符替换
+    const values = {
+      prompt: cleanPrompt,
+      negative: cleanNeg,
+      negative_prompt: cleanNeg, // 酒馆格式别名
+      model: model,
+      vae: vaeName,
+      clip: clipName,
+      sampler: samplerName,
+      scheduler: schedulerName,
+      seed: seed,
+      steps: steps,
+      cfg: cfg,
+      scale: cfg, // 酒馆格式别名
+      width: w,
+      height: h,
+      denoise: denoise,
+      clip_skip: clipSkip > 0 ? -clipSkip : -1,
     };
-    // 替换函数：每次匹配都返回转义后的值，避免 $ 特殊字符破坏 JSON
-    const rep = (val) => () => esc(val);
-    // —— 关键修复：数字字段必须替换为 JSON 数字（无引号），不能是字符串。
-    //   ComfyUI API 要求 KSampler.seed/steps/cfg 等为 INT/FLOAT 类型。
-    //   之前用 esc() 统一替换，数字 20 → "20"（字符串），ComfyUI 校验失败返回 500。
-    //   修复方式：数字占位符替换时连引号一起消掉，产出裸数字；字符串占位符保持引号。
-    workflowStr = workflowStr
-      // 数字值：连引号一起替换为裸数字（"{{seed}}" → 12345，不是 "12345"）
-      .replace(/"\{\{seed\}\}"/g, String(seed))
-      .replace(/"\{\{steps\}\}"/g, String(steps))
-      .replace(/"\{\{cfg\}\}"/g, String(cfg))
-      .replace(/"\{\{width\}\}"/g, String(w))
-      .replace(/"\{\{height\}\}"/g, String(h))
-      .replace(/"\{\{denoise\}\}"/g, String(denoise))
-      // 字符串值：只替换引号内的内容（保留 JSON 字符串引号）
-      .replace(/\{\{prompt\}\}/g, rep(cleanPrompt))
-      .replace(/\{\{negative\}\}/g, rep(cleanNeg))
-      .replace(/\{\{model\}\}/g, rep(model))
-      .replace(/\{\{clip\}\}/g, rep(clipName))
-      .replace(/\{\{vae\}\}/g, rep(vaeName));
-    // —— 关键修复：ComfyUI /prompt 要求 body = { prompt: <nodes对象>, client_id: '唯一标识' }
-    // 之前直接把 workflow JSON 当 body，服务器端拿不到 prompt 字段 → 要么 400 要么 CORS 预检失败后被浏览器吞成 ERR_FAILED
+    let replacedStr = replaceWorkflowPlaceholders(workflowStr, values);
+
+    // 解析替换后的 JSON
     let promptObj;
-    try { promptObj = JSON.parse(workflowStr); } catch (e) {
-      // 万一仍失败，把出错位置附近的片段打出来，便于定位是哪段提示词仍含异常字符
+    try { promptObj = JSON.parse(replacedStr); }
+    catch (e) {
       let posMatch = /position\s+(\d+)/i.exec(String(e && e.message ? e.message : e));
       let snippet = '';
       if (posMatch && posMatch[1]) {
         const p = parseInt(posMatch[1], 10);
         if (!isNaN(p)) {
           const start = Math.max(0, p - 80);
-          const end = Math.min(workflowStr.length, p + 80);
-          snippet = '（上下文：…' + workflowStr.slice(start, end).replace(/[\r\n\t]/g, '↵') + '…）';
+          const end = Math.min(replacedStr.length, p + 80);
+          snippet = '（上下文：…' + replacedStr.slice(start, end).replace(/[\r\n\t]/g, '↵') + '…）';
         }
       }
-      throw new Error('工作流 JSON 占位符替换后解析失败：' + (e.message || String(e)) + snippet
+      throw new Error('工作流占位符替换后解析失败：' + (e.message || String(e)) + snippet
         + '|提示词片段=' + String(cleanPrompt || '').slice(0, 120));
     }
-    // —— 走酒馆服务端代理 /api/sd/comfy/generate ——
-    // 酒馆后端已封装完整流程：POST {url}/prompt → 轮询 {url}/history → GET {url}/view → 返回 {format, data:base64}
-    // 前端只需一次请求，无需自己轮询 /history 和取 /view，且无 CORS 问题。
-    // 这就是酒馆自带 SD 模块能连接任意 ComfyUI 的核心机制。
+
+    // 走酒馆服务端代理
     const clientId = 'WarmMemo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const res = await stFetch('/api/sd/comfy/generate', {
       url: base,
@@ -451,11 +695,9 @@
       throw new Error('ComfyUI（酒馆代理 /api/sd/comfy/generate）HTTP ' + res.status + '：' + t.slice(0, 300));
     }
     const j = await res.json();
-    // 响应格式：{ format: 'png', data: '<base64字符串>' }
     if (!j.data) throw new Error('ComfyUI（酒馆代理）未返回图片数据');
     return 'data:image/' + (j.format || 'png') + ';base64,' + j.data;
   }
-  // pollComfyuiResult 已废弃：酒馆 /api/sd/comfy/generate 后端已封装完整轮询+取图逻辑，前端不再需要。
 
   // ── 后端适配 3：云端 OpenAI 兼容 /images/generations（SiliconFlow / OpenAI 等）──
   // 注：OpenAI 官方 /images/generations 没有 negative_prompt 参数；部分兼容端点（如 SiliconFlow/Kolors）支持 seed
@@ -875,6 +1117,19 @@
     // 楼层生图按钮：外部可手动触发重新扫描（切换角色/刷新聊天后）
     initFloorButtons,
     scanAllMessages,
+    // ── ComfyUI 工作流管理 ──
+    PLACEHOLDER_DEFS,
+    listComfyWorkflows,
+    loadComfyWorkflow,
+    saveComfyWorkflow,
+    deleteComfyWorkflow,
+    renameComfyWorkflow,
+    detectWorkflowNodes,
+    checkPlaceholdersInWorkflow,
+    replaceWorkflowPlaceholders,
+    defaultComfyWorkflow,
+    defaultComfyWorkflowZImage,
+    isUnetModel,
   };
 
   // 自动启动楼层按钮注入（延迟到 DOM 就绪后）
