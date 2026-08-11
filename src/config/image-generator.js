@@ -90,6 +90,32 @@
     }
   }
 
+  // ── 酒馆服务端代理：借鉴酒馆原生 SD 模块，通过 /api/sd/* 端点转发请求到 ComfyUI/SD WebUI ──
+  //   原理：前端 → 酒馆后端（同源无 CORS）→ ComfyUI/SD WebUI（服务器到服务器无 CORS）
+  //   这就是酒馆自带 SD 模块能连接任意后端的秘密——不需要在 ComfyUI/SD WebUI 端开 CORS。
+  //   酒馆后端已封装完整流程（ComfyUI 的提交/轮询/取图全在后端完成），前端只需一次请求。
+  let _csrfToken = null;
+  async function getCsrfToken() {
+    if (_csrfToken) return _csrfToken;
+    try {
+      const res = await fetch('/csrf-token');
+      if (!res.ok) return null;
+      const data = await res.json();
+      _csrfToken = data.token || null;
+      return _csrfToken;
+    } catch (e) {
+      console.warn('[WarmMemo][image-gen] 获取 CSRF token 失败:', e);
+      return null;
+    }
+  }
+  // 酒馆代理请求：统一加 CSRF token + Content-Type，发到 /api/sd/* 端点
+  async function stFetch(path, body) {
+    const token = await getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['X-CSRF-Token'] = token;
+    return await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  }
+
   // 提示词清洗：LLM 经常输出「叙事/解释/元思考」文字（"也许我们可以…""考虑到…""另一种可能…"），
   // 这些根本不是画面描述，会被直接塞给生图模型的 CLIP，浪费 token 且污染提示词。
   // 处理：
@@ -246,12 +272,15 @@
   }
 
   // ── 后端适配 1：SD WebUI（AUTOMATIC1111）/sdapi/v1/txt2img ──
+  // 走酒馆服务端代理 /api/sd/generate：前端→酒馆后端（同源）→SD WebUI（服务器端无 CORS）
+  // 后端直接 JSON.stringify(request.body) 转发到 {url}/sdapi/v1/txt2img，响应原样返回。
   async function callSdWebui(prompt, settings) {
     const ig = settings.imageGen || {};
     const base = (ig.apiUrl || 'http://127.0.0.1:7860').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
-    const url = base + '/sdapi/v1/txt2img';
     const negative = buildFullNegative(settings);
     const body = {
+      url: base,
+      auth: '',
       prompt: prompt,
       negative_prompt: negative,
       steps: Number(ig.steps) || 20,
@@ -263,14 +292,10 @@
       sampler_name: ig.sampler || 'Euler a',
     };
     if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
-    const res = await wmFetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, settings);
+    const res = await stFetch('/api/sd/generate', body);
     if (!res.ok) {
       const t = await res.text().catch(() => '');
-      throw new Error('SD WebUI HTTP ' + res.status + '：' + t.slice(0, 300));
+      throw new Error('SD WebUI（酒馆代理 /api/sd/generate）HTTP ' + res.status + '：' + t.slice(0, 300));
     }
     const j = await res.json();
     if (!j.images || !j.images.length) throw new Error('SD WebUI 未返回图片');
@@ -358,50 +383,26 @@
       throw new Error('工作流 JSON 占位符替换后解析失败：' + (e.message || String(e)) + snippet
         + '|提示词片段=' + String(cleanPrompt || '').slice(0, 120));
     }
+    // —— 走酒馆服务端代理 /api/sd/comfy/generate ——
+    // 酒馆后端已封装完整流程：POST {url}/prompt → 轮询 {url}/history → GET {url}/view → 返回 {format, data:base64}
+    // 前端只需一次请求，无需自己轮询 /history 和取 /view，且无 CORS 问题。
+    // 这就是酒馆自带 SD 模块能连接任意 ComfyUI 的核心机制。
     const clientId = 'WarmMemo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
-    const res = await wmFetch(base + '/prompt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-    }, settings);
+    const res = await stFetch('/api/sd/comfy/generate', {
+      url: base,
+      auth: '',
+      prompt: JSON.stringify({ prompt: promptObj, client_id: clientId }),
+    });
     if (!res.ok) {
       const t = await res.text().catch(() => '');
-      throw new Error('ComfyUI HTTP ' + res.status + '：' + t.slice(0, 300));
+      throw new Error('ComfyUI（酒馆代理 /api/sd/comfy/generate）HTTP ' + res.status + '：' + t.slice(0, 300));
     }
     const j = await res.json();
-    const promptId = j && j.prompt_id;
-    if (!promptId) throw new Error('ComfyUI 未返回 prompt_id（响应：' + JSON.stringify(j).slice(0, 200) + '）');
-    return await pollComfyuiResult(promptId, base, settings);
+    // 响应格式：{ format: 'png', data: '<base64字符串>' }
+    if (!j.data) throw new Error('ComfyUI（酒馆代理）未返回图片数据');
+    return 'data:image/' + (j.format || 'png') + ';base64,' + j.data;
   }
-  async function pollComfyuiResult(promptId, base, settings) {
-    for (let i = 0; i < 90; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      try {
-        const res = await wmFetch(base + '/history/' + encodeURIComponent(promptId), { method: 'GET' }, settings);
-        if (!res.ok) continue;
-        const j = await res.json();
-        const item = j[promptId];
-        if (!item || !item.outputs) continue;
-        // 找到第一个含 images 的输出节点
-        for (const nodeId of Object.keys(item.outputs)) {
-          const out = item.outputs[nodeId];
-          const imgs = out.images || out.gifs;
-          if (imgs && imgs.length) {
-            const img = imgs[0];
-            const params = new URLSearchParams({
-              filename: img.filename || '',
-              subfolder: img.subfolder || '',
-              type: img.type || 'output',
-            });
-            // /view 也是同域，需要走代理
-            return applyImgProxy(base + '/view?' + params.toString(), settings);
-          }
-        }
-      } catch (e) { /* 轮询中网络抖动忽略 */ }
-    }
-    throw new Error('ComfyUI 生成超时（90s 未出图）');
-  }
+  // pollComfyuiResult 已废弃：酒馆 /api/sd/comfy/generate 后端已封装完整轮询+取图逻辑，前端不再需要。
 
   // ── 后端适配 3：云端 OpenAI 兼容 /images/generations（SiliconFlow / OpenAI 等）──
   // 注：OpenAI 官方 /images/generations 没有 negative_prompt 参数；部分兼容端点（如 SiliconFlow/Kolors）支持 seed
@@ -445,8 +446,9 @@
   }
 
   // ── 模型列表查询（下拉框选项） ──
-  //   SD WebUI：GET /sdapi/v1/sd-models → [{title, model_name, filename, hash}]
-  //   ComfyUI：  GET /object_info/CheckpointLoaderSimple → 返回 .input.required.ckpt_name[0] = [文件名数组]
+  //   全部走酒馆服务端代理，无需 ComfyUI/SD WebUI 开 CORS。
+  //   SD WebUI：POST /api/sd/models → 后端 GET {url}/sdapi/v1/sd-models → 返回 [{value, text}]
+  //   ComfyUI：POST /api/sd/comfy/models → 后端 GET {url}/object_info → 返回 [{value, text}]（已含 ckpt+unet+gguf）
   async function fetchAvailableModels(settings) {
     const ig = (settings && settings.imageGen) || WM.Settings.load().imageGen || {};
     const base = (ig.apiUrl || '').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
@@ -458,61 +460,32 @@
     if (!base) return { ok: false, error: '未配置后端地址' };
     if (type === 'sd-webui') {
       try {
-        const res = await wmFetch(base + '/sdapi/v1/sd-models', { method: 'GET' }, settings);
+        const res = await stFetch('/api/sd/models', { url: base, auth: '' });
         if (!res.ok) {
           const t = await res.text().catch(() => '');
-          return { ok: false, error: 'SD WebUI HTTP ' + res.status + '：' + t.slice(0, 200) };
+          return { ok: false, error: 'SD WebUI（酒馆代理 /api/sd/models）HTTP ' + res.status + '：' + t.slice(0, 200) };
         }
         const arr = await res.json();
         if (!Array.isArray(arr)) return { ok: false, error: 'SD WebUI 返回结构异常' };
-        const models = arr.map((m) => ({
-          value: m.title || m.model_name || m.filename || '',
-          label: (m.model_name || m.title || m.filename || '') + (m.hash ? ' [' + String(m.hash).slice(0, 8) + ']' : ''),
-        })).filter((m) => m.value);
+        // 酒馆代理返回 [{value, text}]，统一映射为 {value, label}
+        const models = arr.map((m) => ({ value: m.value || '', label: m.text || m.value || '' })).filter((m) => m.value);
         return { ok: true, models };
       } catch (e) { return { ok: false, error: e.message || String(e) }; }
     }
-    // ComfyUI：优先 /object_info/CheckpointLoaderSimple（兼容性最好）
-    // 失败兜底：/models/checkpoints（ComfyUI 新版支持）
-    // —— 关键修复：第一个请求无论是 HTTP !ok 还是网络异常（CORS 等），都要尝试兜底路径。
-    //   之前只有 !ok 时才兜底，CORS 错误直接进 catch 返回，导致用户以为只有 403。
-    let firstError = null;
+    // ComfyUI：走酒馆代理 /api/sd/comfy/models
+    // 后端已解析 object_info 并合并 CheckpointLoaderSimple + UNETLoader + GGUF，前端无需再解析。
     try {
-      const res = await wmFetch(base + '/object_info/CheckpointLoaderSimple', { method: 'GET' }, settings);
+      const res = await stFetch('/api/sd/comfy/models', { url: base, auth: '' });
       if (!res.ok) {
-        firstError = 'ComfyUI HTTP ' + res.status + '（object_info）';
-      } else {
-        const j = await res.json();
-        // 结构：{ 'CheckpointLoaderSimple': { input: { required: { ckpt_name: [ [..文件列表], 'STRING' ] } } } }
-        const nodeInfo = j && (j.CheckpointLoaderSimple || j['CheckpointLoaderSimple']);
-        const list = nodeInfo && nodeInfo.input && nodeInfo.input.required
-          && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0])
-          ? nodeInfo.input.required.ckpt_name[0] : [];
-        const models = list.map((n) => ({ value: n, label: n }));
-        return { ok: true, models };
+        const t = await res.text().catch(() => '');
+        return { ok: false, error: 'ComfyUI（酒馆代理 /api/sd/comfy/models）HTTP ' + res.status + '：' + t.slice(0, 200) };
       }
-    } catch (e) {
-      firstError = e.message || String(e);
-    }
-    // 兜底：/models/checkpoints
-    try {
-      const res2 = await wmFetch(base + '/models/checkpoints', { method: 'GET' }, settings);
-      if (!res2.ok) {
-        const t = await res2.text().catch(() => '');
-        return { ok: false, error: 'ComfyUI HTTP ' + res2.status + '（models/checkpoints）：' + t.slice(0, 200) + '（前一接口错误：' + String(firstError || '').slice(0, 80) + '）' };
-      }
-      const arr = await res2.json();
-      const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
-        const val = typeof m === 'string' ? m : (m.name || m.filename || '');
-        return { value: val, label: val };
-      }).filter((m) => m.value);
+      const arr = await res.json();
+      const models = (Array.isArray(arr) ? arr : []).map((m) => ({ value: m.value || '', label: m.text || m.value || '' })).filter((m) => m.value);
       return { ok: true, models };
-    } catch (e2) {
-      return { ok: false, error: 'ComfyUI 模型列表加载失败：' + (e2.message || String(e2)) + '\n（第一个接口：' + String(firstError || '').slice(0, 100) + '）'
-        + '\n\n解决方式（ComfyUI 启动参数缺一不可）：\n'
-        + '  python main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check\n\n'
-        + '--enable-cors-header 解决浏览器跨域拦截；\n'
-        + '--disable-header-check 解决 ComfyUI 新版的 Host/Origin 校验（即 403 错误）。' };
+    } catch (e) {
+      return { ok: false, error: 'ComfyUI 模型列表加载失败（酒馆代理）：' + (e.message || String(e))
+        + '\n\n请确认酒馆正在运行，且 ComfyUI 地址正确（' + base + '）。' };
     }
   }
 
@@ -670,17 +643,32 @@
     return { ok: true, prompt: fullPrompt, imageUrl };
   }
 
-  // 测试连接：用极简 prompt 调一次生图后端，验证连通性
+  // 测试连接：走酒馆代理 ping 端点，快速验证连通性（不需要完整生图）
+  //   SD WebUI：POST /api/sd/ping → 后端 GET {url}/sdapi/v1/options
+  //   ComfyUI：POST /api/sd/comfy/ping → 后端 GET {url}/system_stats
   async function testConnection(settings) {
     const ig = (settings && settings.imageGen) || WM.Settings.load().imageGen || {};
-    if (!ig.apiUrl && ig.backendType !== 'sd-webui') {
-      return { success: false, error: '未配置后端地址（apiUrl）' };
+    const type = ig.backendType || 'sd-webui';
+    const base = (ig.apiUrl || '').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
+    if (type === 'cloud') {
+      // 云端：用完整生图测试（云端有自己的 key，不走酒馆代理）
+      if (!ig.apiUrl) return { success: false, error: '未配置后端地址（apiUrl）' };
+      try {
+        const testPrompt = 'a cute cat, simple test image';
+        const url = await generateImage(testPrompt, { imageGen: ig });
+        if (url) return { success: true, detail: '连通，已返回图片（' + (url.startsWith('data:') ? 'base64' : 'url') + '）' };
+        return { success: false, error: '未返回图片' };
+      } catch (e) {
+        return { success: false, error: e.message || String(e) };
+      }
     }
+    if (!base) return { success: false, error: '未配置后端地址（apiUrl）' };
     try {
-      const testPrompt = 'a cute cat, simple test image';
-      const url = await generateImage(testPrompt, { imageGen: ig });
-      if (url) return { success: true, detail: '连通，已返回图片（' + (url.startsWith('data:') ? 'base64' : 'url') + '）' };
-      return { success: false, error: '未返回图片' };
+      const pingPath = type === 'comfyui' ? '/api/sd/comfy/ping' : '/api/sd/ping';
+      const res = await stFetch(pingPath, { url: base, auth: '' });
+      if (res.ok) return { success: true, detail: (type === 'comfyui' ? 'ComfyUI' : 'SD WebUI') + ' 连通（通过酒馆代理，无需开 CORS）' };
+      const t = await res.text().catch(() => '');
+      return { success: false, error: (type === 'comfyui' ? 'ComfyUI' : 'SD WebUI') + ' HTTP ' + res.status + '：' + t.slice(0, 200) };
     } catch (e) {
       return { success: false, error: e.message || String(e) };
     }

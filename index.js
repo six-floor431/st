@@ -3154,6 +3154,26 @@ ${p.summary || ""}`.trim() });
         throw err;
       }
     }
+    let _csrfToken = null;
+    async function getCsrfToken() {
+      if (_csrfToken) return _csrfToken;
+      try {
+        const res = await fetch("/csrf-token");
+        if (!res.ok) return null;
+        const data = await res.json();
+        _csrfToken = data.token || null;
+        return _csrfToken;
+      } catch (e) {
+        console.warn("[WarmMemo][image-gen] \u83B7\u53D6 CSRF token \u5931\u8D25:", e);
+        return null;
+      }
+    }
+    async function stFetch(path, body) {
+      const token = await getCsrfToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["X-CSRF-Token"] = token;
+      return await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
+    }
     function sanitizePrompt(raw) {
       if (!raw) return "";
       let s = String(raw);
@@ -3327,9 +3347,10 @@ ${p.summary || ""}`.trim() });
     async function callSdWebui(prompt, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "http://127.0.0.1:7860").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
-      const url = base + "/sdapi/v1/txt2img";
       const negative = buildFullNegative(settings);
       const body = {
+        url: base,
+        auth: "",
         prompt,
         negative_prompt: negative,
         steps: Number(ig.steps) || 20,
@@ -3341,14 +3362,10 @@ ${p.summary || ""}`.trim() });
         sampler_name: ig.sampler || "Euler a"
       };
       if (ig.model) body.override_settings = { sd_model_checkpoint: ig.model };
-      const res = await wmFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      }, settings);
+      const res = await stFetch("/api/sd/generate", body);
       if (!res.ok) {
         const t = await res.text().catch(() => "");
-        throw new Error("SD WebUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
+        throw new Error("SD WebUI\uFF08\u9152\u9986\u4EE3\u7406 /api/sd/generate\uFF09HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
       }
       const j = await res.json();
       if (!j.images || !j.images.length) throw new Error("SD WebUI \u672A\u8FD4\u56DE\u56FE\u7247");
@@ -3416,47 +3433,18 @@ ${p.summary || ""}`.trim() });
         throw new Error("\u5DE5\u4F5C\u6D41 JSON \u5360\u4F4D\u7B26\u66FF\u6362\u540E\u89E3\u6790\u5931\u8D25\uFF1A" + (e.message || String(e)) + snippet + "|\u63D0\u793A\u8BCD\u7247\u6BB5=" + String(cleanPrompt || "").slice(0, 120));
       }
       const clientId = "WarmMemo_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-      const payload = JSON.stringify({ prompt: promptObj, client_id: clientId });
-      const res = await wmFetch(base + "/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload
-      }, settings);
+      const res = await stFetch("/api/sd/comfy/generate", {
+        url: base,
+        auth: "",
+        prompt: JSON.stringify({ prompt: promptObj, client_id: clientId })
+      });
       if (!res.ok) {
         const t = await res.text().catch(() => "");
-        throw new Error("ComfyUI HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
+        throw new Error("ComfyUI\uFF08\u9152\u9986\u4EE3\u7406 /api/sd/comfy/generate\uFF09HTTP " + res.status + "\uFF1A" + t.slice(0, 300));
       }
       const j = await res.json();
-      const promptId = j && j.prompt_id;
-      if (!promptId) throw new Error("ComfyUI \u672A\u8FD4\u56DE prompt_id\uFF08\u54CD\u5E94\uFF1A" + JSON.stringify(j).slice(0, 200) + "\uFF09");
-      return await pollComfyuiResult(promptId, base, settings);
-    }
-    async function pollComfyuiResult(promptId, base, settings) {
-      for (let i = 0; i < 90; i++) {
-        await new Promise((r) => setTimeout(r, 1e3));
-        try {
-          const res = await wmFetch(base + "/history/" + encodeURIComponent(promptId), { method: "GET" }, settings);
-          if (!res.ok) continue;
-          const j = await res.json();
-          const item = j[promptId];
-          if (!item || !item.outputs) continue;
-          for (const nodeId of Object.keys(item.outputs)) {
-            const out = item.outputs[nodeId];
-            const imgs = out.images || out.gifs;
-            if (imgs && imgs.length) {
-              const img = imgs[0];
-              const params = new URLSearchParams({
-                filename: img.filename || "",
-                subfolder: img.subfolder || "",
-                type: img.type || "output"
-              });
-              return applyImgProxy(base + "/view?" + params.toString(), settings);
-            }
-          }
-        } catch (e) {
-        }
-      }
-      throw new Error("ComfyUI \u751F\u6210\u8D85\u65F6\uFF0890s \u672A\u51FA\u56FE\uFF09");
+      if (!j.data) throw new Error("ComfyUI\uFF08\u9152\u9986\u4EE3\u7406\uFF09\u672A\u8FD4\u56DE\u56FE\u7247\u6570\u636E");
+      return "data:image/" + (j.format || "png") + ";base64," + j.data;
     }
     async function callCloudApi(prompt, settings) {
       const ig = settings.imageGen || {};
@@ -3503,51 +3491,30 @@ ${p.summary || ""}`.trim() });
       if (!base) return { ok: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740" };
       if (type === "sd-webui") {
         try {
-          const res = await wmFetch(base + "/sdapi/v1/sd-models", { method: "GET" }, settings);
+          const res = await stFetch("/api/sd/models", { url: base, auth: "" });
           if (!res.ok) {
             const t = await res.text().catch(() => "");
-            return { ok: false, error: "SD WebUI HTTP " + res.status + "\uFF1A" + t.slice(0, 200) };
+            return { ok: false, error: "SD WebUI\uFF08\u9152\u9986\u4EE3\u7406 /api/sd/models\uFF09HTTP " + res.status + "\uFF1A" + t.slice(0, 200) };
           }
           const arr = await res.json();
           if (!Array.isArray(arr)) return { ok: false, error: "SD WebUI \u8FD4\u56DE\u7ED3\u6784\u5F02\u5E38" };
-          const models = arr.map((m) => ({
-            value: m.title || m.model_name || m.filename || "",
-            label: (m.model_name || m.title || m.filename || "") + (m.hash ? " [" + String(m.hash).slice(0, 8) + "]" : "")
-          })).filter((m) => m.value);
+          const models = arr.map((m) => ({ value: m.value || "", label: m.text || m.value || "" })).filter((m) => m.value);
           return { ok: true, models };
         } catch (e) {
           return { ok: false, error: e.message || String(e) };
         }
       }
-      let firstError = null;
       try {
-        const res = await wmFetch(base + "/object_info/CheckpointLoaderSimple", { method: "GET" }, settings);
+        const res = await stFetch("/api/sd/comfy/models", { url: base, auth: "" });
         if (!res.ok) {
-          firstError = "ComfyUI HTTP " + res.status + "\uFF08object_info\uFF09";
-        } else {
-          const j = await res.json();
-          const nodeInfo = j && (j.CheckpointLoaderSimple || j["CheckpointLoaderSimple"]);
-          const list = nodeInfo && nodeInfo.input && nodeInfo.input.required && nodeInfo.input.required.ckpt_name && Array.isArray(nodeInfo.input.required.ckpt_name[0]) ? nodeInfo.input.required.ckpt_name[0] : [];
-          const models = list.map((n) => ({ value: n, label: n }));
-          return { ok: true, models };
+          const t = await res.text().catch(() => "");
+          return { ok: false, error: "ComfyUI\uFF08\u9152\u9986\u4EE3\u7406 /api/sd/comfy/models\uFF09HTTP " + res.status + "\uFF1A" + t.slice(0, 200) };
         }
-      } catch (e) {
-        firstError = e.message || String(e);
-      }
-      try {
-        const res2 = await wmFetch(base + "/models/checkpoints", { method: "GET" }, settings);
-        if (!res2.ok) {
-          const t = await res2.text().catch(() => "");
-          return { ok: false, error: "ComfyUI HTTP " + res2.status + "\uFF08models/checkpoints\uFF09\uFF1A" + t.slice(0, 200) + "\uFF08\u524D\u4E00\u63A5\u53E3\u9519\u8BEF\uFF1A" + String(firstError || "").slice(0, 80) + "\uFF09" };
-        }
-        const arr = await res2.json();
-        const models = (Array.isArray(arr) ? arr : Object.values(arr || {})).map((m) => {
-          const val = typeof m === "string" ? m : m.name || m.filename || "";
-          return { value: val, label: val };
-        }).filter((m) => m.value);
+        const arr = await res.json();
+        const models = (Array.isArray(arr) ? arr : []).map((m) => ({ value: m.value || "", label: m.text || m.value || "" })).filter((m) => m.value);
         return { ok: true, models };
-      } catch (e2) {
-        return { ok: false, error: "ComfyUI \u6A21\u578B\u5217\u8868\u52A0\u8F7D\u5931\u8D25\uFF1A" + (e2.message || String(e2)) + "\n\uFF08\u7B2C\u4E00\u4E2A\u63A5\u53E3\uFF1A" + String(firstError || "").slice(0, 100) + '\uFF09\n\n\u89E3\u51B3\u65B9\u5F0F\uFF08ComfyUI \u542F\u52A8\u53C2\u6570\u7F3A\u4E00\u4E0D\u53EF\uFF09\uFF1A\n  python main.py --listen 127.0.0.1 --enable-cors-header "*" --disable-header-check\n\n--enable-cors-header \u89E3\u51B3\u6D4F\u89C8\u5668\u8DE8\u57DF\u62E6\u622A\uFF1B\n--disable-header-check \u89E3\u51B3 ComfyUI \u65B0\u7248\u7684 Host/Origin \u6821\u9A8C\uFF08\u5373 403 \u9519\u8BEF\uFF09\u3002' };
+      } catch (e) {
+        return { ok: false, error: "ComfyUI \u6A21\u578B\u5217\u8868\u52A0\u8F7D\u5931\u8D25\uFF08\u9152\u9986\u4EE3\u7406\uFF09\uFF1A" + (e.message || String(e)) + "\n\n\u8BF7\u786E\u8BA4\u9152\u9986\u6B63\u5728\u8FD0\u884C\uFF0C\u4E14 ComfyUI \u5730\u5740\u6B63\u786E\uFF08" + base + "\uFF09\u3002" };
       }
     }
     async function generateImage(prompt, settings) {
@@ -3664,14 +3631,26 @@ ${p.summary || ""}`.trim() });
     }
     async function testConnection(settings) {
       const ig = settings && settings.imageGen || WM.Settings.load().imageGen || {};
-      if (!ig.apiUrl && ig.backendType !== "sd-webui") {
-        return { success: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740\uFF08apiUrl\uFF09" };
+      const type = ig.backendType || "sd-webui";
+      const base = (ig.apiUrl || "").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
+      if (type === "cloud") {
+        if (!ig.apiUrl) return { success: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740\uFF08apiUrl\uFF09" };
+        try {
+          const testPrompt = "a cute cat, simple test image";
+          const url = await generateImage(testPrompt, { imageGen: ig });
+          if (url) return { success: true, detail: "\u8FDE\u901A\uFF0C\u5DF2\u8FD4\u56DE\u56FE\u7247\uFF08" + (url.startsWith("data:") ? "base64" : "url") + "\uFF09" };
+          return { success: false, error: "\u672A\u8FD4\u56DE\u56FE\u7247" };
+        } catch (e) {
+          return { success: false, error: e.message || String(e) };
+        }
       }
+      if (!base) return { success: false, error: "\u672A\u914D\u7F6E\u540E\u7AEF\u5730\u5740\uFF08apiUrl\uFF09" };
       try {
-        const testPrompt = "a cute cat, simple test image";
-        const url = await generateImage(testPrompt, { imageGen: ig });
-        if (url) return { success: true, detail: "\u8FDE\u901A\uFF0C\u5DF2\u8FD4\u56DE\u56FE\u7247\uFF08" + (url.startsWith("data:") ? "base64" : "url") + "\uFF09" };
-        return { success: false, error: "\u672A\u8FD4\u56DE\u56FE\u7247" };
+        const pingPath = type === "comfyui" ? "/api/sd/comfy/ping" : "/api/sd/ping";
+        const res = await stFetch(pingPath, { url: base, auth: "" });
+        if (res.ok) return { success: true, detail: (type === "comfyui" ? "ComfyUI" : "SD WebUI") + " \u8FDE\u901A\uFF08\u901A\u8FC7\u9152\u9986\u4EE3\u7406\uFF0C\u65E0\u9700\u5F00 CORS\uFF09" };
+        const t = await res.text().catch(() => "");
+        return { success: false, error: (type === "comfyui" ? "ComfyUI" : "SD WebUI") + " HTTP " + res.status + "\uFF1A" + t.slice(0, 200) };
       } catch (e) {
         return { success: false, error: e.message || String(e) };
       }
