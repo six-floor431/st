@@ -30,6 +30,8 @@
       vecProxyPath: "/vec",
       // 反代的向量分流路径，与 Caddyfile 的 handle_path /vec/* 对齐
       // 重排序(Rerank)同样支持外网同源代理（复用同一套场景判断，路径独立配置）
+      rerankProxyEnabled: true,
+      // 默认开：跟 vecProxyEnabled 一致；/proxy/ 可用时自动走服务端代理
       rerankProxyPath: "/rerank",
       rerankEnabled: false,
       // 重排序(Rerank)配置：直接填 Base URL 自适应任意 OpenAI 兼容服务
@@ -258,6 +260,79 @@
       }
     }
     WM.Settings = { load, save, DEFAULTS };
+  })();
+
+  // src/config/server-proxy.js
+  (function() {
+    "use strict";
+    const WM = window.WarmMemo || (window.WarmMemo = {});
+    let _proxyAvailable = null;
+    let _detecting = null;
+    async function detectProxy() {
+      if (_proxyAvailable !== null) return _proxyAvailable;
+      if (_detecting) return _detecting;
+      _detecting = (async () => {
+        try {
+          const res = await fetch("/proxy/http://127.0.0.1:1/_wm_probe", {
+            method: "HEAD"
+            // 不需要 CSRF token（/proxy/ 路径显式跳过）
+          });
+          _proxyAvailable = res.status !== 404;
+        } catch (e) {
+          _proxyAvailable = false;
+        }
+        _detecting = null;
+        try {
+          console.log("[WarmMemo][server-proxy] /proxy/ \u7AEF\u70B9\u53EF\u7528\u6027\uFF1A" + _proxyAvailable);
+        } catch (_) {
+        }
+        return _proxyAvailable;
+      })();
+      return _detecting;
+    }
+    function proxyRewrite(url) {
+      if (!url) return url;
+      if (!/^https?:\/\//i.test(url)) return url;
+      if (_proxyAvailable !== true) return url;
+      if (/^\/proxy\//i.test(url)) return url;
+      return "/proxy/" + url;
+    }
+    async function proxyFetch(url, opts) {
+      if (_proxyAvailable === null) {
+        await detectProxy();
+      }
+      const finalUrl = proxyRewrite(url);
+      const finalOpts = opts || {};
+      return fetch(finalUrl, finalOpts);
+    }
+    function needsLegacyProxy() {
+      return _proxyAvailable !== true;
+    }
+    function isExternalAccess() {
+      try {
+        const origin = window.top && window.top.location && window.top.location.origin || window.location.origin;
+        if (!origin || origin === "null") return false;
+        const u = new URL(origin);
+        const port = u.port || (u.protocol === "https:" ? "443" : "80");
+        if (port === "8000" || port === "8001") return false;
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    WM.ServerProxy = {
+      detectProxy,
+      proxyRewrite,
+      proxyFetch,
+      needsLegacyProxy,
+      isExternalAccess,
+      // 直接暴露可用性状态（供 UI 显示）
+      isAvailable: () => _proxyAvailable === true
+    };
+    if (typeof window !== "undefined") {
+      detectProxy().catch(() => {
+      });
+    }
   })();
 
   // src/config/storage.js
@@ -1384,10 +1459,11 @@ ${body}`,
       const input = Array.isArray(texts) ? texts : [texts];
       WM._lastEmbedResolve = { source: s.embeddingSource, url: base, model, provider };
       if (provider === "gemini") {
+        const fetchFn = WM.ServerProxy && WM.ServerProxy.isAvailable() ? WM.ServerProxy.proxyFetch : fetch;
         const out = [];
         for (const t of input) {
           const url2 = resolveGeminiUrl(base, model);
-          const r2 = await fetch(url2, {
+          const r2 = await fetchFn(url2, {
             method: "POST",
             headers: Object.assign({ "Content-Type": "application/json" }, key ? { "x-goog-api-key": key } : {}),
             body: JSON.stringify({ content: { parts: [{ text: t }] } })
@@ -1397,7 +1473,16 @@ ${body}`,
         }
         return out.length === 1 ? out[0] : out;
       }
-      const url = applyVecProxy(base, s);
+      if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === "function") {
+        await WM.ServerProxy.detectProxy();
+      }
+      const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
+      let url;
+      if (useServerProxy) {
+        url = base;
+      } else {
+        url = applyVecProxy(base, s);
+      }
       const useGet = isGetMode(url);
       const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
       let finalUrl = url;
@@ -1419,7 +1504,8 @@ ${body}`,
       }
       let r;
       try {
-        r = await fetch(finalUrl, {
+        const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+        r = await fetchFn(finalUrl, {
           method: useGet ? "GET" : "POST",
           headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
           body
@@ -1427,7 +1513,7 @@ ${body}`,
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
-        const hint = isCors ? "\u8FD9\u662F\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\uFF08\u4E0D\u662F\u540E\u7AEF\u95EE\u9898\uFF09\u3002\u8BF7\u786E\u8BA4\uFF1A\u2460\u5730\u5740\u662F\u540C\u6E90\u4EE3\u7406\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\uFF1B\u2461\u53CD\u4EE3\u5DF2\u8FD4\u56DE access-control-allow-origin \u5934\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
+        const hint = isCors ? "\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\u3002\u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u5728\u9152\u9986 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true\uFF08\u63A8\u8350\uFF0C\u5916\u7F51\u4E5F\u80FD\u7528\uFF09\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
         if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, error: hint });
         throw new Error("[Embedding \u8BF7\u6C42\u5931\u8D25] \u5B9E\u9645\u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C" + hint);
       }
@@ -1490,11 +1576,49 @@ ${body}`,
     function resolveRerankUrl(s) {
       return buildRerankUrl(normalize(s.rerankBaseUrl) || "");
     }
+    function applyRerankProxy(url, settings) {
+      if (!url) return url;
+      var s = settings || {};
+      if (s.rerankProxyEnabled === false) return url;
+      if (!/^https?:\/\//i.test(url)) return url;
+      var base = "";
+      try {
+        base = window.top && window.top.location && window.top.location.origin || window.location.origin;
+      } catch (e) {
+        base = window.location.origin;
+      }
+      if (!base || base === "null") return url;
+      var port = "";
+      try {
+        var u0 = new URL(base);
+        port = u0.port || (u0.protocol === "https:" ? "443" : "80");
+      } catch (e) {
+      }
+      if (port === "8000" || port === "8001") return url;
+      var proxyPath = (s.rerankProxyPath || "/rerank").replace(/\/+$/, "");
+      try {
+        var eu = new URL(url, base);
+        var pathOnly = eu.pathname + (eu.search || "");
+        var rewritten = base + proxyPath + pathOnly;
+        try {
+          console.log("[WarmMemo] Rerank \u540C\u6E90\u4EE3\u7406\u6539\u5199\uFF1A" + url + " \u2192 " + rewritten);
+        } catch (e) {
+        }
+        return rewritten;
+      } catch (e) {
+        return url;
+      }
+    }
     async function rerank(query, documents, rawSettings, options) {
       const s = rawSettings || {};
       const enabled = s.rerankEnabled || s.takeoverRerank;
       if (!enabled) return null;
-      const url = resolveRerankUrl(s);
+      if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === "function") {
+        await WM.ServerProxy.detectProxy();
+      }
+      const rawUrl = resolveRerankUrl(s);
+      const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
+      const url = useServerProxy ? rawUrl : applyRerankProxy(rawUrl, s);
       const model = s.rerankModel || "BAAI/bge-reranker-v2-m3";
       const key = s.rerankApiKey || "";
       const docs = (documents || []).filter((d) => d && String(d).trim());
@@ -1532,12 +1656,14 @@ ${body}`,
             query,
             documents: docs,
             top_n: docs.length,
-            bodyPreview: body ? body.slice(0, 400) : "(GET, \u53C2\u6570\u5728 query)"
+            bodyPreview: body ? body.slice(0, 400) : "(GET, \u53C2\u6570\u5728 query)",
+            viaProxy: useServerProxy
           });
         }
         let r;
         try {
-          r = await fetch(finalUrl, {
+          const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+          r = await fetchFn(finalUrl, {
             method: useGet ? "GET" : "POST",
             signal: ctrl.signal,
             headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
@@ -1546,7 +1672,7 @@ ${body}`,
         } catch (netErr) {
           const msg = String(netErr && netErr.message ? netErr.message : netErr);
           const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-          const hint = (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF0C\u6216\u53CD\u4EE3\u672A\u8FD4\u56DE CORS \u5934\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u82E5\u4F60\u586B\u7684\u662F http://127.0.0.1:xxxx \u76F4\u8FDE\u672C\u5730\u670D\u52A1\uFF0C\u8BF7\u6539\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002";
+          const hint = (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u5728\u9152\u9986 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true\uFF08\u63A8\u8350\uFF0C\u5916\u7F51\u4E5F\u80FD\u7528\uFF09\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002";
           if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, error: hint });
           throw new Error(hint);
         }
@@ -1586,7 +1712,7 @@ ${body}`,
         return { success: false, error: String(e.message || e) };
       }
     }
-    WM.RerankClient = { rerank, testConnection, resolveRerankUrl };
+    WM.RerankClient = { rerank, testConnection, resolveRerankUrl, applyRerankProxy };
   })();
 
   // src/config/worldbook.js
@@ -5692,6 +5818,8 @@ ${p.summary || ""}`.trim() });
           s.rerankApiKey = q("#c-rk-key") ? q("#c-rk-key").value : s.rerankApiKey;
           s.rerankModel = q("#c-rk-model") ? q("#c-rk-model").value : s.rerankModel;
           s.rerankInstruction = q("#c-rk-inst") ? q("#c-rk-inst").value : s.rerankInstruction;
+          s.rerankProxyEnabled = q("#c-rk-proxy") ? q("#c-rk-proxy").checked : s.rerankProxyEnabled !== false;
+          s.rerankProxyPath = q("#c-rk-proxy-path") ? q("#c-rk-proxy-path").value : s.rerankProxyPath || "/rerank";
           s.takeoverRerank = q("#c-take-re") ? q("#c-take-re").checked : s.takeoverRerank;
         }
       }
@@ -6213,9 +6341,11 @@ ${p.summary || ""}`.trim() });
     </div>`;
     }
     function renderPaneVector(s) {
+      const proxyAvail = WM.ServerProxy && WM.ServerProxy.isAvailable();
       return `<div class="wm-card">
       <div class="wm-h">Embedding\uFF08\u5411\u91CF\uFF09\u914D\u7F6E</div>
       <div class="wm-hint">\u9ED8\u8BA4\u60C5\u51B5\u4E0B\u4F60<b>\u4EC0\u4E48\u90FD\u4E0D\u7528\u914D</b>\uFF1A\u52FE\u4E0B\u9762\u7684\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u540E\uFF0C\u6E29\u8BB0\u4F1A\u76F4\u63A5\u7528\u4F60<b>\u5DF2\u7ECF\u586B\u597D\u7684 LLM \u5730\u5740</b>\u505A\u5411\u91CF\u53EC\u56DE\uFF08DeepSeek/\u706B\u5C71/OpenAI/Ollama \u90FD\u652F\u6301 /embeddings \u63A5\u53E3\uFF09\uFF0C\u96F6\u914D\u7F6E\u771F\u63A5\u7BA1\u3002\u53EA\u6709\u60F3\u6362\u72EC\u7ACB embedding \u670D\u52A1\u65F6\u624D\u586B\u4E0B\u9762\u5730\u5740\u3002</div>
+      ${proxyAvail ? `<div class="wm-hint" style="padding:6px 10px;background:rgba(76,175,80,.1);border-radius:6px;border:1px solid rgba(76,175,80,.25)">\u2705 \u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u5DF2\u542F\u7528\uFF08<code>/proxy/</code>\uFF09\uFF0C\u5411\u91CF\u8BF7\u6C42\u81EA\u52A8\u8D70\u670D\u52A1\u7AEF\u8F6C\u53D1\uFF0C\u5916\u7F51\u4E5F\u80FD\u8FDE\u672C\u5730\u670D\u52A1\uFF0C<b>\u65E0\u9700\u914D\u7F6E\u4E0B\u65B9\u540C\u6E90\u4EE3\u7406</b>\u3002</div>` : `<div class="wm-hint" style="padding:6px 10px;background:rgba(255,193,7,.08);border-radius:6px;border:1px solid rgba(255,193,7,.2)">\u{1F4A1} \u5728\u9152\u9986 <code>config.yaml</code> \u4E2D\u8BBE\u7F6E <code>enableCorsProxy: true</code> \u53EF\u542F\u7528\u670D\u52A1\u7AEF\u4EE3\u7406\uFF0C\u5411\u91CF\u8BF7\u6C42\u81EA\u52A8\u8D70\u670D\u52A1\u7AEF\u8F6C\u53D1\uFF0C\u5916\u7F51\u4E5F\u80FD\u8FDE\u672C\u5730\u670D\u52A1\uFF08\u8DDF\u9152\u9986 SD \u6A21\u5757\u4E00\u6837\u7684\u539F\u7406\uFF09\uFF0C<b>\u65E0\u9700 Caddy \u540C\u6E90\u4EE3\u7406</b>\u3002</div>`}
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled ? "checked" : ""}/> \u542F\u7528\u5411\u91CF\u68C0\u7D22\uFF08\u63A5\u7BA1\u65F6\u5FC5\u987B\uFF09</label>
       <label class="wm-row"><input type="checkbox" id="c-emb-usellm" ${s.embeddingUseLLM !== false ? "checked" : ""}/> \u590D\u7528 LLM \u5730\u5740\u505A Embedding\uFF08\u9ED8\u8BA4\u5F00\uFF0C\u514D\u914D\u7F6E\uFF09</label>
       <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u65F6\uFF0C\u4E0B\u65B9\u7559\u7A7A\u4F1A\u81EA\u52A8\u7528\u300CLLM \u914D\u7F6E\u300D\u91CC\u7684 Base URL\u3002\u82E5\u4E0B\u65B9\u5DF2\u586B\u72EC\u7ACB\u5730\u5740\u5219\u4EE5\u6B64\u4E3A\u51C6\u3002</div>
@@ -6224,8 +6354,8 @@ ${p.summary || ""}`.trim() });
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u590D\u7528 LLM \u65F6\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled !== false ? "checked" : ""}/> \u5916\u7F51\u540C\u6E90\u4EE3\u7406\uFF08\u672C\u5730\u76F4\u8FDE/\u5916\u7F51\u81EA\u52A8\u6539\u5199\uFF09</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">\u5916\u7F51\u8BBF\u95EE\u9152\u9986\u65F6\uFF0C\u81EA\u52A8\u628A\u672C\u5730\u5730\u5740\uFF08\u5982 <code>http://127.0.0.1:11434/v1/embeddings</code>\uFF09\u6539\u5199\u6210\u540C\u6E90\u4EE3\u7406 URL\uFF08<code>https://\u4F60\u7684\u57DF\u540D/vec/v1/embeddings</code>\uFF09\uFF0C\u8D70 Caddy \u8F6C\u53D1\u5230\u5185\u7F51 Ollama\u3002\u672C\u5730\u8BBF\u95EE\uFF08\u7AEF\u53E3 8000/8001\uFF09\u81EA\u52A8\u8DF3\u8FC7\u76F4\u8FDE\u3002\u9700\u914D\u5408\u300C\u540C\u6E90\u4EE3\u7406\u300DCaddyfile \u7684 <code>/vec/* \u2192 11434</code> \u5206\u6D41\u3002</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled !== false ? "checked" : ""}/> \u540C\u6E90\u4EE3\u7406\uFF08\u5907\u7528\uFF0C\u670D\u52A1\u7AEF\u4EE3\u7406\u4E0D\u53EF\u7528\u65F6\u751F\u6548\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? "\u670D\u52A1\u7AEF\u4EE3\u7406\u5DF2\u542F\u7528\uFF0C\u6B64\u9879\u4E0D\u9700\u8981\u3002\u4EC5\u5F53\u670D\u52A1\u7AEF\u4EE3\u7406\u4E0D\u53EF\u7528\u65F6\uFF0C\u624D\u4F1A\u7528\u540C\u6E90\u4EE3\u7406\u6539\u5199\u3002" : "\u5916\u7F51\u8BBF\u95EE\u9152\u9986\u65F6\uFF0C\u81EA\u52A8\u628A\u672C\u5730\u5730\u5740\u6539\u5199\u6210\u540C\u6E90\u4EE3\u7406 URL\uFF0C\u8D70 Caddy \u8F6C\u53D1\u5230\u5185\u7F51\u670D\u52A1\u3002\u672C\u5730\u8BBF\u95EE\u81EA\u52A8\u8DF3\u8FC7\u3002\u9700\u914D\u5408 Caddyfile \u7684 <code>/vec/* \u2192 11434</code> \u5206\u6D41\u3002"}</div>
       <label class="wm-row">\u4EE3\u7406\u5206\u6D41\u8DEF\u5F84<input id="c-vec-proxy-path" value="${s.vecProxyPath || "/vec"}" placeholder="/vec"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding ? "checked" : ""}/> \u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\uFF08\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 embedding \u53EC\u56DE\uFF0C\u66FF\u4EE3\u9152\u9986\u539F\u751F\u53EC\u56DE\uFF09</label>
@@ -6233,8 +6363,10 @@ ${p.summary || ""}`.trim() });
     </div>`;
     }
     function renderPaneRerank(s) {
+      const proxyAvail = WM.ServerProxy && WM.ServerProxy.isAvailable();
       return `<div class="wm-card">
       <div class="wm-h">Rerank\uFF08\u91CD\u6392\u5E8F\uFF09\u914D\u7F6E</div>
+      ${proxyAvail ? `<div class="wm-hint" style="padding:6px 10px;background:rgba(76,175,80,.1);border-radius:6px;border:1px solid rgba(76,175,80,.25)">\u2705 \u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u5DF2\u542F\u7528\uFF08<code>/proxy/</code>\uFF09\uFF0CRerank \u8BF7\u6C42\u81EA\u52A8\u8D70\u670D\u52A1\u7AEF\u8F6C\u53D1\uFF0C\u5916\u7F51\u4E5F\u80FD\u8FDE\u672C\u5730\u670D\u52A1\uFF0C<b>\u65E0\u9700\u914D\u7F6E\u4E0B\u65B9\u540C\u6E90\u4EE3\u7406</b>\u3002</div>` : `<div class="wm-hint" style="padding:6px 10px;background:rgba(255,193,7,.08);border-radius:6px;border:1px solid rgba(255,193,7,.2)">\u{1F4A1} \u5728\u9152\u9986 <code>config.yaml</code> \u4E2D\u8BBE\u7F6E <code>enableCorsProxy: true</code> \u53EF\u542F\u7528\u670D\u52A1\u7AEF\u4EE3\u7406\uFF0CRerank \u8BF7\u6C42\u81EA\u52A8\u8D70\u670D\u52A1\u7AEF\u8F6C\u53D1\uFF08\u8DDF\u9152\u9986 SD \u6A21\u5757\u4E00\u6837\u7684\u539F\u7406\uFF09\uFF0C<b>\u65E0\u9700 Caddy \u540C\u6E90\u4EE3\u7406</b>\u3002</div>`}
       <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled ? "checked" : ""}/> \u542F\u7528\u91CD\u6392\u5E8F(Rerank)</label>
       <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank \u6216 http://127.0.0.1:8080/vec/v1/rerank"/></label>
       <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u670D\u52A1\u7684 Base URL\uFF0C\u81EA\u52A8\u9002\u914D\uFF1A<br/>\xB7 \u672C\u5730\u53CD\u4EE3/\u540C\u6E90\u4EE3\u7406\uFF1A<code>http://127.0.0.1:8080/vec</code>\uFF08\u81EA\u52A8\u8865 /v1/rerank\uFF09<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1/rerank</code></div>
@@ -6243,6 +6375,10 @@ ${p.summary || ""}`.trim() });
       <label class="wm-row" style="flex-direction:column;align-items:stretch">Rerank \u6307\u4EE4\uFF08\u544A\u8BC9\u6A21\u578B\u6309\u4EC0\u4E48\u6807\u51C6\u6392\u5E8F\uFF09
         <textarea id="c-rk-inst" rows="3" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(s.rerankInstruction || "")}</textarea>
       </label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-rk-proxy" ${s.rerankProxyEnabled !== false ? "checked" : ""}/> \u540C\u6E90\u4EE3\u7406\uFF08\u5907\u7528\uFF0C\u670D\u52A1\u7AEF\u4EE3\u7406\u4E0D\u53EF\u7528\u65F6\u751F\u6548\uFF09</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? "\u670D\u52A1\u7AEF\u4EE3\u7406\u5DF2\u542F\u7528\uFF0C\u6B64\u9879\u4E0D\u9700\u8981\u3002" : "\u5916\u7F51\u8BBF\u95EE\u9152\u9986\u65F6\uFF0C\u81EA\u52A8\u628A\u672C\u5730\u5730\u5740\u6539\u5199\u6210\u540C\u6E90\u4EE3\u7406 URL\u3002\u672C\u5730\u8BBF\u95EE\u81EA\u52A8\u8DF3\u8FC7\u3002"}</div>
+      <label class="wm-row">\u4EE3\u7406\u5206\u6D41\u8DEF\u5F84<input id="c-rk-proxy-path" value="${s.rerankProxyPath || "/rerank"}" placeholder="/rerank"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank ? "checked" : ""}/> \u63A5\u7BA1\u91CD\u6392\u5E8F\uFF08\u5728\u5411\u91CF\u63A5\u7BA1\u57FA\u7840\u4E0A\uFF0C\u7528\u6E29\u8BB0\u81EA\u5DF1\u7684 Rerank \u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF09</label>
       <div class="wm-hint" style="margin:-2px 0 4px">\u9700\u914D\u5408\u300C\u63A5\u7BA1\u5411\u91CF\u68C0\u7D22\u300D\u4E00\u8D77\u5F00\u542F\u624D\u751F\u6548\uFF1A\u5411\u91CF\u53EC\u56DE\u540E\u518D\u7528\u4F60\u914D\u7F6E\u7684 Rerank \u670D\u52A1\u91CD\u6392\u53EC\u56DE\u7ED3\u679C\uFF0C\u63D0\u5347\u76F8\u5173\u6027\u3002\u5355\u72EC\u5F00\u542F\u65E0\u6548\u3002</div>
@@ -6295,7 +6431,7 @@ ${p.summary || ""}`.trim() });
         <select id="ig-backend">${backendOpts}</select>
       </label>
       <label class="wm-row">\u540E\u7AEF\u5730\u5740 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl || "")}" placeholder="${isCloud ? "https://api.siliconflow.cn/v1" : "http://127.0.0.1:" + portHint}"/></label>
-      <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? 'ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u4F1A\u8C03\u7528 /prompt \u63D0\u4EA4\u3001/history \u8F6E\u8BE2\u3001/view \u53D6\u56FE\u3002<b>\u5982\u6D4F\u89C8\u5668\u63A7\u5236\u53F0\u62A5 CORS/ERR_FAILED\uFF0C\u8BF7\u542F\u52A8 ComfyUI \u65F6\u52A0\u53C2\u6570\uFF1A<code>python main.py --enable-cors-header "*"</code></b>\u3002' : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u8C03\u7528 /sdapi/v1/txt2img\u3002<b>\u5982\u62A5 CORS \u8BF7\u542F\u52A8\u65F6\u52A0\uFF1A<code>--api --cors-allow-origins=*</code></b>\u3002"}</div>
+      <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? "ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u901A\u8FC7\u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u8F6C\u53D1\uFF08<code>/api/sd/comfy/*</code>\uFF09\uFF0C\u65E0\u9700\u5F00 CORS\u3002" : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u901A\u8FC7\u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u8F6C\u53D1\uFF08<code>/api/sd/*</code>\uFF09\uFF0C\u65E0\u9700\u5F00 CORS\u3002"}</div>
       <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey || "")}" placeholder="${isCloud ? "sk-...\uFF08\u4E91\u7AEF\u5FC5\u586B\uFF09" : "\u672C\u5730\u901A\u5E38\u7559\u7A7A"}"/></label>
       <label class="wm-row" style="flex-direction:column;align-items:stretch">\u6A21\u578B / Checkpoint
         ${isCloud ? `<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="\u5982 Kwai-Kolors/Kolors"/>` : `<div style="display:flex;gap:6px;width:100%;margin-top:4px">
@@ -6307,15 +6443,15 @@ ${p.summary || ""}`.trim() });
       }).join("") : `<option value="">${escapeHtml(ig.model || "")}\uFF08\u70B9\u51FB\u53F3\u4FA7\u300C\u{1F504}\u300D\u5237\u65B0\u6A21\u578B\u5217\u8868\uFF09</option>`}
                 ${ig.model && !(Array.isArray(ig.models) && ig.models.some((mm) => (typeof mm === "string" ? mm : mm.value) === ig.model)) ? `<option value="${escapeHtml(ig.model)}" selected>${escapeHtml(ig.model)}\uFF08\u81EA\u5B9A\u4E49 / \u672C\u5730\u672A\u5339\u914D\uFF09</option>` : ""}
               </select>
-              <button id="ig-model-refresh" class="wm-btn small" title="\u4ECE ${isComfy ? "ComfyUI (/object_info/CheckpointLoaderSimple)" : "SD WebUI (/sdapi/v1/sd-models)"} \u62C9\u53D6\u53EF\u7528 Checkpoint">\u{1F504}</button>
+              <button id="ig-model-refresh" class="wm-btn small" title="\u4ECE ${isComfy ? "ComfyUI" : "SD WebUI"} \u62C9\u53D6\u53EF\u7528\u6A21\u578B\u5217\u8868">\u{1F504} \u5237\u65B0</button>
             </div>
-            <div class="wm-hint">\u672C\u5730\u6A21\u578B\u6765\u81EA\u4F60${isComfy ? "ComfyUI\u300Cmodels/checkpoints\u300D\u76EE\u5F55\u4E0B\u7684\u6587\u4EF6\uFF08\u6587\u4EF6\u540D\u5373 CKPT \u540D\uFF09" : "SD WebUI \u5DF2\u52A0\u8F7D\u7684\u6A21\u578B\u5217\u8868"}\u3002\u5237\u65B0\u5931\u8D25\u901A\u5E38\u662F\u672A\u5F00 CORS \u6216\u540E\u7AEF\u5730\u5740\u4E0D\u5BF9\u3002\u4E0B\u62C9\u9009\u4E2D\u540E\u4F1A\u81EA\u52A8\u5199\u5165\u4E0A\u65B9\u6A21\u578B\u5B57\u6BB5\u3002</div>`}
+            <div class="wm-hint">\u672C\u5730\u6A21\u578B\u6765\u81EA\u4F60${isComfy ? "ComfyUI \u7684 models \u76EE\u5F55\uFF08\u542B Checkpoint / UNet / GGUF\uFF0C\u81EA\u52A8\u8BC6\u522B\uFF09" : "SD WebUI \u5DF2\u52A0\u8F7D\u7684\u6A21\u578B\u5217\u8868"}\u3002\u901A\u8FC7\u9152\u9986\u4EE3\u7406\u62C9\u53D6\uFF0C\u5237\u65B0\u5931\u8D25\u901A\u5E38\u662F\u540E\u7AEF\u5730\u5740\u4E0D\u5BF9\u6216\u540E\u7AEF\u672A\u542F\u52A8\u3002</div>`}
       </label>
-      ${isCloud ? `` : `
-      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled !== false ? "checked" : ""}/> \u5916\u7F51\u8BBF\u95EE\u65F6\u542F\u7528\u540C\u6E90\u4EE3\u7406\uFF08\u81EA\u52A8\u628A\u8BF7\u6C42\u6539\u5199\u5230\u5F53\u524D\u6E90 + \u4EE3\u7406\u8DEF\u5F84\uFF0C\u7ED5\u5F00\u672C\u5730\u540E\u7AEF CORS \u9650\u5236\uFF09</label>
-      <label class="wm-row">\u540C\u6E90\u4EE3\u7406\u8DEF\u5F84<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath || "/img")}" placeholder="/img"/>
-      </label>
-      <div class="wm-hint">\u7528\u4E8E frp/ngrok/\u4E91\u53CD\u4EE3\u7B49\u5916\u7F51\u8BBF\u95EE\u6E29\u8BB0\u7684\u573A\u666F\u3002\u628A\u6E29\u8BB0\u53CD\u4EE3\u91CC <code>/img/*</code> \u8F6C\u53D1\u5230\u672C\u5730\u751F\u56FE\u670D\u52A1\uFF08ComfyUI/SD WebUI\uFF09\u5373\u53EF\u3002</div>`}
+      ${isCloud ? `
+      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled !== false ? "checked" : ""}/> \u5916\u7F51\u8BBF\u95EE\u65F6\u542F\u7528\u540C\u6E90\u4EE3\u7406\uFF08\u81EA\u52A8\u6539\u5199\u8BF7\u6C42\u5230\u5F53\u524D\u6E90 + \u4EE3\u7406\u8DEF\u5F84\uFF09</label>
+      <label class="wm-row">\u540C\u6E90\u4EE3\u7406\u8DEF\u5F84<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath || "/img")}" placeholder="/img"/></label>
+      <div class="wm-hint">\u7528\u4E8E frp/ngrok/\u4E91\u53CD\u4EE3\u7B49\u5916\u7F51\u8BBF\u95EE\u6E29\u8BB0\u7684\u573A\u666F\u3002\u628A\u53CD\u4EE3\u91CC <code>/img/*</code> \u8F6C\u53D1\u5230\u76EE\u6807\u4E91\u7AEF API \u5373\u53EF\u3002</div>` : `
+      <div class="wm-hint" style="padding:6px 10px;background:rgba(111,92,255,.08);border-radius:6px;border:1px solid rgba(111,92,255,.2)">\u2705 \u672C\u5730\u540E\u7AEF\uFF08SD WebUI / ComfyUI\uFF09\u901A\u8FC7\u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u8F6C\u53D1\uFF0C\u5916\u7F51\u4E5F\u80FD\u8FDE\u672C\u5730\u540E\u7AEF\uFF0C\u65E0\u9700\u5F00 CORS\u3001\u65E0\u9700\u914D\u540C\u6E90\u4EE3\u7406\u3002</div>`}
       ${isCloud ? `<label class="wm-row">\u4E91\u7AEF API \u8DEF\u5F84<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath || "/images/generations")}" placeholder="/images/generations"/></label>
       <div class="wm-hint">\u62FC\u5728 apiUrl \u540E\u3002SiliconFlow / OpenAI \u517C\u5BB9\u7AEF\u70B9\u90FD\u7528 <code>/images/generations</code>\u3002</div>` : ""}
       <div class="wm-divider"></div>
@@ -6355,9 +6491,8 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">\u300C\u8FFD\u52A0\u5230 AI \u697C\u5C42\u672B\u5C3E\u300D\uFF1A\u56FE\u7247\u7D27\u8DDF AI \u56DE\u590D\u4E0B\u65B9\u3002\u300C\u72EC\u7ACB system \u697C\u5C42\u300D\uFF1A\u5355\u72EC\u4E00\u5C42\u663E\u793A\u3002\u4E24\u79CD\u65B9\u5F0F\u5747\u4E0D\u8FDB\u4E0A\u4E0B\u6587\u3002</div>
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41</div>
-      <div class="wm-hint">\u4ECE ComfyUI \u91CC\u300C\u4FDD\u5B58(Ctrl+S)\u300D\u6216\u300CSave (API Format)\u300D\u5BFC\u51FA\u7684 JSON \u5373\u53EF\u7528\u3002<br/>
-        \u652F\u6301\u4E24\u79CD\u5360\u4F4D\u7B26\u683C\u5F0F\uFF08\u7B49\u4EF7\uFF09\uFF1A<code>{{prompt}}</code> \u6216 <code>"%prompt%"</code>\u3002\u5728\u7F16\u8F91\u5668\u91CC\u628A\u9700\u8981\u52A8\u6001\u66FF\u6362\u7684\u503C\u6539\u6210\u5360\u4F4D\u7B26\u5373\u53EF\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\u3002</div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+      <div class="wm-hint">\u4ECE ComfyUI\u300CSave (API Format)\u300D\u5BFC\u51FA\u7684 JSON \u5373\u53EF\u7528\u3002\u5360\u4F4D\u7B26\uFF1A<code>{{prompt}}</code> \u6216 <code>"%prompt%"</code>\uFF08\u7B49\u4EF7\uFF09\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\uFF08\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09\u3002</div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center">
         <select id="ig-comfy-wf" style="flex:1;min-width:180px">
           <option value="">\uFF08\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\xB7\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09</option>
           ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
@@ -6365,15 +6500,17 @@ ${p.summary || ""}`.trim() });
         return `<option value="${escapeHtml(name)}" ${ig.comfyWorkflowName === name ? "selected" : ""}>${escapeHtml(name)}</option>`;
       }).join("")}
         </select>
-        <button id="ig-comfy-edit" class="wm-btn small" title="\u7F16\u8F91\u5F53\u524D\u5DE5\u4F5C\u6D41\uFF08\u5F39\u51FA\u7F16\u8F91\u5668\uFF0C\u652F\u6301\u5360\u4F4D\u7B26\u68C0\u6D4B\uFF09">\u270F\uFE0F \u7F16\u8F91</button>
+        <button id="ig-comfy-refresh" class="wm-btn small" title="\u5237\u65B0\u5DE5\u4F5C\u6D41\u5217\u8868">\u{1F504} \u5237\u65B0</button>
+      </div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;flex-wrap:wrap">
+        <button id="ig-comfy-edit" class="wm-btn small" title="\u7F16\u8F91\u5F53\u524D\u5DE5\u4F5C\u6D41">\u270F\uFE0F \u7F16\u8F91</button>
         <button id="ig-comfy-new" class="wm-btn small" title="\u65B0\u5EFA\u7A7A\u767D\u5DE5\u4F5C\u6D41">\u2795 \u65B0\u5EFA</button>
-        <button id="ig-comfy-import" class="wm-btn small" title="\u4ECE .json \u6587\u4EF6\u5BFC\u5165\u5DE5\u4F5C\u6D41">\u{1F4E5} \u5BFC\u5165</button>
+        <button id="ig-comfy-import" class="wm-btn small" title="\u4ECE .json \u6587\u4EF6\u5BFC\u5165">\u{1F4E5} \u5BFC\u5165</button>
         <button id="ig-comfy-rename" class="wm-btn small" title="\u91CD\u547D\u540D\u5F53\u524D\u5DE5\u4F5C\u6D41">\u6539\u540D</button>
-        <button id="ig-comfy-delete" class="wm-btn small" title="\u5220\u9664\u5F53\u524D\u5DE5\u4F5C\u6D41">\u{1F5D1}\uFE0F</button>
-        <button id="ig-comfy-refresh" class="wm-btn small" title="\u5237\u65B0\u5DE5\u4F5C\u6D41\u5217\u8868">\u{1F504}</button>
+        <button id="ig-comfy-delete" class="wm-btn small" title="\u5220\u9664\u5F53\u524D\u5DE5\u4F5C\u6D41">\u{1F5D1}\uFE0F \u5220\u9664</button>
       </div>
       <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
-      <div class="wm-hint" style="margin-top:4px">\u5DE5\u4F5C\u6D41\u6587\u4EF6\u901A\u8FC7\u9152\u9986\u540E\u7AEF\u7BA1\u7406\uFF0C\u4E0E\u9152\u9986\u539F\u751F SD \u6A21\u5757\u4E92\u901A\u3002\u9009\u300C\u5185\u7F6E\u9ED8\u8BA4\u300D\u4F1A\u6839\u636E\u6A21\u578B\u540D\u81EA\u52A8\u5207\u6362 Checkpoint/UNet \u5DE5\u4F5C\u6D41\u3002</div>
+      <div class="wm-hint" style="margin-top:4px">\u4E0E\u9152\u9986\u539F\u751F SD \u6A21\u5757\u4E92\u901A\u3002\u9009\u300C\u5185\u7F6E\u9ED8\u8BA4\u300D\u4F1A\u6839\u636E\u6A21\u578B\u540D\u81EA\u52A8\u5207\u6362 Checkpoint/UNet \u5DE5\u4F5C\u6D41\u3002</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">\u{1F4DD} \u9AD8\u7EA7\uFF1A\u5185\u8054\u5DE5\u4F5C\u6D41 JSON\uFF08\u76F4\u63A5\u7C98\u8D34\uFF0C\u4F18\u5148\u7EA7\u9AD8\u4E8E\u4E0A\u65B9\u4E0B\u62C9\u6846\uFF09</summary>
         <textarea id="ig-comfy" rows="5" style="width:100%;font-family:monospace;font-size:11px;margin-top:6px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow || "")}</textarea>
@@ -6576,7 +6713,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "summary-wenxue-style-v6";
+  window.WarmMemo.version = "server-proxy-unified-v1";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

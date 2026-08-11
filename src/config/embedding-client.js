@@ -115,10 +115,11 @@
 
     if (provider === 'gemini') {
       // Gemini 逐条（无批量接口）
+      const fetchFn = (WM.ServerProxy && WM.ServerProxy.isAvailable()) ? WM.ServerProxy.proxyFetch : fetch;
       const out = [];
       for (const t of input) {
         const url = resolveGeminiUrl(base, model);
-        const r = await fetch(url, {
+        const r = await fetchFn(url, {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, key ? { 'x-goog-api-key': key } : {}),
           body: JSON.stringify({ content: { parts: [{ text: t }] } }),
@@ -132,8 +133,19 @@
     // OpenAI 兼容（支持本地反代/同源代理的 GET 模式）
     // 注意：info.url（即 base）已由 resolveEmbedUrl/buildEmbedUrl 处理为完整 embeddings 地址，
     // 此处绝不能再二次拼接，否则会出现 .../v1/embeddings/v1/embeddings 的 404。
-    // 外网同源代理改写：本地直连，外网把 127.0.0.1:11434/v1/embeddings 改写成 https://域名/vec/v1/embeddings
-    const url = applyVecProxy(base, s);
+    // 优先走酒馆服务端代理（/proxy/:url），无 CORS 问题，外网也能直连本地服务
+    // 代理不可用时回退 applyVecProxy 同源改写
+    // 关键：必须 await detectProxy() 确保检测完成，否则 isAvailable() 在检测前返回 false
+    if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
+      await WM.ServerProxy.detectProxy();
+    }
+    const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
+    let url;
+    if (useServerProxy) {
+      url = base; // 服务端代理：保持原始 URL，由 proxyRewrite 改写
+    } else {
+      url = applyVecProxy(base, s); // 回退：同源代理改写
+    }
     const useGet = isGetMode(url);
     const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
     let finalUrl = url;
@@ -154,7 +166,9 @@
     try { console.log('[WarmMemo] Embedding 实际请求：', reqTrace); } catch (e) {}
     let r;
     try {
-      r = await fetch(finalUrl, {
+      // 优先走服务端代理（proxyFetch 会自动改写 URL 为 /proxy/<url>）
+      const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+      r = await fetchFn(finalUrl, {
         method: useGet ? 'GET' : 'POST',
         headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
         body,
@@ -165,7 +179,7 @@
       const msg = String(netErr && netErr.message ? netErr.message : netErr);
       const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
       const hint = isCors
-        ? '这是浏览器层面的跨域/CORS 拦截（不是后端问题）。请确认：①地址是同源代理（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434；②反代已返回 access-control-allow-origin 头。'
+        ? '浏览器层面的跨域/CORS 拦截。解决方式：①在酒馆 config.yaml 中设置 enableCorsProxy: true（推荐，外网也能用）；②或用同源代理地址（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434。'
         : ('网络请求失败：' + msg + '。');
       if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, error: hint });
       throw new Error('[Embedding 请求失败] 实际请求地址：' + finalUrl + '｜' + hint);

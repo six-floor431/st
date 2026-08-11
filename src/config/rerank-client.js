@@ -33,6 +33,31 @@
     return buildRerankUrl(normalize(s.rerankBaseUrl) || '');
   }
 
+  // 外网同源代理改写（跟 embedding-client.js 的 applyVecProxy 一样的逻辑，用 rerankProxyPath）
+  //   本地访问酒馆（端口 8000/8001）→ 直连原始地址
+  //   外网访问酒馆 → 把原始地址改写成「页面源 + 代理路径 + 原 path」的同源 URL
+  //   当酒馆 /proxy/ 可用时不需要此改写（ServerProxy 优先）
+  function applyRerankProxy(url, settings) {
+    if (!url) return url;
+    var s = settings || {};
+    if (s.rerankProxyEnabled === false) return url;
+    if (!/^https?:\/\//i.test(url)) return url;
+    var base = '';
+    try { base = (window.top && window.top.location && window.top.location.origin) || window.location.origin; } catch (e) { base = window.location.origin; }
+    if (!base || base === 'null') return url;
+    var port = '';
+    try { var u0 = new URL(base); port = u0.port || (u0.protocol === 'https:' ? '443' : '80'); } catch (e) {}
+    if (port === '8000' || port === '8001') return url;
+    var proxyPath = (s.rerankProxyPath || '/rerank').replace(/\/+$/, '');
+    try {
+      var eu = new URL(url, base);
+      var pathOnly = eu.pathname + (eu.search || '');
+      var rewritten = base + proxyPath + pathOnly;
+      try { console.log('[WarmMemo] Rerank 同源代理改写：' + url + ' → ' + rewritten); } catch (e) {}
+      return rewritten;
+    } catch (e) { return url; }
+  }
+
   async function rerank(query, documents, rawSettings, options) {
     const s = rawSettings || {};
     // 重排启用判定：独立 rerankEnabled「或」向量接管模式下的 takeoverRerank 二者之一即可。
@@ -40,7 +65,17 @@
     // （用户只开了 takeoverRerank），必须同时认 takeoverRerank，否则接管重排静默失效。
     const enabled = s.rerankEnabled || s.takeoverRerank;
     if (!enabled) return null;
-    const url = resolveRerankUrl(s);
+
+    // 优先走酒馆服务端代理（/proxy/<url>），无 CORS 问题，外网也能直连本地服务
+    // 代理不可用时回退 applyRerankProxy 同源改写
+    // 关键：必须 await detectProxy() 确保检测完成，否则 isAvailable() 在检测前返回 false
+    if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
+      await WM.ServerProxy.detectProxy();
+    }
+    const rawUrl = resolveRerankUrl(s);
+    const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
+    const url = useServerProxy ? rawUrl : applyRerankProxy(rawUrl, s);
+
     const model = s.rerankModel || 'BAAI/bge-reranker-v2-m3';
     const key = s.rerankApiKey || '';
     const docs = (documents || []).filter((d) => d && String(d).trim());
@@ -82,11 +117,13 @@
           documents: docs,
           top_n: docs.length,
           bodyPreview: body ? body.slice(0, 400) : '(GET, 参数在 query)',
+          viaProxy: useServerProxy,
         });
       }
       let r;
       try {
-        r = await fetch(finalUrl, {
+        const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+        r = await fetchFn(finalUrl, {
           method: useGet ? 'GET' : 'POST',
           signal: ctrl.signal,
           headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
@@ -95,8 +132,9 @@
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-        const hint = (isCors ? '请求被浏览器拦截（疑似跨域/CORS，或反代未返回 CORS 头）。' : '网络请求失败：' + msg + '。') +
-          ' 若你填的是 http://127.0.0.1:xxxx 直连本地服务，请改用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。';
+        const hint = (isCors ? '请求被浏览器拦截（疑似跨域/CORS）。' : '网络请求失败：' + msg + '。') +
+          ' 解决方式：①在酒馆 config.yaml 中设置 enableCorsProxy: true（推荐，外网也能用）；' +
+          '②或用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。';
         if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, error: hint });
         throw new Error(hint);
       }
@@ -139,5 +177,5 @@
     }
   }
 
-  WM.RerankClient = { rerank, testConnection, resolveRerankUrl };
+  WM.RerankClient = { rerank, testConnection, resolveRerankUrl, applyRerankProxy };
 })();

@@ -1283,6 +1283,8 @@
         s.rerankApiKey = q('#c-rk-key') ? q('#c-rk-key').value : s.rerankApiKey;
         s.rerankModel = q('#c-rk-model') ? q('#c-rk-model').value : s.rerankModel;
         s.rerankInstruction = q('#c-rk-inst') ? q('#c-rk-inst').value : s.rerankInstruction;
+        s.rerankProxyEnabled = q('#c-rk-proxy') ? q('#c-rk-proxy').checked : (s.rerankProxyEnabled !== false);
+        s.rerankProxyPath = q('#c-rk-proxy-path') ? q('#c-rk-proxy-path').value : (s.rerankProxyPath || '/rerank');
         s.takeoverRerank = q('#c-take-re') ? q('#c-take-re').checked : s.takeoverRerank;
       }
     }
@@ -1818,9 +1820,14 @@
 
   // 向量(Embedding)面板：直接填 Base URL 自适应任意 OpenAI 兼容 / 本地反代 / Gemini，无需选厂家
   function renderPaneVector(s) {
+    const proxyAvail = (WM.ServerProxy && WM.ServerProxy.isAvailable());
     return `<div class="wm-card">
       <div class="wm-h">Embedding（向量）配置</div>
       <div class="wm-hint">默认情况下你<b>什么都不用配</b>：勾下面的「接管向量检索」后，温记会直接用你<b>已经填好的 LLM 地址</b>做向量召回（DeepSeek/火山/OpenAI/Ollama 都支持 /embeddings 接口），零配置真接管。只有想换独立 embedding 服务时才填下面地址。</div>
+      ${proxyAvail
+        ? `<div class="wm-hint" style="padding:6px 10px;background:rgba(76,175,80,.1);border-radius:6px;border:1px solid rgba(76,175,80,.25)">✅ 酒馆服务端代理已启用（<code>/proxy/</code>），向量请求自动走服务端转发，外网也能连本地服务，<b>无需配置下方同源代理</b>。</div>`
+        : `<div class="wm-hint" style="padding:6px 10px;background:rgba(255,193,7,.08);border-radius:6px;border:1px solid rgba(255,193,7,.2)">💡 在酒馆 <code>config.yaml</code> 中设置 <code>enableCorsProxy: true</code> 可启用服务端代理，向量请求自动走服务端转发，外网也能连本地服务（跟酒馆 SD 模块一样的原理），<b>无需 Caddy 同源代理</b>。</div>`
+      }
       <label class="wm-row"><input type="checkbox" id="c-vec" ${s.vectorEnabled?'checked':''}/> 启用向量检索（接管时必须）</label>
       <label class="wm-row"><input type="checkbox" id="c-emb-usellm" ${s.embeddingUseLLM!==false?'checked':''}/> 复用 LLM 地址做 Embedding（默认开，免配置）</label>
       <div class="wm-hint" style="margin:-2px 0 4px">开启时，下方留空会自动用「LLM 配置」里的 Base URL。若下方已填独立地址则以此为准。</div>
@@ -1829,8 +1836,8 @@
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（复用 LLM 时留空）"/></label>
       <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
       <div class="wm-divider"></div>
-      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled!==false?'checked':''}/> 外网同源代理（本地直连/外网自动改写）</label>
-      <div class="wm-hint" style="margin:-2px 0 4px">外网访问酒馆时，自动把本地地址（如 <code>http://127.0.0.1:11434/v1/embeddings</code>）改写成同源代理 URL（<code>https://你的域名/vec/v1/embeddings</code>），走 Caddy 转发到内网 Ollama。本地访问（端口 8000/8001）自动跳过直连。需配合「同源代理」Caddyfile 的 <code>/vec/* → 11434</code> 分流。</div>
+      <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled!==false?'checked':''}/> 同源代理（备用，服务端代理不可用时生效）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? '服务端代理已启用，此项不需要。仅当服务端代理不可用时，才会用同源代理改写。' : '外网访问酒馆时，自动把本地地址改写成同源代理 URL，走 Caddy 转发到内网服务。本地访问自动跳过。需配合 Caddyfile 的 <code>/vec/* → 11434</code> 分流。'}</div>
       <label class="wm-row">代理分流路径<input id="c-vec-proxy-path" value="${s.vecProxyPath||'/vec'}" placeholder="/vec"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-emb" ${s.takeoverEmbedding?'checked':''}/> 接管向量检索（用温记自己的 embedding 召回，替代酒馆原生召回）</label>
@@ -1840,8 +1847,13 @@
 
   // 重排序(Rerank)面板：直接填 Base URL 自适应任意 OpenAI 兼容 / 本地反代
   function renderPaneRerank(s) {
+    const proxyAvail = (WM.ServerProxy && WM.ServerProxy.isAvailable());
     return `<div class="wm-card">
       <div class="wm-h">Rerank（重排序）配置</div>
+      ${proxyAvail
+        ? `<div class="wm-hint" style="padding:6px 10px;background:rgba(76,175,80,.1);border-radius:6px;border:1px solid rgba(76,175,80,.25)">✅ 酒馆服务端代理已启用（<code>/proxy/</code>），Rerank 请求自动走服务端转发，外网也能连本地服务，<b>无需配置下方同源代理</b>。</div>`
+        : `<div class="wm-hint" style="padding:6px 10px;background:rgba(255,193,7,.08);border-radius:6px;border:1px solid rgba(255,193,7,.2)">💡 在酒馆 <code>config.yaml</code> 中设置 <code>enableCorsProxy: true</code> 可启用服务端代理，Rerank 请求自动走服务端转发（跟酒馆 SD 模块一样的原理），<b>无需 Caddy 同源代理</b>。</div>`
+      }
       <label class="wm-row"><input type="checkbox" id="c-rerank" ${s.rerankEnabled?'checked':''}/> 启用重排序(Rerank)</label>
       <label class="wm-row">Base URL<input id="c-rk-url" value="${s.rerankBaseUrl}" placeholder="https://api.siliconflow.cn/v1/rerank 或 http://127.0.0.1:8080/vec/v1/rerank"/></label>
       <div class="wm-hint">直接填任意服务的 Base URL，自动适配：<br/>· 本地反代/同源代理：<code>http://127.0.0.1:8080/vec</code>（自动补 /v1/rerank）<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1/rerank</code></div>
@@ -1850,6 +1862,10 @@
       <label class="wm-row" style="flex-direction:column;align-items:stretch">Rerank 指令（告诉模型按什么标准排序）
         <textarea id="c-rk-inst" rows="3" style="width:100%;font-family:monospace;font-size:12px">${escapeHtml(s.rerankInstruction||'')}</textarea>
       </label>
+      <div class="wm-divider"></div>
+      <label class="wm-row"><input type="checkbox" id="c-rk-proxy" ${s.rerankProxyEnabled!==false?'checked':''}/> 同源代理（备用，服务端代理不可用时生效）</label>
+      <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? '服务端代理已启用，此项不需要。' : '外网访问酒馆时，自动把本地地址改写成同源代理 URL。本地访问自动跳过。'}</div>
+      <label class="wm-row">代理分流路径<input id="c-rk-proxy-path" value="${s.rerankProxyPath||'/rerank'}" placeholder="/rerank"/></label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-take-re" ${s.takeoverRerank?'checked':''}/> 接管重排序（在向量接管基础上，用温记自己的 Rerank 重排召回结果）</label>
       <div class="wm-hint" style="margin:-2px 0 4px">需配合「接管向量检索」一起开启才生效：向量召回后再用你配置的 Rerank 服务重排召回结果，提升相关性。单独开启无效。</div>
@@ -1907,7 +1923,7 @@
         <select id="ig-backend">${backendOpts}</select>
       </label>
       <label class="wm-row">后端地址 (apiUrl)<input id="ig-url" value="${escapeHtml(ig.apiUrl||'')}" placeholder="${isCloud ? 'https://api.siliconflow.cn/v1' : 'http://127.0.0.1:' + portHint}"/></label>
-      <div class="wm-hint">${isCloud ? '云端 OpenAI 兼容端点的 BaseURL，自动拼接下方的 API 路径。' : (isComfy ? 'ComfyUI 服务地址，默认端口 8188。会调用 /prompt 提交、/history 轮询、/view 取图。<b>如浏览器控制台报 CORS/ERR_FAILED，请启动 ComfyUI 时加参数：<code>python main.py --enable-cors-header "*"</code></b>。' : 'SD WebUI (AUTOMATIC1111) 服务地址，默认端口 7860。调用 /sdapi/v1/txt2img。<b>如报 CORS 请启动时加：<code>--api --cors-allow-origins=*</code></b>。')}</div>
+      <div class="wm-hint">${isCloud ? '云端 OpenAI 兼容端点的 BaseURL，自动拼接下方的 API 路径。' : (isComfy ? 'ComfyUI 服务地址，默认端口 8188。通过酒馆服务端代理转发（<code>/api/sd/comfy/*</code>），无需开 CORS。' : 'SD WebUI (AUTOMATIC1111) 服务地址，默认端口 7860。通过酒馆服务端代理转发（<code>/api/sd/*</code>），无需开 CORS。')}</div>
       <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey||'')}" placeholder="${isCloud ? 'sk-...（云端必填）' : '本地通常留空'}"/></label>
       <label class="wm-row" style="flex-direction:column;align-items:stretch">模型 / Checkpoint
         ${(isCloud)
@@ -1927,16 +1943,16 @@
                   ? `<option value="${escapeHtml(ig.model)}" selected>${escapeHtml(ig.model)}（自定义 / 本地未匹配）</option>`
                   : ''}
               </select>
-              <button id="ig-model-refresh" class="wm-btn small" title="从 ${isComfy?'ComfyUI (/object_info/CheckpointLoaderSimple)':'SD WebUI (/sdapi/v1/sd-models)'} 拉取可用 Checkpoint">🔄</button>
+              <button id="ig-model-refresh" class="wm-btn small" title="从 ${isComfy?'ComfyUI':'SD WebUI'} 拉取可用模型列表">🔄 刷新</button>
             </div>
-            <div class="wm-hint">本地模型来自你${isComfy?'ComfyUI「models/checkpoints」目录下的文件（文件名即 CKPT 名）':'SD WebUI 已加载的模型列表'}。刷新失败通常是未开 CORS 或后端地址不对。下拉选中后会自动写入上方模型字段。</div>`
+            <div class="wm-hint">本地模型来自你${isComfy?'ComfyUI 的 models 目录（含 Checkpoint / UNet / GGUF，自动识别）':'SD WebUI 已加载的模型列表'}。通过酒馆代理拉取，刷新失败通常是后端地址不对或后端未启动。</div>`
         }
       </label>
-      ${isCloud ? `` : `
-      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled!==false?'checked':''}/> 外网访问时启用同源代理（自动把请求改写到当前源 + 代理路径，绕开本地后端 CORS 限制）</label>
-      <label class="wm-row">同源代理路径<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath||'/img')}" placeholder="/img"/>
-      </label>
-      <div class="wm-hint">用于 frp/ngrok/云反代等外网访问温记的场景。把温记反代里 <code>/img/*</code> 转发到本地生图服务（ComfyUI/SD WebUI）即可。</div>`}
+      ${isCloud ? `
+      <label class="wm-row"><input type="checkbox" id="ig-proxy" ${ig.imgProxyEnabled!==false?'checked':''}/> 外网访问时启用同源代理（自动改写请求到当前源 + 代理路径）</label>
+      <label class="wm-row">同源代理路径<input id="ig-proxy-path" value="${escapeHtml(ig.imgProxyPath||'/img')}" placeholder="/img"/></label>
+      <div class="wm-hint">用于 frp/ngrok/云反代等外网访问温记的场景。把反代里 <code>/img/*</code> 转发到目标云端 API 即可。</div>` : `
+      <div class="wm-hint" style="padding:6px 10px;background:rgba(111,92,255,.08);border-radius:6px;border:1px solid rgba(111,92,255,.2)">✅ 本地后端（SD WebUI / ComfyUI）通过酒馆服务端代理转发，外网也能连本地后端，无需开 CORS、无需配同源代理。</div>`}
       ${isCloud ? `<label class="wm-row">云端 API 路径<input id="ig-cloud-path" value="${escapeHtml(ig.cloudPath||'/images/generations')}" placeholder="/images/generations"/></label>
       <div class="wm-hint">拼在 apiUrl 后。SiliconFlow / OpenAI 兼容端点都用 <code>/images/generations</code>。</div>` : ''}
       <div class="wm-divider"></div>
@@ -1976,9 +1992,8 @@
       <div class="wm-hint">「追加到 AI 楼层末尾」：图片紧跟 AI 回复下方。「独立 system 楼层」：单独一层显示。两种方式均不进上下文。</div>
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI 工作流</div>
-      <div class="wm-hint">从 ComfyUI 里「保存(Ctrl+S)」或「Save (API Format)」导出的 JSON 即可用。<br/>
-        支持两种占位符格式（等价）：<code>{{prompt}}</code> 或 <code>"%prompt%"</code>。在编辑器里把需要动态替换的值改成占位符即可。留空用内置默认工作流。</div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+      <div class="wm-hint">从 ComfyUI「Save (API Format)」导出的 JSON 即可用。占位符：<code>{{prompt}}</code> 或 <code>"%prompt%"</code>（等价）。留空用内置默认工作流（自动检测模型类型）。</div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center">
         <select id="ig-comfy-wf" style="flex:1;min-width:180px">
           <option value="">（内置默认工作流·自动检测模型类型）</option>
           ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
@@ -1986,15 +2001,17 @@
             return `<option value="${escapeHtml(name)}" ${ig.comfyWorkflowName===name?'selected':''}>${escapeHtml(name)}</option>`;
           }).join('')}
         </select>
-        <button id="ig-comfy-edit" class="wm-btn small" title="编辑当前工作流（弹出编辑器，支持占位符检测）">✏️ 编辑</button>
+        <button id="ig-comfy-refresh" class="wm-btn small" title="刷新工作流列表">🔄 刷新</button>
+      </div>
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;flex-wrap:wrap">
+        <button id="ig-comfy-edit" class="wm-btn small" title="编辑当前工作流">✏️ 编辑</button>
         <button id="ig-comfy-new" class="wm-btn small" title="新建空白工作流">➕ 新建</button>
-        <button id="ig-comfy-import" class="wm-btn small" title="从 .json 文件导入工作流">📥 导入</button>
+        <button id="ig-comfy-import" class="wm-btn small" title="从 .json 文件导入">📥 导入</button>
         <button id="ig-comfy-rename" class="wm-btn small" title="重命名当前工作流">改名</button>
-        <button id="ig-comfy-delete" class="wm-btn small" title="删除当前工作流">🗑️</button>
-        <button id="ig-comfy-refresh" class="wm-btn small" title="刷新工作流列表">🔄</button>
+        <button id="ig-comfy-delete" class="wm-btn small" title="删除当前工作流">🗑️ 删除</button>
       </div>
       <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
-      <div class="wm-hint" style="margin-top:4px">工作流文件通过酒馆后端管理，与酒馆原生 SD 模块互通。选「内置默认」会根据模型名自动切换 Checkpoint/UNet 工作流。</div>
+      <div class="wm-hint" style="margin-top:4px">与酒馆原生 SD 模块互通。选「内置默认」会根据模型名自动切换 Checkpoint/UNet 工作流。</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">📝 高级：内联工作流 JSON（直接粘贴，优先级高于上方下拉框）</summary>
         <textarea id="ig-comfy" rows="5" style="width:100%;font-family:monospace;font-size:11px;margin-top:6px" placeholder='{"3":{"class_type":"KSampler","inputs":{"seed":"{{seed}}",...}},"6":{"class_type":"CLIPTextEncode","inputs":{"text":"{{prompt}}"}}}'>${escapeHtml(ig.comfyWorkflow||'')}</textarea>

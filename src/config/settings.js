@@ -27,6 +27,7 @@
     vecProxyEnabled: true,          // 默认开：本地自动跳过（无害），外网自动改写
     vecProxyPath: '/vec',           // 反代的向量分流路径，与 Caddyfile 的 handle_path /vec/* 对齐
     // 重排序(Rerank)同样支持外网同源代理（复用同一套场景判断，路径独立配置）
+    rerankProxyEnabled: true,         // 默认开：跟 vecProxyEnabled 一致；/proxy/ 可用时自动走服务端代理
     rerankProxyPath: '/rerank',
     rerankEnabled: false,
     // 重排序(Rerank)配置：直接填 Base URL 自适应任意 OpenAI 兼容服务
