@@ -134,8 +134,9 @@
     // 先去掉所有控制字符（0x00-0x1F、0x7F），只保留可见字符 + 常用空白
     // 这是 JSON 解析安全的第一道防线——LLM 偶尔会输出零宽字符等奇怪东西
     s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-    // 分句：按中文句号/问号/感叹号/换行/英文 .?! 切
-    const parts = s.split(/[\n\r。！？!?\.；;]+/).map((p) => p.trim()).filter(Boolean);
+    // 分句：按中文句号/问号/感叹号/换行/英文 .?! 分号 逗号 切
+    // 关键：加逗号分隔，避免"masterpiece, 但实际上..."这种中英混合被当成一个整体跳过过滤
+    const parts = s.split(/[\n\r。！？!?\.；;，,]+/).map((p) => p.trim()).filter(Boolean);
     const NOISE_KEYWORDS = [
       // 中文：LLM 自言自语/解释类关键词
       '也许', '或许', '可能', '考虑到', '鉴于', '另一种可能', '另外', '此外',
@@ -145,6 +146,10 @@
       '比喻性', '示意的方式', '不是具体叙事', '抽象', 'welcome', '欢迎消息',
       '画面元素', '肉眼可见', '提炼规范', '输出契约', '格式要求', '以下是',
       '让我', '我们来', '首先', '其次', '最后', '总结一下', '综上所述',
+      // 新增：LLM 分析/元评论类（"但实际上用户没有提供叙事"等典型废话）
+      '但实际上', '这似乎', '没有提供', '需要指出', '角色设定', '叙事',
+      '实际上是', '看起来', '似乎是', '应该是', '无法生成', '无法描绘',
+      '平台', '没有实际', '所以我们需要', '指出', '用户没有', '助手',
       // 英文
       'maybe', 'perhaps', 'however', 'but', 'if we', 'consider', 'considering',
       'note that', 'note:', 'prompt', 'output:', 'welcome', 'let me', 'i think',
@@ -355,15 +360,21 @@
     };
     // 替换函数：每次匹配都返回转义后的值，避免 $ 特殊字符破坏 JSON
     const rep = (val) => () => esc(val);
+    // —— 关键修复：数字字段必须替换为 JSON 数字（无引号），不能是字符串。
+    //   ComfyUI API 要求 KSampler.seed/steps/cfg 等为 INT/FLOAT 类型。
+    //   之前用 esc() 统一替换，数字 20 → "20"（字符串），ComfyUI 校验失败返回 500。
+    //   修复方式：数字占位符替换时连引号一起消掉，产出裸数字；字符串占位符保持引号。
     workflowStr = workflowStr
+      // 数字值：连引号一起替换为裸数字（"{{seed}}" → 12345，不是 "12345"）
+      .replace(/"\{\{seed\}\}"/g, String(seed))
+      .replace(/"\{\{steps\}\}"/g, String(steps))
+      .replace(/"\{\{cfg\}\}"/g, String(cfg))
+      .replace(/"\{\{width\}\}"/g, String(w))
+      .replace(/"\{\{height\}\}"/g, String(h))
+      .replace(/"\{\{denoise\}\}"/g, String(denoise))
+      // 字符串值：只替换引号内的内容（保留 JSON 字符串引号）
       .replace(/\{\{prompt\}\}/g, rep(cleanPrompt))
       .replace(/\{\{negative\}\}/g, rep(cleanNeg))
-      .replace(/\{\{width\}\}/g, rep(w))
-      .replace(/\{\{height\}\}/g, rep(h))
-      .replace(/\{\{steps\}\}/g, rep(steps))
-      .replace(/\{\{cfg\}\}/g, rep(cfg))
-      .replace(/\{\{denoise\}\}/g, rep(denoise))
-      .replace(/\{\{seed\}\}/g, rep(seed))
       .replace(/\{\{model\}\}/g, rep(model));
     // —— 关键修复：ComfyUI /prompt 要求 body = { prompt: <nodes对象>, client_id: '唯一标识' }
     // 之前直接把 workflow JSON 当 body，服务器端拿不到 prompt 字段 → 要么 400 要么 CORS 预检失败后被浏览器吞成 ERR_FAILED

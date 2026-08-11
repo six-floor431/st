@@ -3180,7 +3180,7 @@ ${p.summary || ""}`.trim() });
       s = s.replace(/<\/?ImagePrompt[^>]*>/gi, "");
       s = s.replace(/^```[a-zA-Z]*\s*/gm, "").replace(/```\s*$/gm, "");
       s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
-      const parts = s.split(/[\n\r。！？!?\.；;]+/).map((p) => p.trim()).filter(Boolean);
+      const parts = s.split(/[\n\r。！？!?\.；;，,]+/).map((p) => p.trim()).filter(Boolean);
       const NOISE_KEYWORDS = [
         // 中文：LLM 自言自语/解释类关键词
         "\u4E5F\u8BB8",
@@ -3234,6 +3234,25 @@ ${p.summary || ""}`.trim() });
         "\u6700\u540E",
         "\u603B\u7ED3\u4E00\u4E0B",
         "\u7EFC\u4E0A\u6240\u8FF0",
+        // 新增：LLM 分析/元评论类（"但实际上用户没有提供叙事"等典型废话）
+        "\u4F46\u5B9E\u9645\u4E0A",
+        "\u8FD9\u4F3C\u4E4E",
+        "\u6CA1\u6709\u63D0\u4F9B",
+        "\u9700\u8981\u6307\u51FA",
+        "\u89D2\u8272\u8BBE\u5B9A",
+        "\u53D9\u4E8B",
+        "\u5B9E\u9645\u4E0A\u662F",
+        "\u770B\u8D77\u6765",
+        "\u4F3C\u4E4E\u662F",
+        "\u5E94\u8BE5\u662F",
+        "\u65E0\u6CD5\u751F\u6210",
+        "\u65E0\u6CD5\u63CF\u7ED8",
+        "\u5E73\u53F0",
+        "\u6CA1\u6709\u5B9E\u9645",
+        "\u6240\u4EE5\u6211\u4EEC\u9700\u8981",
+        "\u6307\u51FA",
+        "\u7528\u6237\u6CA1\u6709",
+        "\u52A9\u624B",
         // 英文
         "maybe",
         "perhaps",
@@ -3415,7 +3434,7 @@ ${p.summary || ""}`.trim() });
         return out.length >= 2 ? out.slice(1, -1) : out;
       };
       const rep = (val) => () => esc(val);
-      workflowStr = workflowStr.replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{width\}\}/g, rep(w)).replace(/\{\{height\}\}/g, rep(h)).replace(/\{\{steps\}\}/g, rep(steps)).replace(/\{\{cfg\}\}/g, rep(cfg)).replace(/\{\{denoise\}\}/g, rep(denoise)).replace(/\{\{seed\}\}/g, rep(seed)).replace(/\{\{model\}\}/g, rep(model));
+      workflowStr = workflowStr.replace(/"\{\{seed\}\}"/g, String(seed)).replace(/"\{\{steps\}\}"/g, String(steps)).replace(/"\{\{cfg\}\}"/g, String(cfg)).replace(/"\{\{width\}\}"/g, String(w)).replace(/"\{\{height\}\}"/g, String(h)).replace(/"\{\{denoise\}\}"/g, String(denoise)).replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{model\}\}/g, rep(model));
       let promptObj;
       try {
         promptObj = JSON.parse(workflowStr);
