@@ -231,5 +231,56 @@
     }
   }
 
-  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy };
+  // 拉取模型列表：通过 /proxy/ 请求 /v1/models（OpenAI 兼容），供下拉框选择
+  async function fetchModels(settings) {
+    const s = settings || {};
+    const info = resolveEmbedUrl(s);
+    const base = normalizeBaseUrl(info.url || s.embeddingBaseUrl || s.baseUrl || '') || '';
+    if (!base) return { ok: false, error: '请先填写 Base URL（或在 LLM 配置中填写）' };
+    // 从 embeddings 地址反推 /models 地址
+    let url = base;
+    if (/\/v1\/embeddings$/i.test(url)) url = url.replace(/\/embeddings$/i, '/models');
+    else if (/\/v1\/?$/i.test(url)) url = url + '/models';
+    else if (/\/models$/.test(url)) { /* 已是 */ }
+    else url = url.replace(/\/embeddings.*$/, '') + '/models';
+    const key = info.apiKey || s.embeddingApiKey || s.apiKey || '';
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
+    // 通过 /proxy/ 发送请求
+    if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
+      await WM.ServerProxy.detectProxy();
+    }
+    const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
+    let fetchFn, finalUrl;
+    if (useServerProxy) {
+      fetchFn = WM.ServerProxy.proxyFetch;
+      finalUrl = url;
+    } else {
+      fetchFn = fetch;
+      finalUrl = '/proxy/' + url;
+    }
+    try {
+      const r = await fetchFn(finalUrl, { method: 'GET', headers });
+      const rawText = await r.text();
+      if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+        return { ok: false, error: '酒馆 /proxy/ 未启用，请在 config.yaml 中设置 enableCorsProxy: true 并重启酒馆' };
+      }
+      if (!r.ok) return { ok: false, error: 'HTTP ' + r.status + '：' + rawText.slice(0, 200) };
+      let j;
+      try { j = JSON.parse(rawText); } catch (e) {
+        return { ok: false, error: '返回非 JSON：' + rawText.slice(0, 200) };
+      }
+      let models;
+      if (j.data) models = j.data.map((m) => m.id || m.name).filter(Boolean);
+      else if (j.models) models = j.models.map((m) => m.name || m.model).filter(Boolean);
+      else models = [];
+      if (!useServerProxy && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === 'function') {
+        WM.ServerProxy.markAvailable();
+      }
+      return { ok: true, models };
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
+  }
+
+  WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy, fetchModels };
 })();

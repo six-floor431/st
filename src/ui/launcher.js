@@ -986,7 +986,13 @@
           <label class="wm-row">Base URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1、https://ark.cn-beijing.volces.com/api/v3、https://api.deepseek.com/v1"/></label>
           <div class="wm-hint">直接填任意厂家的 Base URL 即可，自动按 OpenAI 兼容协议请求（火山引擎填 <code>https://ark.cn-beijing.volces.com/api/v3</code>，DeepSeek 填 <code>https://api.deepseek.com/v1</code>）。</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
-          <label class="wm-row">模型名<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
+          <label class="wm-row">模型名
+            <div style="display:flex;gap:4px;align-items:center">
+              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1"/>
+              <datalist id="llm-model-list">${(s.llmModelCache||[]).map(m=>`<option value="${escapeHtml(m)}">`).join('')}</datalist>
+              <button id="llm-model-refresh" class="wm-btn small" title="从 API 拉取可用模型列表">🔄</button>
+            </div>
+          </label>
           <label class="wm-row"><input type="checkbox" id="llm-deep" ${c.deepThinking ? 'checked' : ''}/> 深度思考（推理模型）</label>
           <div class="wm-hint" style="margin:-2px 0 4px">开启后按模型自动适配深度思考参数：OpenAI o 系列用 reasoning_effort；DeepSeek reasoner 走原生思考链；豆包/Qwen 思考模型用 thinking 块。普通模型（如 gpt-4o）开启无效，可放心留开。</div>
           <label class="wm-row">输出 Token 上限<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="限制模型输出长度，所有功能共用此上限"/> <span class="wm-hint" style="margin:0">所有功能共用默认上限，下面可对每个任务单独覆盖</span></label>
@@ -1474,6 +1480,68 @@
     const modelRefreshBtn = body.querySelector('#ig-model-refresh');
     if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
 
+    // ── LLM 模型列表刷新 ──
+    async function refreshLlmModels(opts) {
+      opts = opts || {};
+      const inputEl = body.querySelector('#llm-model');
+      const dataListEl = body.querySelector('#llm-model-list');
+      const btn = body.querySelector('#llm-model-refresh');
+      if (!inputEl || !WM.LLMClient || typeof WM.LLMClient.fetchModels !== 'function') return { ok: false, error: '无法刷新' };
+      syncPaneToSettings(body, s, 'llm');
+      const wasDisabled = btn ? btn.disabled : false;
+      if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+      try {
+        const r = await WM.LLMClient.fetchModels(s);
+        if (!r.ok) {
+          if (!opts.silent) toast('🔄 LLM 模型列表刷新失败：' + (r.error || '未知错误'));
+          return { ok: false, error: r.error };
+        }
+        const list = r.models || [];
+        s.llmModelCache = list;
+        if (dataListEl) dataListEl.innerHTML = list.map(m => `<option value="${escapeHtml(m)}">`).join('');
+        if (!opts.silent) toast('🔄 已刷新 LLM 模型列表，共 ' + list.length + ' 个');
+        return { ok: true, count: list.length };
+      } catch (e) {
+        if (!opts.silent) toast('🔄 LLM 模型列表刷新异常：' + (e.message || String(e)));
+        return { ok: false, error: e.message || String(e) };
+      } finally {
+        if (btn) { btn.disabled = wasDisabled; btn.textContent = '🔄'; }
+      }
+    }
+    const llmModelRefreshBtn = body.querySelector('#llm-model-refresh');
+    if (llmModelRefreshBtn) llmModelRefreshBtn.onclick = () => refreshLlmModels({ silent: false });
+
+    // ── 向量模型列表刷新 ──
+    async function refreshEmbModels(opts) {
+      opts = opts || {};
+      const inputEl = body.querySelector('#c-emb-model');
+      const dataListEl = body.querySelector('#emb-model-list');
+      const btn = body.querySelector('#emb-model-refresh');
+      if (!inputEl || !WM.EmbeddingClient || typeof WM.EmbeddingClient.fetchModels !== 'function') return { ok: false, error: '无法刷新' };
+      syncPaneToSettings(body, s, 'vec');
+      const wasDisabled = btn ? btn.disabled : false;
+      if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+      try {
+        const r = await WM.EmbeddingClient.fetchModels(s);
+        if (!r.ok) {
+          if (!opts.silent) toast('🔄 向量模型列表刷新失败：' + (r.error || '未知错误'));
+          return { ok: false, error: r.error };
+        }
+        const list = r.models || [];
+        s.embModelCache = list;
+        if (dataListEl) dataListEl.innerHTML = list.map(m => `<option value="${escapeHtml(m)}">`).join('');
+        if (!opts.silent) toast('🔄 已刷新向量模型列表，共 ' + list.length + ' 个');
+        return { ok: true, count: list.length };
+      } catch (e) {
+        if (!opts.silent) toast('🔄 向量模型列表刷新异常：' + (e.message || String(e)));
+        return { ok: false, error: e.message || String(e) };
+      } finally {
+        if (btn) { btn.disabled = wasDisabled; btn.textContent = '🔄'; }
+      }
+    }
+    const embModelRefreshBtn = body.querySelector('#emb-model-refresh');
+    if (embModelRefreshBtn) embModelRefreshBtn.onclick = () => refreshEmbModels({ silent: false });
+
     // ── ComfyUI 工作流管理 ──
     // 刷新工作流列表：从酒馆后端拉取已保存的工作流文件名，填入下拉框
     async function refreshComfyWorkflows() {
@@ -1834,7 +1902,13 @@
       <label class="wm-row">独立 Base URL（可选）<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="留空=自动用 LLM 地址；如 https://api.siliconflow.cn/v1"/></label>
       <div class="wm-hint">想用独立 embedding 服务才填：<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· 本地 Ollama：<code>http://127.0.0.1:11434/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（复用 LLM 时留空）"/></label>
-      <label class="wm-row">模型<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <label class="wm-row">模型
+        <div style="display:flex;gap:4px;align-items:center">
+          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1"/>
+          <datalist id="emb-model-list">${(s.embModelCache||[]).map(m=>`<option value="${escapeHtml(m)}">`).join('')}</datalist>
+          <button id="emb-model-refresh" class="wm-btn small" title="从 API 拉取可用模型列表">🔄</button>
+        </div>
+      </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled!==false?'checked':''}/> 同源代理（备用，服务端代理不可用时生效）</label>
       <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? '服务端代理已启用，此项不需要。仅当服务端代理不可用时，才会用同源代理改写。' : '外网访问酒馆时，自动把本地地址改写成同源代理 URL，走 Caddy 转发到内网服务。本地访问自动跳过。需配合 Caddyfile 的 <code>/vec/* → 11434</code> 分流。'}</div>

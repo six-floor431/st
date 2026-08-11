@@ -1238,7 +1238,55 @@ ${body}`,
         return { success: false, error: String(e && e.message ? e.message : e) };
       }
     }
-    WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl };
+    async function fetchModels(settings) {
+      const s = settings || {};
+      const c = s.llmConfig || {};
+      const base = normalizeBaseUrl(c.apiUrl) || "";
+      if (!base) return { ok: false, error: "\u8BF7\u5148\u586B\u5199 Base URL" };
+      let url;
+      if (/\/v\d+\/?$/.test(base)) url = base + "/models";
+      else if (/\/models$/.test(base)) url = base;
+      else url = base + "/v1/models";
+      const key = c.apiKey || "";
+      const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
+      if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === "function") {
+        await WM.ServerProxy.detectProxy();
+      }
+      const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
+      let fetchFn, finalUrl;
+      if (useServerProxy) {
+        fetchFn = WM.ServerProxy.proxyFetch;
+        finalUrl = url;
+      } else {
+        fetchFn = fetch;
+        finalUrl = "/proxy/" + url;
+      }
+      try {
+        const r = await fetchFn(finalUrl, { method: "GET", headers });
+        const rawText = await r.text();
+        if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+          return { ok: false, error: "\u9152\u9986 /proxy/ \u672A\u542F\u7528\uFF0C\u8BF7\u5728 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true \u5E76\u91CD\u542F\u9152\u9986" };
+        }
+        if (!r.ok) return { ok: false, error: "HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200) };
+        let j;
+        try {
+          j = JSON.parse(rawText);
+        } catch (e) {
+          return { ok: false, error: "\u8FD4\u56DE\u975E JSON\uFF1A" + rawText.slice(0, 200) };
+        }
+        let models;
+        if (j.data) models = j.data.map((m) => m.id || m.name).filter(Boolean);
+        else if (j.models) models = j.models.map((m) => m.name || m.model).filter(Boolean);
+        else models = [];
+        if (!useServerProxy && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === "function") {
+          WM.ServerProxy.markAvailable();
+        }
+        return { ok: true, models };
+      } catch (e) {
+        return { ok: false, error: e.message || String(e) };
+      }
+    }
+    WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl, fetchModels };
   })();
 
   // src/config/vector-store.js
@@ -1584,7 +1632,56 @@ ${body}`,
         return { success: false, error: String(e.message || e), version: ver, resolve: WM._lastEmbedResolve, request: WM._lastEmbedReq };
       }
     }
-    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy };
+    async function fetchModels(settings) {
+      const s = settings || {};
+      const info = resolveEmbedUrl(s);
+      const base = normalizeBaseUrl(info.url || s.embeddingBaseUrl || s.baseUrl || "") || "";
+      if (!base) return { ok: false, error: "\u8BF7\u5148\u586B\u5199 Base URL\uFF08\u6216\u5728 LLM \u914D\u7F6E\u4E2D\u586B\u5199\uFF09" };
+      let url = base;
+      if (/\/v1\/embeddings$/i.test(url)) url = url.replace(/\/embeddings$/i, "/models");
+      else if (/\/v1\/?$/i.test(url)) url = url + "/models";
+      else if (/\/models$/.test(url)) {
+      } else url = url.replace(/\/embeddings.*$/, "") + "/models";
+      const key = info.apiKey || s.embeddingApiKey || s.apiKey || "";
+      const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
+      if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === "function") {
+        await WM.ServerProxy.detectProxy();
+      }
+      const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
+      let fetchFn, finalUrl;
+      if (useServerProxy) {
+        fetchFn = WM.ServerProxy.proxyFetch;
+        finalUrl = url;
+      } else {
+        fetchFn = fetch;
+        finalUrl = "/proxy/" + url;
+      }
+      try {
+        const r = await fetchFn(finalUrl, { method: "GET", headers });
+        const rawText = await r.text();
+        if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+          return { ok: false, error: "\u9152\u9986 /proxy/ \u672A\u542F\u7528\uFF0C\u8BF7\u5728 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true \u5E76\u91CD\u542F\u9152\u9986" };
+        }
+        if (!r.ok) return { ok: false, error: "HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200) };
+        let j;
+        try {
+          j = JSON.parse(rawText);
+        } catch (e) {
+          return { ok: false, error: "\u8FD4\u56DE\u975E JSON\uFF1A" + rawText.slice(0, 200) };
+        }
+        let models;
+        if (j.data) models = j.data.map((m) => m.id || m.name).filter(Boolean);
+        else if (j.models) models = j.models.map((m) => m.name || m.model).filter(Boolean);
+        else models = [];
+        if (!useServerProxy && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === "function") {
+          WM.ServerProxy.markAvailable();
+        }
+        return { ok: true, models };
+      } catch (e) {
+        return { ok: false, error: e.message || String(e) };
+      }
+    }
+    WM.EmbeddingClient = { PROVIDERS, embed, testConnection, normalizeBaseUrl, resolveEmbedUrl, applyVecProxy, fetchModels };
   })();
 
   // src/config/rerank-client.js
@@ -5585,7 +5682,13 @@ ${p.summary || ""}`.trim() });
           <label class="wm-row">Base URL<input id="llm-url" value="${escapeHtml(c.apiUrl)}" placeholder="https://api.openai.com/v1\u3001https://ark.cn-beijing.volces.com/api/v3\u3001https://api.deepseek.com/v1"/></label>
           <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u5382\u5BB6\u7684 Base URL \u5373\u53EF\uFF0C\u81EA\u52A8\u6309 OpenAI \u517C\u5BB9\u534F\u8BAE\u8BF7\u6C42\uFF08\u706B\u5C71\u5F15\u64CE\u586B <code>https://ark.cn-beijing.volces.com/api/v3</code>\uFF0CDeepSeek \u586B <code>https://api.deepseek.com/v1</code>\uFF09\u3002</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
-          <label class="wm-row">\u6A21\u578B\u540D<input id="llm-model" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro"/></label>
+          <label class="wm-row">\u6A21\u578B\u540D
+            <div style="display:flex;gap:4px;align-items:center">
+              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1"/>
+              <datalist id="llm-model-list">${(s.llmModelCache || []).map((m) => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
+              <button id="llm-model-refresh" class="wm-btn small" title="\u4ECE API \u62C9\u53D6\u53EF\u7528\u6A21\u578B\u5217\u8868">\u{1F504}</button>
+            </div>
+          </label>
           <label class="wm-row"><input type="checkbox" id="llm-deep" ${c.deepThinking ? "checked" : ""}/> \u6DF1\u5EA6\u601D\u8003\uFF08\u63A8\u7406\u6A21\u578B\uFF09</label>
           <div class="wm-hint" style="margin:-2px 0 4px">\u5F00\u542F\u540E\u6309\u6A21\u578B\u81EA\u52A8\u9002\u914D\u6DF1\u5EA6\u601D\u8003\u53C2\u6570\uFF1AOpenAI o \u7CFB\u5217\u7528 reasoning_effort\uFF1BDeepSeek reasoner \u8D70\u539F\u751F\u601D\u8003\u94FE\uFF1B\u8C46\u5305/Qwen \u601D\u8003\u6A21\u578B\u7528 thinking \u5757\u3002\u666E\u901A\u6A21\u578B\uFF08\u5982 gpt-4o\uFF09\u5F00\u542F\u65E0\u6548\uFF0C\u53EF\u653E\u5FC3\u7559\u5F00\u3002</div>
           <label class="wm-row">\u8F93\u51FA Token \u4E0A\u9650<input id="llm-maxtok" type="number" min="50" max="4000" step="50" value="${Number(c.maxTokens) || 700}" title="\u9650\u5236\u6A21\u578B\u8F93\u51FA\u957F\u5EA6\uFF0C\u6240\u6709\u529F\u80FD\u5171\u7528\u6B64\u4E0A\u9650"/> <span class="wm-hint" style="margin:0">\u6240\u6709\u529F\u80FD\u5171\u7528\u9ED8\u8BA4\u4E0A\u9650\uFF0C\u4E0B\u9762\u53EF\u5BF9\u6BCF\u4E2A\u4EFB\u52A1\u5355\u72EC\u8986\u76D6</span></label>
@@ -6064,6 +6167,76 @@ ${p.summary || ""}`.trim() });
       }
       const modelRefreshBtn = body.querySelector("#ig-model-refresh");
       if (modelRefreshBtn) modelRefreshBtn.onclick = () => refreshImageGenModels({ silent: false });
+      async function refreshLlmModels(opts) {
+        opts = opts || {};
+        const inputEl = body.querySelector("#llm-model");
+        const dataListEl = body.querySelector("#llm-model-list");
+        const btn = body.querySelector("#llm-model-refresh");
+        if (!inputEl || !WM.LLMClient || typeof WM.LLMClient.fetchModels !== "function") return { ok: false, error: "\u65E0\u6CD5\u5237\u65B0" };
+        syncPaneToSettings(body, s, "llm");
+        const wasDisabled = btn ? btn.disabled : false;
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "\u23F3";
+        }
+        try {
+          const r = await WM.LLMClient.fetchModels(s);
+          if (!r.ok) {
+            if (!opts.silent) toast("\u{1F504} LLM \u6A21\u578B\u5217\u8868\u5237\u65B0\u5931\u8D25\uFF1A" + (r.error || "\u672A\u77E5\u9519\u8BEF"));
+            return { ok: false, error: r.error };
+          }
+          const list = r.models || [];
+          s.llmModelCache = list;
+          if (dataListEl) dataListEl.innerHTML = list.map((m) => `<option value="${escapeHtml(m)}">`).join("");
+          if (!opts.silent) toast("\u{1F504} \u5DF2\u5237\u65B0 LLM \u6A21\u578B\u5217\u8868\uFF0C\u5171 " + list.length + " \u4E2A");
+          return { ok: true, count: list.length };
+        } catch (e) {
+          if (!opts.silent) toast("\u{1F504} LLM \u6A21\u578B\u5217\u8868\u5237\u65B0\u5F02\u5E38\uFF1A" + (e.message || String(e)));
+          return { ok: false, error: e.message || String(e) };
+        } finally {
+          if (btn) {
+            btn.disabled = wasDisabled;
+            btn.textContent = "\u{1F504}";
+          }
+        }
+      }
+      const llmModelRefreshBtn = body.querySelector("#llm-model-refresh");
+      if (llmModelRefreshBtn) llmModelRefreshBtn.onclick = () => refreshLlmModels({ silent: false });
+      async function refreshEmbModels(opts) {
+        opts = opts || {};
+        const inputEl = body.querySelector("#c-emb-model");
+        const dataListEl = body.querySelector("#emb-model-list");
+        const btn = body.querySelector("#emb-model-refresh");
+        if (!inputEl || !WM.EmbeddingClient || typeof WM.EmbeddingClient.fetchModels !== "function") return { ok: false, error: "\u65E0\u6CD5\u5237\u65B0" };
+        syncPaneToSettings(body, s, "vec");
+        const wasDisabled = btn ? btn.disabled : false;
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "\u23F3";
+        }
+        try {
+          const r = await WM.EmbeddingClient.fetchModels(s);
+          if (!r.ok) {
+            if (!opts.silent) toast("\u{1F504} \u5411\u91CF\u6A21\u578B\u5217\u8868\u5237\u65B0\u5931\u8D25\uFF1A" + (r.error || "\u672A\u77E5\u9519\u8BEF"));
+            return { ok: false, error: r.error };
+          }
+          const list = r.models || [];
+          s.embModelCache = list;
+          if (dataListEl) dataListEl.innerHTML = list.map((m) => `<option value="${escapeHtml(m)}">`).join("");
+          if (!opts.silent) toast("\u{1F504} \u5DF2\u5237\u65B0\u5411\u91CF\u6A21\u578B\u5217\u8868\uFF0C\u5171 " + list.length + " \u4E2A");
+          return { ok: true, count: list.length };
+        } catch (e) {
+          if (!opts.silent) toast("\u{1F504} \u5411\u91CF\u6A21\u578B\u5217\u8868\u5237\u65B0\u5F02\u5E38\uFF1A" + (e.message || String(e)));
+          return { ok: false, error: e.message || String(e) };
+        } finally {
+          if (btn) {
+            btn.disabled = wasDisabled;
+            btn.textContent = "\u{1F504}";
+          }
+        }
+      }
+      const embModelRefreshBtn = body.querySelector("#emb-model-refresh");
+      if (embModelRefreshBtn) embModelRefreshBtn.onclick = () => refreshEmbModels({ silent: false });
       async function refreshComfyWorkflows() {
         const wfSelect2 = body.querySelector("#ig-comfy-wf");
         if (!wfSelect2) return;
@@ -6412,7 +6585,13 @@ ${p.summary || ""}`.trim() });
       <label class="wm-row">\u72EC\u7ACB Base URL\uFF08\u53EF\u9009\uFF09<input id="c-emb-url" value="${s.embeddingBaseUrl}" placeholder="\u7559\u7A7A=\u81EA\u52A8\u7528 LLM \u5730\u5740\uFF1B\u5982 https://api.siliconflow.cn/v1"/></label>
       <div class="wm-hint">\u60F3\u7528\u72EC\u7ACB embedding \u670D\u52A1\u624D\u586B\uFF1A<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1</code><br/>\xB7 \u672C\u5730 Ollama\uFF1A<code>http://127.0.0.1:11434/v1</code><br/>\xB7 Gemini\uFF1A<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u590D\u7528 LLM \u65F6\u7559\u7A7A\uFF09"/></label>
-      <label class="wm-row">\u6A21\u578B<input id="c-emb-model" value="${s.embeddingModel}" placeholder="text-embedding-3-small"/></label>
+      <label class="wm-row">\u6A21\u578B
+        <div style="display:flex;gap:4px;align-items:center">
+          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1"/>
+          <datalist id="emb-model-list">${(s.embModelCache || []).map((m) => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
+          <button id="emb-model-refresh" class="wm-btn small" title="\u4ECE API \u62C9\u53D6\u53EF\u7528\u6A21\u578B\u5217\u8868">\u{1F504}</button>
+        </div>
+      </label>
       <div class="wm-divider"></div>
       <label class="wm-row"><input type="checkbox" id="c-vec-proxy" ${s.vecProxyEnabled !== false ? "checked" : ""}/> \u540C\u6E90\u4EE3\u7406\uFF08\u5907\u7528\uFF0C\u670D\u52A1\u7AEF\u4EE3\u7406\u4E0D\u53EF\u7528\u65F6\u751F\u6548\uFF09</label>
       <div class="wm-hint" style="margin:-2px 0 4px">${proxyAvail ? "\u670D\u52A1\u7AEF\u4EE3\u7406\u5DF2\u542F\u7528\uFF0C\u6B64\u9879\u4E0D\u9700\u8981\u3002\u4EC5\u5F53\u670D\u52A1\u7AEF\u4EE3\u7406\u4E0D\u53EF\u7528\u65F6\uFF0C\u624D\u4F1A\u7528\u540C\u6E90\u4EE3\u7406\u6539\u5199\u3002" : "\u5916\u7F51\u8BBF\u95EE\u9152\u9986\u65F6\uFF0C\u81EA\u52A8\u628A\u672C\u5730\u5730\u5740\u6539\u5199\u6210\u540C\u6E90\u4EE3\u7406 URL\uFF0C\u8D70 Caddy \u8F6C\u53D1\u5230\u5185\u7F51\u670D\u52A1\u3002\u672C\u5730\u8BBF\u95EE\u81EA\u52A8\u8DF3\u8FC7\u3002\u9700\u914D\u5408 Caddyfile \u7684 <code>/vec/* \u2192 11434</code> \u5206\u6D41\u3002"}</div>
@@ -6773,7 +6952,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "server-proxy-v2-force";
+  window.WarmMemo.version = "server-proxy-v2-models";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

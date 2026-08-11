@@ -243,5 +243,58 @@
     }
   }
 
-  WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl };
+  // 拉取模型列表：通过 /proxy/ 请求 /v1/models（OpenAI 兼容），供下拉框选择
+  async function fetchModels(settings) {
+    const s = settings || {};
+    const c = s.llmConfig || {};
+    const base = normalizeBaseUrl(c.apiUrl) || '';
+    if (!base) return { ok: false, error: '请先填写 Base URL' };
+    // 构造 /models 请求 URL（自适应 /v1、/api/v3 等格式）
+    let url;
+    if (/\/v\d+\/?$/.test(base)) url = base + '/models';
+    else if (/\/models$/.test(base)) url = base;
+    else url = base + '/v1/models';
+    const key = c.apiKey || '';
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
+    // 通过 /proxy/ 发送请求
+    if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
+      await WM.ServerProxy.detectProxy();
+    }
+    const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
+    let fetchFn, finalUrl;
+    if (useServerProxy) {
+      fetchFn = WM.ServerProxy.proxyFetch;
+      finalUrl = url;
+    } else {
+      fetchFn = fetch;
+      finalUrl = '/proxy/' + url;
+    }
+    try {
+      const r = await fetchFn(finalUrl, { method: 'GET', headers });
+      const rawText = await r.text();
+      if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+        return { ok: false, error: '酒馆 /proxy/ 未启用，请在 config.yaml 中设置 enableCorsProxy: true 并重启酒馆' };
+      }
+      if (!r.ok) return { ok: false, error: 'HTTP ' + r.status + '：' + rawText.slice(0, 200) };
+      let j;
+      try { j = JSON.parse(rawText); } catch (e) {
+        return { ok: false, error: '返回非 JSON：' + rawText.slice(0, 200) };
+      }
+      // OpenAI 兼容格式：{ data: [{ id: 'model-name' }] }
+      // Ollama /api/tags 格式：{ models: [{ name: 'model-name' }] }
+      let models;
+      if (j.data) models = j.data.map((m) => m.id || m.name).filter(Boolean);
+      else if (j.models) models = j.models.map((m) => m.name || m.model).filter(Boolean);
+      else models = [];
+      // 手动走 /proxy/ 成功 → 更新缓存
+      if (!useServerProxy && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === 'function') {
+        WM.ServerProxy.markAvailable();
+      }
+      return { ok: true, models };
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
+  }
+
+  WM.LLMClient = { complete, testConnection, resolveUrl, normalizeBaseUrl, fetchModels };
 })();

@@ -4,7 +4,7 @@
 
 // 构建版本标记：每次发布时同步修改，用于确认酒馆加载的是否为最新版
 window.WarmMemo = window.WarmMemo || {};
-window.WarmMemo.version = 'server-proxy-v2-force';
+window.WarmMemo.version = 'server-proxy-v2-models';
 
 import './config/settings.js';
 import './config/server-proxy.js';
