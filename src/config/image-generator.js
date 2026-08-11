@@ -116,6 +116,46 @@
     return await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
   }
 
+  // ── 将 base64 图片保存为文件（借鉴酒馆原生 SD 模块的 saveBase64AsFile）──
+  //   原理：把 base64 数据 POST 到 /api/images/upload，酒馆后端保存为文件并返回文件路径 URL。
+  //   这样消息里存的是文件 URL（几十字节），而非几 MB 的 base64 data URI。
+  //   直接把 base64 嵌入消息文本会导致酒馆 re-render 时浏览器解析超大字符串 → 卡死。
+  //   参数：
+  //     dataUri: 'data:image/png;base64,xxxx...' 或纯 base64 字符串
+  //     subFolder: 子目录（角色名），默认 'WarmMemo'
+  //     ext: 文件扩展名（png/jpg/webp），从 dataUri 自动推断
+  //   返回：文件 URL 路径（如 '/user/images/WarmMemo/2026-08-11@20x30x00.png'）
+  async function saveBase64AsFile(dataUri, subFolder, ext) {
+    let base64Data = dataUri;
+    let format = ext || 'png';
+    // 从 data URI 中提取 base64 数据和格式
+    const m = /^data:image\/([a-zA-Z0-9]+);base64,(.+)$/.exec(dataUri);
+    if (m) {
+      format = m[1] === 'jpeg' ? 'jpg' : m[1];
+      base64Data = m[2];
+    }
+    const fileName = 'wm_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const token = await getCsrfToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['X-CSRF-Token'] = token;
+    const res = await fetch('/api/images/upload', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        image: base64Data,
+        format: format,
+        ch_name: subFolder || 'WarmMemo',
+        filename: fileName,
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error('图片保存失败（/api/images/upload HTTP ' + res.status + '）：' + t.slice(0, 200));
+    }
+    const data = await res.json();
+    return data.path; // 文件 URL
+  }
+
   // 提示词清洗：LLM 经常输出「叙事/解释/元思考」文字（"也许我们可以…""考虑到…""另一种可能…"），
   // 这些根本不是画面描述，会被直接塞给生图模型的 CLIP，浪费 token 且污染提示词。
   // 处理：
@@ -848,15 +888,37 @@
   //   separate → 创建独立 system 楼层（同样用标记包裹，不进上下文）
   // 视觉增强：
   //   - 给图片外层包 <a href target="_blank">，点击新标签页看大图（像酒馆终端那样无限制查看原图）
-  //   - 给 <img> 加 inline style：取消 max-width/max-height 限制，保证显示完整且清晰
+  //   - 给 <img> 加 inline style：合理限制显示尺寸，保证清晰且不撑爆页面
+  // —— 关键修复：base64 data URI 必须先存为文件，否则几 MB 的 base64 嵌入消息文本会让酒馆卡死 ——
   async function insertImage(imageUrl, messageId, settings) {
     const ig = settings.imageGen || {};
     const alt = '温记生图 ' + new Date().toLocaleTimeString('zh-CN');
-    const safeUrl = String(imageUrl || '').replace(/"/g, '%22').replace(/'/g, '%27');
-    // a 包 img：点击新标签页打开原图；img 样式去掉宽度限制、保持比例、加圆角视觉
-    const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="点击新标签页查看原图（无限制大小）">'
+
+    // 如果是 base64 data URI，先存为文件再使用文件 URL
+    // 酒馆原生 SD 模块就是这么做的（saveBase64AsFile → /api/images/upload）
+    let imgSrc = imageUrl;
+    if (/^data:image\//i.test(imageUrl)) {
+      try {
+        // 用当前角色名做子目录（跟酒馆 SD 模块一致），获取不到则用 'WarmMemo'
+        let charName = 'WarmMemo';
+        try {
+          const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+          if (ctx && ctx.name2) charName = ctx.name2;
+        } catch (e) {}
+        imgSrc = await saveBase64AsFile(imageUrl, charName);
+        try { console.log('[WarmMemo][image-gen] 图片已保存为文件：' + imgSrc); } catch (_) {}
+      } catch (e) {
+        // 保存失败时回退到 base64（但加 console 警告）
+        console.warn('[WarmMemo][image-gen] 图片保存为文件失败，回退 base64（可能导致卡顿）：', e.message);
+        imgSrc = imageUrl;
+      }
+    }
+
+    const safeUrl = String(imgSrc || '').replace(/"/g, '%22').replace(/'/g, '%27');
+    // a 包 img：点击新标签页打开原图；img 样式限制最大高度避免撑爆页面
+    const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="点击新标签页查看原图">'
       + '<img src="' + safeUrl + '" alt="' + alt + '"'
-      + ' style="max-width:100%!important;max-height:none!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1"'
+      + ' style="max-width:100%!important;max-height:70vh!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1"'
       + ' /></a>';
     const wrapped = IMG_START + html + IMG_END;
     if (ig.displayMode === 'separate') {

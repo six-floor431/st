@@ -3465,6 +3465,35 @@ ${p.summary || ""}`.trim() });
       if (token) headers["X-CSRF-Token"] = token;
       return await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
     }
+    async function saveBase64AsFile(dataUri, subFolder, ext) {
+      let base64Data = dataUri;
+      let format = ext || "png";
+      const m = /^data:image\/([a-zA-Z0-9]+);base64,(.+)$/.exec(dataUri);
+      if (m) {
+        format = m[1] === "jpeg" ? "jpg" : m[1];
+        base64Data = m[2];
+      }
+      const fileName = "wm_" + (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const token = await getCsrfToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["X-CSRF-Token"] = token;
+      const res = await fetch("/api/images/upload", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          image: base64Data,
+          format,
+          ch_name: subFolder || "WarmMemo",
+          filename: fileName
+        })
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error("\u56FE\u7247\u4FDD\u5B58\u5931\u8D25\uFF08/api/images/upload HTTP " + res.status + "\uFF09\uFF1A" + t.slice(0, 200));
+      }
+      const data = await res.json();
+      return data.path;
+    }
     function sanitizePrompt(raw) {
       if (!raw) return "";
       let s = String(raw);
@@ -4113,8 +4142,27 @@ ${p.summary || ""}`.trim() });
     async function insertImage(imageUrl, messageId, settings) {
       const ig = settings.imageGen || {};
       const alt = "\u6E29\u8BB0\u751F\u56FE " + (/* @__PURE__ */ new Date()).toLocaleTimeString("zh-CN");
-      const safeUrl = String(imageUrl || "").replace(/"/g, "%22").replace(/'/g, "%27");
-      const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="\u70B9\u51FB\u65B0\u6807\u7B7E\u9875\u67E5\u770B\u539F\u56FE\uFF08\u65E0\u9650\u5236\u5927\u5C0F\uFF09"><img src="' + safeUrl + '" alt="' + alt + '" style="max-width:100%!important;max-height:none!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1" /></a>';
+      let imgSrc = imageUrl;
+      if (/^data:image\//i.test(imageUrl)) {
+        try {
+          let charName = "WarmMemo";
+          try {
+            const ctx = window.SillyTavern && window.SillyTavern.getContext && window.SillyTavern.getContext();
+            if (ctx && ctx.name2) charName = ctx.name2;
+          } catch (e) {
+          }
+          imgSrc = await saveBase64AsFile(imageUrl, charName);
+          try {
+            console.log("[WarmMemo][image-gen] \u56FE\u7247\u5DF2\u4FDD\u5B58\u4E3A\u6587\u4EF6\uFF1A" + imgSrc);
+          } catch (_) {
+          }
+        } catch (e) {
+          console.warn("[WarmMemo][image-gen] \u56FE\u7247\u4FDD\u5B58\u4E3A\u6587\u4EF6\u5931\u8D25\uFF0C\u56DE\u9000 base64\uFF08\u53EF\u80FD\u5BFC\u81F4\u5361\u987F\uFF09\uFF1A", e.message);
+          imgSrc = imageUrl;
+        }
+      }
+      const safeUrl = String(imgSrc || "").replace(/"/g, "%22").replace(/'/g, "%27");
+      const html = '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" data-wm-img-link="1" title="\u70B9\u51FB\u65B0\u6807\u7B7E\u9875\u67E5\u770B\u539F\u56FE"><img src="' + safeUrl + '" alt="' + alt + '" style="max-width:100%!important;max-height:70vh!important;width:auto!important;height:auto!important;display:block;margin:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)" data-wm-img="1" /></a>';
       const wrapped = IMG_START + html + IMG_END;
       if (ig.displayMode === "separate") {
         await createChatMessages([{ role: "system", message: wrapped, is_hidden: false }], { refresh: "affected" });
@@ -7127,7 +7175,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "layout-fix-v1";
+  window.WarmMemo.version = "img-fix-v1";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();
