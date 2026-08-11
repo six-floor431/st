@@ -5701,8 +5701,8 @@ ${p.summary || ""}`.trim() });
           <div class="wm-hint">\u76F4\u63A5\u586B\u4EFB\u610F\u5382\u5BB6\u7684 Base URL \u5373\u53EF\uFF0C\u81EA\u52A8\u6309 OpenAI \u517C\u5BB9\u534F\u8BAE\u8BF7\u6C42\uFF08\u706B\u5C71\u5F15\u64CE\u586B <code>https://ark.cn-beijing.volces.com/api/v3</code>\uFF0CDeepSeek \u586B <code>https://api.deepseek.com/v1</code>\uFF09\u3002</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">\u6A21\u578B\u540D
-            <div style="display:flex;gap:4px;align-items:center">
-              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1"/>
+            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="\u5982 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1;min-width:120px"/>
               <datalist id="llm-model-list">${(s.llmModelCache || []).map((m) => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
               <button id="llm-model-refresh" class="wm-btn small" title="\u4ECE API \u62C9\u53D6\u53EF\u7528\u6A21\u578B\u5217\u8868">\u{1F504}</button>
             </div>
@@ -6296,15 +6296,14 @@ ${p.summary || ""}`.trim() });
         }
         const overlay = document.createElement("div");
         overlay.className = "wm-modal-mask wm-wf-editor-mask";
-        overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box;background:rgba(15,15,13,.4);isolation:isolate";
         const popup = document.createElement("div");
         popup.className = "wm-wf-editor-popup";
-        popup.style.cssText = "background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden";
+        popup.style.cssText = "background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden";
         const phStatus = ig.PLACEHOLDER_DEFS.map(
           (p) => `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">\u274C <code>{{${p.key}}}</code> ${p.label}</span>`
         ).join("");
         popup.innerHTML = `
-        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <span style="font-weight:600;font-size:14px">\u270F\uFE0F \u5DE5\u4F5C\u6D41\u7F16\u8F91\u5668 \u2014 ${escapeHtml(title)}</span>
           <button id="wf-close" style="background:none;border:none;color:var(--SmartThemeBodyColor,#ccc);font-size:18px;cursor:pointer">\u2715</button>
         </div>
@@ -6387,12 +6386,11 @@ ${p.summary || ""}`.trim() });
         ].map((o) => `<option value="${o.v}" ${ig.promptStyle === o.v ? "selected" : ""}>${o.label}</option>`).join("");
         const overlay = document.createElement("div");
         overlay.className = "wm-modal-mask wm-free-img-mask";
-        overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;background:rgba(15,15,13,.4)";
         const popup = document.createElement("div");
         popup.className = "wm-free-img-popup";
-        popup.style.cssText = "background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17";
+        popup.style.cssText = "background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17";
         popup.innerHTML = `
-        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none">
+        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none;flex-wrap:wrap;gap:8px">
           <span style="font-weight:600;font-size:15px">\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE <span style="font-size:12px;color:#8a8a80;font-weight:400">\uFF08\u4E0D\u7ECF\u8FC7 LLM\uFF0C\u81EA\u5DF1\u5199\u63D0\u793A\u8BCD\u51FA\u56FE\uFF09</span></span>
           <button id="fi-close" style="background:none;border:none;color:#1a1a17;font-size:18px;cursor:pointer;padding:4px 8px">\u2715</button>
         </div>
@@ -6539,29 +6537,32 @@ ${p.summary || ""}`.trim() });
       const wfNewBtn = body.querySelector("#ig-comfy-new");
       if (wfNewBtn) wfNewBtn.onclick = () => openComfyWorkflowEditor(null);
       const wfImportBtn = body.querySelector("#ig-comfy-import");
-      const wfFileInput = body.querySelector("#ig-comfy-file");
-      if (wfImportBtn && wfFileInput) {
-        wfImportBtn.onclick = () => wfFileInput.click();
-        wfFileInput.onchange = async (e) => {
-          const file = e.target.files && e.target.files[0];
-          if (!file) return;
-          try {
-            const text = await file.text();
-            JSON.parse(text);
-            const baseName = file.name.replace(/\.json$/i, "");
-            const ig = WM.ImageGen;
-            if (!ig) return;
-            await ig.saveComfyWorkflow(baseName, text);
-            toast("\u{1F3A8} \u5DF2\u5BFC\u5165\u5DE5\u4F5C\u6D41\uFF1A" + file.name);
-            await refreshComfyWorkflows();
-            const fullName = baseName.toLowerCase().endsWith(".json") ? baseName : baseName + ".json";
-            if (wfSelect) wfSelect.value = fullName;
-            if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
-            openComfyWorkflowEditor(fullName);
-          } catch (e2) {
-            toast("\u{1F3A8} \u5BFC\u5165\u5931\u8D25\uFF1A" + (e2.message || String(e2)));
-          }
-          wfFileInput.value = "";
+      if (wfImportBtn) {
+        wfImportBtn.onclick = () => {
+          const inp = document.createElement("input");
+          inp.type = "file";
+          inp.accept = ".json";
+          inp.onchange = async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            try {
+              const text = await file.text();
+              JSON.parse(text);
+              const baseName = file.name.replace(/\.json$/i, "");
+              const ig = WM.ImageGen;
+              if (!ig) return;
+              await ig.saveComfyWorkflow(baseName, text);
+              toast("\u{1F3A8} \u5DF2\u5BFC\u5165\u5DE5\u4F5C\u6D41\uFF1A" + file.name);
+              await refreshComfyWorkflows();
+              const fullName = baseName.toLowerCase().endsWith(".json") ? baseName : baseName + ".json";
+              if (wfSelect) wfSelect.value = fullName;
+              if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+              openComfyWorkflowEditor(fullName);
+            } catch (err) {
+              toast("\u{1F3A8} \u5BFC\u5165\u5931\u8D25\uFF1A" + (err.message || String(err)));
+            }
+          };
+          inp.click();
         };
       }
       const wfRenameBtn = body.querySelector("#ig-comfy-rename");
@@ -6760,8 +6761,8 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">\u60F3\u7528\u72EC\u7ACB embedding \u670D\u52A1\u624D\u586B\uFF1A<br/>\xB7 \u7845\u57FA\u6D41\u52A8\u7B49\u4E91\u7AEF\uFF1A<code>https://api.siliconflow.cn/v1</code><br/>\xB7 \u672C\u5730 Ollama\uFF1A<code>http://127.0.0.1:11434/v1</code><br/>\xB7 Gemini\uFF1A<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="\u53EF\u9009\uFF08\u590D\u7528 LLM \u65F6\u7559\u7A7A\uFF09"/></label>
       <label class="wm-row">\u6A21\u578B
-        <div style="display:flex;gap:4px;align-items:center">
-          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1"/>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1;min-width:120px"/>
           <datalist id="emb-model-list">${(s.embModelCache || []).map((m) => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
           <button id="emb-model-refresh" class="wm-btn small" title="\u4ECE API \u62C9\u53D6\u53EF\u7528\u6A21\u578B\u5217\u8868">\u{1F504}</button>
         </div>
@@ -6835,8 +6836,8 @@ ${p.summary || ""}`.trim() });
       <div class="wm-h">\u{1F3A8} \u751F\u56FE\u914D\u7F6E</div>
       <div class="wm-hint">AI \u6BCF\u6B21\u56DE\u590D\u540E\uFF0C\u81EA\u52A8\u8C03\u7528 LLM \u628A\u56DE\u590D\u6574\u5408\u6210\u753B\u9762\u63D0\u793A\u8BCD\uFF0C\u518D\u9001\u751F\u56FE\u540E\u7AEF\u51FA\u56FE\u3002<b>\u56FE\u7247\u4E0D\u8FDB\u5BF9\u8BDD\u4E0A\u4E0B\u6587</b>\uFF08\u7528\u6807\u8BB0\u5305\u88F9\uFF0C\u6CE8\u5165\u65F6\u5254\u9664\uFF09\u3002\u590D\u7528\u4E0A\u65B9\u300CLLM \u8C03\u7528\u300D\u914D\u7F6E\u505A\u63D0\u793A\u8BCD\u6574\u5408\uFF0C\u65E0\u9700\u989D\u5916\u914D LLM\u3002</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
-        <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\uFF08\u5BF9\u6700\u65B0 AI \u6D88\u606F\u51FA\u56FE\uFF0C\u8FDE\u70B9\u53EF\u6392\u961F\u591A\u5F20\uFF09</button>
-        <button id="ig-free-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE\uFF08\u81EA\u5DF1\u5199\u63D0\u793A\u8BCD\u51FA\u56FE\uFF0C\u4E0D\u5F71\u54CD\u5BF9\u8BDD\uFF09</button>
+        <button id="ig-unlimited-top" class="wm-btn" style="flex:1 1 200px;background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\uFF08\u5BF9\u6700\u65B0 AI \u6D88\u606F\u51FA\u56FE\uFF0C\u8FDE\u70B9\u53EF\u6392\u961F\u591A\u5F20\uFF09</button>
+        <button id="ig-free-gen" class="wm-btn" style="flex:1 1 200px;background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE\uFF08\u81EA\u5DF1\u5199\u63D0\u793A\u8BCD\u51FA\u56FE\uFF0C\u4E0D\u5F71\u54CD\u5BF9\u8BDD\uFF09</button>
       </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled ? "checked" : ""}/> \u542F\u7528\u751F\u56FE\u529F\u80FD</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger ? "checked" : ""}/> \u81EA\u52A8\u89E6\u53D1\uFF08AI \u56DE\u590D\u843D\u5E93\u540E\u81EA\u52A8\u751F\u56FE\uFF1B\u5173\u95ED\u5219\u4EC5\u624B\u52A8\u70B9\u300C\u{1F3A8} \u7ACB\u5373\u751F\u56FE\u300D\u6309\u94AE\uFF09</label>
@@ -6848,8 +6849,8 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">${isCloud ? "\u4E91\u7AEF OpenAI \u517C\u5BB9\u7AEF\u70B9\u7684 BaseURL\uFF0C\u81EA\u52A8\u62FC\u63A5\u4E0B\u65B9\u7684 API \u8DEF\u5F84\u3002" : isComfy ? "ComfyUI \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 8188\u3002\u901A\u8FC7\u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u8F6C\u53D1\uFF08<code>/api/sd/comfy/*</code>\uFF09\uFF0C\u65E0\u9700\u5F00 CORS\u3002" : "SD WebUI (AUTOMATIC1111) \u670D\u52A1\u5730\u5740\uFF0C\u9ED8\u8BA4\u7AEF\u53E3 7860\u3002\u901A\u8FC7\u9152\u9986\u670D\u52A1\u7AEF\u4EE3\u7406\u8F6C\u53D1\uFF08<code>/api/sd/*</code>\uFF09\uFF0C\u65E0\u9700\u5F00 CORS\u3002"}</div>
       <label class="wm-row">API Key<input id="ig-key" type="password" value="${escapeHtml(ig.apiKey || "")}" placeholder="${isCloud ? "sk-...\uFF08\u4E91\u7AEF\u5FC5\u586B\uFF09" : "\u672C\u5730\u901A\u5E38\u7559\u7A7A"}"/></label>
       <label class="wm-row" style="flex-direction:column;align-items:stretch">\u6A21\u578B / Checkpoint
-        ${isCloud ? `<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="\u5982 Kwai-Kolors/Kolors"/>` : `<div style="display:flex;gap:6px;width:100%;margin-top:4px">
-              <select id="ig-model" style="flex:1">
+        ${isCloud ? `<input id="ig-model" value="${escapeHtml(ig.model || "")}" placeholder="\u5982 Kwai-Kolors/Kolors"/>` : `<div style="display:flex;gap:6px;width:100%;margin-top:4px;flex-wrap:wrap">
+              <select id="ig-model" style="flex:1;min-width:120px">
                 ${Array.isArray(ig.models) && ig.models.length ? `<option value="">\uFF08\u8BF7\u9009\u62E9\u4E00\u4E2A\u6A21\u578B\uFF09</option>` + ig.models.map((m) => {
         const val = typeof m === "string" ? m : m && m.value ? m.value : "";
         const lab = typeof m === "string" ? m : m && m.label ? m.label : val;
@@ -6906,8 +6907,8 @@ ${p.summary || ""}`.trim() });
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI \u5DE5\u4F5C\u6D41</div>
       <div class="wm-hint">\u4ECE ComfyUI\u300CSave (API Format)\u300D\u5BFC\u51FA\u7684 JSON \u5373\u53EF\u7528\u3002\u5360\u4F4D\u7B26\uFF1A<code>{{prompt}}</code> \u6216 <code>"%prompt%"</code>\uFF08\u7B49\u4EF7\uFF09\u3002\u7559\u7A7A\u7528\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\uFF08\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09\u3002</div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center">
-        <select id="ig-comfy-wf" style="flex:1;min-width:180px">
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+        <select id="ig-comfy-wf" style="flex:1;min-width:120px">
           <option value="">\uFF08\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\xB7\u81EA\u52A8\u68C0\u6D4B\u6A21\u578B\u7C7B\u578B\uFF09</option>
           ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
         const name = typeof wf === "string" ? wf : wf && wf.name ? wf.name : "";
@@ -6923,7 +6924,6 @@ ${p.summary || ""}`.trim() });
         <button id="ig-comfy-rename" class="wm-btn small" title="\u91CD\u547D\u540D\u5F53\u524D\u5DE5\u4F5C\u6D41">\u6539\u540D</button>
         <button id="ig-comfy-delete" class="wm-btn small" title="\u5220\u9664\u5F53\u524D\u5DE5\u4F5C\u6D41">\u{1F5D1}\uFE0F \u5220\u9664</button>
       </div>
-      <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
       <div class="wm-hint" style="margin-top:4px">\u4E0E\u9152\u9986\u539F\u751F SD \u6A21\u5757\u4E92\u901A\u3002\u9009\u300C\u5185\u7F6E\u9ED8\u8BA4\u300D\u4F1A\u6839\u636E\u6A21\u578B\u540D\u81EA\u52A8\u5207\u6362 Checkpoint/UNet \u5DE5\u4F5C\u6D41\u3002</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">\u{1F4DD} \u9AD8\u7EA7\uFF1A\u5185\u8054\u5DE5\u4F5C\u6D41 JSON\uFF08\u76F4\u63A5\u7C98\u8D34\uFF0C\u4F18\u5148\u7EA7\u9AD8\u4E8E\u4E0A\u65B9\u4E0B\u62C9\u6846\uFF09</summary>
@@ -7127,7 +7127,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "server-proxy-v2-models";
+  window.WarmMemo.version = "layout-fix-v1";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

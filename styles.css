@@ -361,6 +361,8 @@
   border-color: var(--wm-ink);
 }
 .wm-btn.primary:hover { background: var(--wm-ink-soft); }
+/* 小号按钮（刷新/编辑/导入等） */
+.wm-btn.small { padding: 4px 10px; font-size: 12px; min-height: 32px; flex: 0 0 auto; }
 
 .wm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
@@ -426,6 +428,31 @@
 .wm-graph circle { transition: r .12s, fill .12s; }
 .wm-graph circle:hover { fill: var(--wm-seal); }
 .wm-weight { color: var(--wm-seal); letter-spacing: -1px; }
+
+/* 补充：rel-graph.js 运行时注入的样式在手机端需要适配高度 */
+@media (max-width: 768px) {
+  .wm-graph-wrap { height: 280px !important; }
+}
+@media (max-width: 480px) {
+  .wm-graph-wrap { height: 220px !important; }
+}
+
+/* 状态消息（多个面板共用） */
+.wm-status { font-size: 12px; color: var(--wm-ink-faint); margin: 4px 0; line-height: 1.5; min-height: 0; }
+.wm-status:empty { display: none; }
+
+/* 记忆项头部（标签 + 时间戳行） */
+.wm-item-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+
+/* 标题副文本 */
+.wm-h-sub { font-size: 12px; color: var(--wm-ink-faint); font-weight: 400; letter-spacing: 0; margin-left: 4px; }
+
+/* Ghost 按钮（调试面板用） */
+.wm-btn.wm-btn-ghost { background: transparent; border-color: var(--wm-line); color: var(--wm-ink-soft); }
+.wm-btn.wm-btn-ghost:hover { background: rgba(43,43,40,.06); }
+
+/* 调试日志时间戳 */
+.wm-debug-time { color: var(--wm-ink-faint); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
 
 /* ============================================================
  * 剧情线：时间轴（最新在上，左时间 / 右内容）
@@ -1029,7 +1056,7 @@
     font-size: 12px !important;
   }
   /* 工作流管理按钮在手机端：两行排列 */
-  .wm-row .wm-btn.small {
+  .wm-btn.small {
     flex: 1 1 calc(50% - 6px);
     min-width: 0;
   }

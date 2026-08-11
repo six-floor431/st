@@ -987,8 +987,8 @@
           <div class="wm-hint">直接填任意厂家的 Base URL 即可，自动按 OpenAI 兼容协议请求（火山引擎填 <code>https://ark.cn-beijing.volces.com/api/v3</code>，DeepSeek 填 <code>https://api.deepseek.com/v1</code>）。</div>
           <label class="wm-row">API Key<input id="llm-key" type="password" value="${escapeHtml(c.apiKey)}" placeholder="sk-..."/></label>
           <label class="wm-row">模型名
-            <div style="display:flex;gap:4px;align-items:center">
-              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1"/>
+            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+              <input id="llm-model" list="llm-model-list" value="${escapeHtml(c.model)}" placeholder="如 gpt-4o-mini / deepseek-chat / doubao-pro" style="flex:1;min-width:120px"/>
               <datalist id="llm-model-list">${(s.llmModelCache||[]).map(m=>`<option value="${escapeHtml(m)}">`).join('')}</datalist>
               <button id="llm-model-refresh" class="wm-btn small" title="从 API 拉取可用模型列表">🔄</button>
             </div>
@@ -1589,16 +1589,16 @@
       // 构建弹窗
       const overlay = document.createElement('div');
       overlay.className = 'wm-modal-mask wm-wf-editor-mask';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box;background:rgba(15,15,13,.4);isolation:isolate';
+      // 不用内联 padding/max-height，依赖 .wm-modal-mask CSS 类（含 safe-area-inset + dvh 计算）
       const popup = document.createElement('div');
       popup.className = 'wm-wf-editor-popup';
-      popup.style.cssText = 'background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden';
+      popup.style.cssText = 'background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden';
       // 占位符检测 HTML
       const phStatus = ig.PLACEHOLDER_DEFS.map((p) =>
         `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">❌ <code>{{${p.key}}}</code> ${p.label}</span>`
       ).join('');
       popup.innerHTML = `
-        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--SmartThemeBorderColor,#333);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <span style="font-weight:600;font-size:14px">✏️ 工作流编辑器 — ${escapeHtml(title)}</span>
           <button id="wf-close" style="background:none;border:none;color:var(--SmartThemeBodyColor,#ccc);font-size:18px;cursor:pointer">✕</button>
         </div>
@@ -1681,15 +1681,14 @@
         { v: 'ink', label: '东方水墨' },
       ].map((o) => `<option value="${o.v}" ${ig.promptStyle===o.v?'selected':''}>${o.label}</option>`).join('');
 
-      // 构建弹窗（使用 .wm-modal-mask 类，手机端兼容）
+      // 构建弹窗（依赖 .wm-modal-mask CSS 类，含 safe-area-inset + dvh 计算）
       const overlay = document.createElement('div');
       overlay.className = 'wm-modal-mask wm-free-img-mask';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;background:rgba(15,15,13,.4)';
       const popup = document.createElement('div');
       popup.className = 'wm-free-img-popup';
-      popup.style.cssText = 'background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17';
+      popup.style.cssText = 'background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17';
       popup.innerHTML = `
-        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none">
+        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none;flex-wrap:wrap;gap:8px">
           <span style="font-weight:600;font-size:15px">🖌️ 自由生图 <span style="font-size:12px;color:#8a8a80;font-weight:400">（不经过 LLM，自己写提示词出图）</span></span>
           <button id="fi-close" style="background:none;border:none;color:#1a1a17;font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
         </div>
@@ -1848,37 +1847,40 @@
     const wfNewBtn = body.querySelector('#ig-comfy-new');
     if (wfNewBtn) wfNewBtn.onclick = () => openComfyWorkflowEditor(null);
 
-    // 导入文件按钮
+    // 导入文件按钮 — 动态创建 input（不挂载到 DOM），避免 click 事件冒泡到 body
+    // 触发酒馆 clipboardService 全局监听器导致 "Canceled: Canceled" 控制台错误
     const wfImportBtn = body.querySelector('#ig-comfy-import');
-    const wfFileInput = body.querySelector('#ig-comfy-file');
-    if (wfImportBtn && wfFileInput) {
-      wfImportBtn.onclick = () => wfFileInput.click();
-      wfFileInput.onchange = async (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        try {
-          const text = await file.text();
-          // 验证 JSON
-          JSON.parse(text);
-          // 用文件名（去掉 .json）作为工作流名
-          const baseName = file.name.replace(/\.json$/i, '');
-          // 打开编辑器让用户确认/修改
-          const ig = WM.ImageGen;
-          if (!ig) return;
-          // 先保存到后端
-          await ig.saveComfyWorkflow(baseName, text);
-          toast('🎨 已导入工作流：' + file.name);
-          await refreshComfyWorkflows();
-          const fullName = baseName.toLowerCase().endsWith('.json') ? baseName : baseName + '.json';
-          if (wfSelect) wfSelect.value = fullName;
-          if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
-          // 打开编辑器让用户调整占位符
-          openComfyWorkflowEditor(fullName);
-        } catch (e) {
-          toast('🎨 导入失败：' + (e.message || String(e)));
-        }
-        // 清空 file input 允许重复导入同一文件
-        wfFileInput.value = '';
+    if (wfImportBtn) {
+      wfImportBtn.onclick = () => {
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.json';
+        inp.onchange = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            // 验证 JSON
+            JSON.parse(text);
+            // 用文件名（去掉 .json）作为工作流名
+            const baseName = file.name.replace(/\.json$/i, '');
+            // 打开编辑器让用户确认/修改
+            const ig = WM.ImageGen;
+            if (!ig) return;
+            // 先保存到后端
+            await ig.saveComfyWorkflow(baseName, text);
+            toast('🎨 已导入工作流：' + file.name);
+            await refreshComfyWorkflows();
+            const fullName = baseName.toLowerCase().endsWith('.json') ? baseName : baseName + '.json';
+            if (wfSelect) wfSelect.value = fullName;
+            if (s.imageGen) s.imageGen.comfyWorkflowName = fullName;
+            // 打开编辑器让用户调整占位符
+            openComfyWorkflowEditor(fullName);
+          } catch (err) {
+            toast('🎨 导入失败：' + (err.message || String(err)));
+          }
+        };
+        inp.click();
       };
     }
 
@@ -2072,8 +2074,8 @@
       <div class="wm-hint">想用独立 embedding 服务才填：<br/>· 硅基流动等云端：<code>https://api.siliconflow.cn/v1</code><br/>· 本地 Ollama：<code>http://127.0.0.1:11434/v1</code><br/>· Gemini：<code>https://generativelanguage.googleapis.com/v1beta</code></div>
       <label class="wm-row">API Key<input id="c-emb-key" type="password" value="${s.embeddingApiKey}" placeholder="可选（复用 LLM 时留空）"/></label>
       <label class="wm-row">模型
-        <div style="display:flex;gap:4px;align-items:center">
-          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1"/>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <input id="c-emb-model" list="emb-model-list" value="${s.embeddingModel}" placeholder="text-embedding-3-small" style="flex:1;min-width:120px"/>
           <datalist id="emb-model-list">${(s.embModelCache||[]).map(m=>`<option value="${escapeHtml(m)}">`).join('')}</datalist>
           <button id="emb-model-refresh" class="wm-btn small" title="从 API 拉取可用模型列表">🔄</button>
         </div>
@@ -2157,8 +2159,8 @@
       <div class="wm-h">🎨 生图配置</div>
       <div class="wm-hint">AI 每次回复后，自动调用 LLM 把回复整合成画面提示词，再送生图后端出图。<b>图片不进对话上下文</b>（用标记包裹，注入时剔除）。复用上方「LLM 调用」配置做提示词整合，无需额外配 LLM。</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
-        <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">🎨 无限制立即生图（对最新 AI 消息出图，连点可排队多张）</button>
-        <button id="ig-free-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">🖌️ 自由生图（自己写提示词出图，不影响对话）</button>
+        <button id="ig-unlimited-top" class="wm-btn" style="flex:1 1 200px;background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">🎨 无限制立即生图（对最新 AI 消息出图，连点可排队多张）</button>
+        <button id="ig-free-gen" class="wm-btn" style="flex:1 1 200px;background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">🖌️ 自由生图（自己写提示词出图，不影响对话）</button>
       </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled?'checked':''}/> 启用生图功能</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger?'checked':''}/> 自动触发（AI 回复落库后自动生图；关闭则仅手动点「🎨 立即生图」按钮）</label>
@@ -2172,8 +2174,8 @@
       <label class="wm-row" style="flex-direction:column;align-items:stretch">模型 / Checkpoint
         ${(isCloud)
           ? `<input id="ig-model" value="${escapeHtml(ig.model||'')}" placeholder="如 Kwai-Kolors/Kolors"/>`
-          : `<div style="display:flex;gap:6px;width:100%;margin-top:4px">
-              <select id="ig-model" style="flex:1">
+          : `<div style="display:flex;gap:6px;width:100%;margin-top:4px;flex-wrap:wrap">
+              <select id="ig-model" style="flex:1;min-width:120px">
                 ${(Array.isArray(ig.models) && ig.models.length)
                   ? `<option value="">（请选择一个模型）</option>`
                     + ig.models.map((m) => {
@@ -2237,8 +2239,8 @@
       ${isComfy ? `<div class="wm-divider"></div>
       <div class="wm-h" style="margin-top:0">ComfyUI 工作流</div>
       <div class="wm-hint">从 ComfyUI「Save (API Format)」导出的 JSON 即可用。占位符：<code>{{prompt}}</code> 或 <code>"%prompt%"</code>（等价）。留空用内置默认工作流（自动检测模型类型）。</div>
-      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center">
-        <select id="ig-comfy-wf" style="flex:1;min-width:180px">
+      <div style="display:flex;gap:6px;width:100%;margin-top:6px;align-items:center;flex-wrap:wrap">
+        <select id="ig-comfy-wf" style="flex:1;min-width:120px">
           <option value="">（内置默认工作流·自动检测模型类型）</option>
           ${(Array.isArray(ig.comfyWorkflowList) ? ig.comfyWorkflowList : []).map((wf) => {
             const name = typeof wf === 'string' ? wf : (wf && wf.name) ? wf.name : '';
@@ -2254,7 +2256,6 @@
         <button id="ig-comfy-rename" class="wm-btn small" title="重命名当前工作流">改名</button>
         <button id="ig-comfy-delete" class="wm-btn small" title="删除当前工作流">🗑️ 删除</button>
       </div>
-      <input type="file" id="ig-comfy-file" accept=".json" style="display:none"/>
       <div class="wm-hint" style="margin-top:4px">与酒馆原生 SD 模块互通。选「内置默认」会根据模型名自动切换 Checkpoint/UNet 工作流。</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;color:var(--SmartThemeQuoteColor,#6f5cff);font-size:12px">📝 高级：内联工作流 JSON（直接粘贴，优先级高于上方下拉框）</summary>
