@@ -308,7 +308,7 @@
   }
 
   // ── 后端适配 2：ComfyUI /prompt + /history 轮询 ──
-  // 占位符列表：{{prompt}} {{negative}} {{model}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}}
+  // 占位符列表：{{prompt}} {{negative}} {{model}} {{width}} {{height}} {{steps}} {{cfg}} {{denoise}} {{seed}} {{clip}} {{vae}}
   // 留空则用内置 txt2img 默认工作流（含 KSampler/CheckpointLoaderSimple/EmptyLatent/CLIP/VAEDecode/SaveImage）
   function defaultComfyWorkflow() {
     return {
@@ -321,31 +321,71 @@
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'WarmMemo', images: ['8', 0] } },
     };
   }
+  // Z-Image-Turbo 专用工作流：UNETLoader + CLIPLoader + VAELoader + ModelSamplingAuraFlow + ConditioningZeroOut
+  // 参考 ComfyUI 官方蓝图 Text to Image (Z-Image-Turbo).json
+  // 与普通 checkpoint 工作流的区别：
+  //   1) 用 UNETLoader（从 unet/diffusion_models 目录加载）而非 CheckpointLoaderSimple
+  //   2) 用独立 CLIPLoader 加载 qwen_3_4b.safetensors（type=lumina2）
+  //   3) 用独立 VAELoader 加载 ae.safetensors
+  //   4) 加 ModelSamplingAuraFlow（shift=3）调整采样分布
+  //   5) 用 ConditioningZeroOut 生成空负面（Z-Image-Turbo 是蒸馏模型，不需要负面提示词）
+  //   6) KSampler 用 cfg=1, sampler=res_multistep, scheduler=simple（蒸馏模型专用参数）
+  //   7) 用 EmptySD3LatentImage 而非 EmptyLatentImage
+  function defaultComfyWorkflowZImage() {
+    return {
+      '3': { class_type: 'KSampler', inputs: { seed: '{{seed}}', steps: '{{steps}}', cfg: 1, sampler_name: 'res_multistep', scheduler: 'simple', denoise: '{{denoise}}', model: ['11', 0], positive: ['27', 0], negative: ['33', 0], latent_image: ['13', 0] } },
+      '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['29', 0] } },
+      '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'WarmMemo', images: ['8', 0] } },
+      '11': { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['28', 0], shift: 3 } },
+      '13': { class_type: 'EmptySD3LatentImage', inputs: { width: '{{width}}', height: '{{height}}', batch_size: 1 } },
+      '27': { class_type: 'CLIPTextEncode', inputs: { text: '{{prompt}}', clip: ['30', 0] } },
+      '28': { class_type: 'UNETLoader', inputs: { unet_name: '{{model}}', weight_dtype: 'default' } },
+      '29': { class_type: 'VAELoader', inputs: { vae_name: '{{vae}}' } },
+      '30': { class_type: 'CLIPLoader', inputs: { clip_name: '{{clip}}', type: 'lumina2', device: 'default' } },
+      '33': { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['27', 0] } },
+    };
+  }
+  // 自动检测模型类型：根据模型名判断是否为 UNet/diffusion 模型
+  function isUnetModel(modelName) {
+    if (!modelName) return false;
+    const lower = modelName.toLowerCase();
+    return lower.includes('z_image') || lower.includes('z-image') ||
+           lower.includes('flux') || lower.includes('sdxl_unet') ||
+           lower.includes('diffusion_model');
+  }
   async function callComfyui(prompt, settings) {
     const ig = settings.imageGen || {};
     const base = (ig.apiUrl || 'http://127.0.0.1:8188').replace(/0\.0\.0\.0/g, '127.0.0.1').replace(/\/+$/, '');
+    // {{model}}：用户没选时给一个兜底值（避免 CheckpointLoaderSimple/UNETLoader 提交空名称，ComfyUI 会直接 400）
+    const model = (ig.model && ig.model.trim()) ? ig.model.trim() : '';
+    // 自动检测模型类型：Z-Image-Turbo 等 diffusion 模型需要完全不同的工作流
+    // 用户也可通过 ig.comfyWorkflowPreset 手动指定 ('auto' | 'checkpoint' | 'z-image-turbo')
+    const useZImageWorkflow = ig.comfyWorkflowPreset === 'z-image-turbo' ||
+      (ig.comfyWorkflowPreset !== 'checkpoint' && isUnetModel(model));
     let workflow;
     if (ig.comfyWorkflow && ig.comfyWorkflow.trim()) {
       try { workflow = JSON.parse(ig.comfyWorkflow); }
       catch (e) { throw new Error('ComfyUI 工作流 JSON 解析失败：' + e.message); }
     } else {
-      workflow = defaultComfyWorkflow();
+      workflow = useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow();
     }
     const neg = buildFullNegative(settings);
     // 所有占位符先洗一遍：去控制字符、去 LLM 叙事废话，确保塞进 JSON 字符串不会有语法错误
     const cleanPrompt = sanitizePrompt(prompt);
     const cleanNeg = sanitizePrompt(neg);
-    const w = Number(ig.width) || 512;
-    const h = Number(ig.height) || 768;
-    const steps = Number(ig.steps) || 20;
-    const cfg = Number(ig.cfgScale) || 7;
+    const w = Number(ig.width) || (useZImageWorkflow ? 1024 : 512);
+    const h = Number(ig.height) || (useZImageWorkflow ? 1024 : 768);
+    const steps = Number(ig.steps) || (useZImageWorkflow ? 8 : 20);
+    const cfg = Number(ig.cfgScale) || (useZImageWorkflow ? 1 : 7);
     const denoise = ig.denoisingStrength == null ? 1.0 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
     const seed = resolveSeed(ig.seed);
-    // {{model}}：用户没选时给一个兜底值（避免 CheckpointLoaderSimple 提交空 ckpt_name，ComfyUI 会直接 400）
-    const model = (ig.model && ig.model.trim()) ? ig.model.trim() : '';
+    // Z-Image-Turbo 配套模型：CLIP 和 VAE 文件名（用户可在设置中覆盖）
+    const clipName = (ig.comfyClip && ig.comfyClip.trim()) ? ig.comfyClip.trim() : 'qwen_3_4b.safetensors';
+    const vaeName = (ig.comfyVae && ig.comfyVae.trim()) ? ig.comfyVae.trim() : 'ae.safetensors';
     if (!model && !ig.comfyWorkflow) {
-      // 内置默认工作流且用户未选模型：报错明确提示让用户用"刷新模型列表"选一个
-      throw new Error('ComfyUI：未选择 Checkpoint 模型。请点「模型/Checkpoint」输入框旁的「🔄 刷新列表」，从下拉框选一个你本地已有的模型名。');
+      throw new Error(useZImageWorkflow
+        ? 'ComfyUI：未选择 UNet 模型。请点「🔄 刷新列表」，从下拉框选一个（如 z_image_turbo_bf16.safetensors）。'
+        : 'ComfyUI：未选择 Checkpoint 模型。请点「🔄 刷新列表」，从下拉框选一个你本地已有的模型名。');
     }
     // 占位符替换：用 JSON.stringify(s).slice(1,-1) 得到合法 JSON 字符串字面量内容。
     // JSON.stringify 自动正确转义：引号、反斜杠、\r、\n、\t、\b、\f、所有 0x00-0x1F 控制字符、U+2028/U+2029 行分隔符。
@@ -375,7 +415,9 @@
       // 字符串值：只替换引号内的内容（保留 JSON 字符串引号）
       .replace(/\{\{prompt\}\}/g, rep(cleanPrompt))
       .replace(/\{\{negative\}\}/g, rep(cleanNeg))
-      .replace(/\{\{model\}\}/g, rep(model));
+      .replace(/\{\{model\}\}/g, rep(model))
+      .replace(/\{\{clip\}\}/g, rep(clipName))
+      .replace(/\{\{vae\}\}/g, rep(vaeName));
     // —— 关键修复：ComfyUI /prompt 要求 body = { prompt: <nodes对象>, client_id: '唯一标识' }
     // 之前直接把 workflow JSON 当 body，服务器端拿不到 prompt 字段 → 要么 400 要么 CORS 预检失败后被浏览器吞成 ERR_FAILED
     let promptObj;

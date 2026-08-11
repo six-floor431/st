@@ -3401,9 +3401,30 @@ ${p.summary || ""}`.trim() });
         "9": { class_type: "SaveImage", inputs: { filename_prefix: "WarmMemo", images: ["8", 0] } }
       };
     }
+    function defaultComfyWorkflowZImage() {
+      return {
+        "3": { class_type: "KSampler", inputs: { seed: "{{seed}}", steps: "{{steps}}", cfg: 1, sampler_name: "res_multistep", scheduler: "simple", denoise: "{{denoise}}", model: ["11", 0], positive: ["27", 0], negative: ["33", 0], latent_image: ["13", 0] } },
+        "8": { class_type: "VAEDecode", inputs: { samples: ["3", 0], vae: ["29", 0] } },
+        "9": { class_type: "SaveImage", inputs: { filename_prefix: "WarmMemo", images: ["8", 0] } },
+        "11": { class_type: "ModelSamplingAuraFlow", inputs: { model: ["28", 0], shift: 3 } },
+        "13": { class_type: "EmptySD3LatentImage", inputs: { width: "{{width}}", height: "{{height}}", batch_size: 1 } },
+        "27": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}", clip: ["30", 0] } },
+        "28": { class_type: "UNETLoader", inputs: { unet_name: "{{model}}", weight_dtype: "default" } },
+        "29": { class_type: "VAELoader", inputs: { vae_name: "{{vae}}" } },
+        "30": { class_type: "CLIPLoader", inputs: { clip_name: "{{clip}}", type: "lumina2", device: "default" } },
+        "33": { class_type: "ConditioningZeroOut", inputs: { conditioning: ["27", 0] } }
+      };
+    }
+    function isUnetModel(modelName) {
+      if (!modelName) return false;
+      const lower = modelName.toLowerCase();
+      return lower.includes("z_image") || lower.includes("z-image") || lower.includes("flux") || lower.includes("sdxl_unet") || lower.includes("diffusion_model");
+    }
     async function callComfyui(prompt, settings) {
       const ig = settings.imageGen || {};
       const base = (ig.apiUrl || "http://127.0.0.1:8188").replace(/0\.0\.0\.0/g, "127.0.0.1").replace(/\/+$/, "");
+      const model = ig.model && ig.model.trim() ? ig.model.trim() : "";
+      const useZImageWorkflow = ig.comfyWorkflowPreset === "z-image-turbo" || ig.comfyWorkflowPreset !== "checkpoint" && isUnetModel(model);
       let workflow;
       if (ig.comfyWorkflow && ig.comfyWorkflow.trim()) {
         try {
@@ -3412,20 +3433,21 @@ ${p.summary || ""}`.trim() });
           throw new Error("ComfyUI \u5DE5\u4F5C\u6D41 JSON \u89E3\u6790\u5931\u8D25\uFF1A" + e.message);
         }
       } else {
-        workflow = defaultComfyWorkflow();
+        workflow = useZImageWorkflow ? defaultComfyWorkflowZImage() : defaultComfyWorkflow();
       }
       const neg = buildFullNegative(settings);
       const cleanPrompt = sanitizePrompt(prompt);
       const cleanNeg = sanitizePrompt(neg);
-      const w = Number(ig.width) || 512;
-      const h = Number(ig.height) || 768;
-      const steps = Number(ig.steps) || 20;
-      const cfg = Number(ig.cfgScale) || 7;
+      const w = Number(ig.width) || (useZImageWorkflow ? 1024 : 512);
+      const h = Number(ig.height) || (useZImageWorkflow ? 1024 : 768);
+      const steps = Number(ig.steps) || (useZImageWorkflow ? 8 : 20);
+      const cfg = Number(ig.cfgScale) || (useZImageWorkflow ? 1 : 7);
       const denoise = ig.denoisingStrength == null ? 1 : Math.max(0, Math.min(1, Number(ig.denoisingStrength)));
       const seed = resolveSeed(ig.seed);
-      const model = ig.model && ig.model.trim() ? ig.model.trim() : "";
+      const clipName = ig.comfyClip && ig.comfyClip.trim() ? ig.comfyClip.trim() : "qwen_3_4b.safetensors";
+      const vaeName = ig.comfyVae && ig.comfyVae.trim() ? ig.comfyVae.trim() : "ae.safetensors";
       if (!model && !ig.comfyWorkflow) {
-        throw new Error("ComfyUI\uFF1A\u672A\u9009\u62E9 Checkpoint \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u6A21\u578B/Checkpoint\u300D\u8F93\u5165\u6846\u65C1\u7684\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\u4F60\u672C\u5730\u5DF2\u6709\u7684\u6A21\u578B\u540D\u3002");
+        throw new Error(useZImageWorkflow ? "ComfyUI\uFF1A\u672A\u9009\u62E9 UNet \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\uFF08\u5982 z_image_turbo_bf16.safetensors\uFF09\u3002" : "ComfyUI\uFF1A\u672A\u9009\u62E9 Checkpoint \u6A21\u578B\u3002\u8BF7\u70B9\u300C\u{1F504} \u5237\u65B0\u5217\u8868\u300D\uFF0C\u4ECE\u4E0B\u62C9\u6846\u9009\u4E00\u4E2A\u4F60\u672C\u5730\u5DF2\u6709\u7684\u6A21\u578B\u540D\u3002");
       }
       let workflowStr = JSON.stringify(workflow);
       const esc = (anyVal) => {
@@ -3434,7 +3456,7 @@ ${p.summary || ""}`.trim() });
         return out.length >= 2 ? out.slice(1, -1) : out;
       };
       const rep = (val) => () => esc(val);
-      workflowStr = workflowStr.replace(/"\{\{seed\}\}"/g, String(seed)).replace(/"\{\{steps\}\}"/g, String(steps)).replace(/"\{\{cfg\}\}"/g, String(cfg)).replace(/"\{\{width\}\}"/g, String(w)).replace(/"\{\{height\}\}"/g, String(h)).replace(/"\{\{denoise\}\}"/g, String(denoise)).replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{model\}\}/g, rep(model));
+      workflowStr = workflowStr.replace(/"\{\{seed\}\}"/g, String(seed)).replace(/"\{\{steps\}\}"/g, String(steps)).replace(/"\{\{cfg\}\}"/g, String(cfg)).replace(/"\{\{width\}\}"/g, String(w)).replace(/"\{\{height\}\}"/g, String(h)).replace(/"\{\{denoise\}\}"/g, String(denoise)).replace(/\{\{prompt\}\}/g, rep(cleanPrompt)).replace(/\{\{negative\}\}/g, rep(cleanNeg)).replace(/\{\{model\}\}/g, rep(model)).replace(/\{\{clip\}\}/g, rep(clipName)).replace(/\{\{vae\}\}/g, rep(vaeName));
       let promptObj;
       try {
         promptObj = JSON.parse(workflowStr);
