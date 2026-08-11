@@ -268,25 +268,40 @@
     const WM = window.WarmMemo || (window.WarmMemo = {});
     let _proxyAvailable = null;
     let _detecting = null;
+    let _detectReason = "";
+    let _lastDetectTime = 0;
+    const RETRY_INTERVAL = 5e3;
     async function detectProxy() {
-      if (_proxyAvailable !== null) return _proxyAvailable;
+      if (_proxyAvailable === true) return true;
+      if (_proxyAvailable === false) {
+        if (Date.now() - _lastDetectTime < RETRY_INTERVAL) return false;
+        _proxyAvailable = null;
+      }
       if (_detecting) return _detecting;
       _detecting = (async () => {
         try {
           const res = await fetch("/proxy/http://127.0.0.1:1/_wm_probe", {
-            method: "HEAD"
+            method: "GET"
             // 不需要 CSRF token（/proxy/ 路径显式跳过）
           });
-          _proxyAvailable = res.status !== 404;
+          if (res.status === 404) {
+            _proxyAvailable = false;
+            _detectReason = "\u9152\u9986 /proxy/ \u8FD4\u56DE 404\uFF08enableCorsProxy \u672A\u542F\u7528\u6216\u672A\u91CD\u542F\u9152\u9986\uFF09";
+          } else {
+            _proxyAvailable = true;
+            _detectReason = "";
+          }
         } catch (e) {
           _proxyAvailable = false;
+          _detectReason = "\u63A2\u6D4B\u8BF7\u6C42\u5F02\u5E38\uFF1A" + String(e && e.message ? e.message : e);
         }
+        _lastDetectTime = Date.now();
         _detecting = null;
         try {
-          console.log("[WarmMemo][server-proxy] /proxy/ \u7AEF\u70B9\u53EF\u7528\u6027\uFF1A" + _proxyAvailable);
+          console.log("[WarmMemo][server-proxy] /proxy/ \u7AEF\u70B9\u53EF\u7528\u6027\uFF1A" + _proxyAvailable + (_detectReason ? "\uFF08" + _detectReason + "\uFF09" : ""));
         } catch (_) {
         }
-        return _proxyAvailable;
+        return _proxyAvailable === true;
       })();
       return _detecting;
     }
@@ -320,6 +335,16 @@
         return false;
       }
     }
+    function markAvailable() {
+      if (_proxyAvailable !== true) {
+        _proxyAvailable = true;
+        _detectReason = "";
+        try {
+          console.log("[WarmMemo][server-proxy] /proxy/ \u7AEF\u70B9\u6807\u8BB0\u4E3A\u53EF\u7528\uFF08\u5B9E\u9645\u8BF7\u6C42\u6210\u529F\uFF0C\u8986\u76D6\u63A2\u6D4B\u7ED3\u679C\uFF09");
+        } catch (_) {
+        }
+      }
+    }
     WM.ServerProxy = {
       detectProxy,
       proxyRewrite,
@@ -327,7 +352,11 @@
       needsLegacyProxy,
       isExternalAccess,
       // 直接暴露可用性状态（供 UI 显示）
-      isAvailable: () => _proxyAvailable === true
+      isAvailable: () => _proxyAvailable === true,
+      // 获取检测失败原因（供错误提示和 UI 诊断）
+      getDetectReason: () => _detectReason,
+      // 手动标记代理可用
+      markAvailable
     };
     if (typeof window !== "undefined") {
       detectProxy().catch(() => {
@@ -1478,10 +1507,13 @@ ${body}`,
       }
       const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
       let url;
+      let useProxyFetch = false;
       if (useServerProxy) {
         url = base;
+        useProxyFetch = true;
       } else {
-        url = applyVecProxy(base, s);
+        url = "/proxy/" + base;
+        useProxyFetch = false;
       }
       const useGet = isGetMode(url);
       const headers = Object.assign({ "Content-Type": "application/json" }, key ? { Authorization: "Bearer " + key } : {});
@@ -1504,7 +1536,7 @@ ${body}`,
       }
       let r;
       try {
-        const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+        const fetchFn = useProxyFetch ? WM.ServerProxy.proxyFetch : fetch;
         r = await fetchFn(finalUrl, {
           method: useGet ? "GET" : "POST",
           headers: useGet ? Object.assign({}, headers, { "Content-Type": "application/x-www-form-urlencoded" }) : headers,
@@ -1513,14 +1545,24 @@ ${body}`,
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
-        const hint = isCors ? "\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\u3002\u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u5728\u9152\u9986 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true\uFF08\u63A8\u8350\uFF0C\u5916\u7F51\u4E5F\u80FD\u7528\uFF09\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
+        const proxyReason = WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === "function" ? WM.ServerProxy.getDetectReason() : "";
+        const hint = isCors ? "\u6D4F\u89C8\u5668\u5C42\u9762\u7684\u8DE8\u57DF/CORS \u62E6\u622A\u3002ServerProxy \u72B6\u6001\uFF1A" + (WM.ServerProxy && WM.ServerProxy.isAvailable() ? "\u53EF\u7528" : "\u4E0D\u53EF\u7528") + (proxyReason ? "\uFF08" + proxyReason + "\uFF09" : "") + "\u3002\u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u786E\u8BA4\u9152\u9986 config.yaml \u4E2D enableCorsProxy: true \u4E14\u5DF2\u91CD\u542F\u9152\u9986\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/embeddings\uFF09\u800C\u975E\u76F4\u8FDE 127.0.0.1:11434\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002";
         if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, error: hint });
         throw new Error("[Embedding \u8BF7\u6C42\u5931\u8D25] \u5B9E\u9645\u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C" + hint);
       }
       const rawText = await r.text();
+      if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+        const reason = WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === "function" ? WM.ServerProxy.getDetectReason() : "";
+        const hint = "\u9152\u9986 /proxy/ \u7AEF\u70B9\u672A\u542F\u7528\uFF08\u8FD4\u56DE 404\uFF09\u3002" + (reason ? "\u63A2\u6D4B\u8BE6\u60C5\uFF1A" + reason + "\u3002" : "") + "\u8BF7\u5728 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true \u5E76\u91CD\u542F\u9152\u9986\uFF0C\u6216\u914D\u7F6E\u540C\u6E90\u4EE3\u7406\u5730\u5740\u3002";
+        if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, httpStatus: 404, response: rawText.slice(0, 400) });
+        throw new Error("[Embedding \u4EE3\u7406\u672A\u542F\u7528] " + hint);
+      }
       if (!r.ok) {
         if (WM.DebugLog) WM.DebugLog.logError("embedding", { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
         throw new Error("[Embedding HTTP " + r.status + "] \u8BF7\u6C42\u5730\u5740\uFF1A" + finalUrl + "\uFF5C\u54CD\u5E94\uFF1A" + rawText.slice(0, 200));
+      }
+      if (!useProxyFetch && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === "function") {
+        WM.ServerProxy.markAvailable();
       }
       let j;
       try {
@@ -1618,7 +1660,15 @@ ${body}`,
       }
       const rawUrl = resolveRerankUrl(s);
       const useServerProxy = WM.ServerProxy && WM.ServerProxy.isAvailable();
-      const url = useServerProxy ? rawUrl : applyRerankProxy(rawUrl, s);
+      let useProxyFetch = false;
+      let url;
+      if (useServerProxy) {
+        url = rawUrl;
+        useProxyFetch = true;
+      } else {
+        url = "/proxy/" + rawUrl;
+        useProxyFetch = false;
+      }
       const model = s.rerankModel || "BAAI/bge-reranker-v2-m3";
       const key = s.rerankApiKey || "";
       const docs = (documents || []).filter((d) => d && String(d).trim());
@@ -1662,7 +1712,7 @@ ${body}`,
         }
         let r;
         try {
-          const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+          const fetchFn = useProxyFetch ? WM.ServerProxy.proxyFetch : fetch;
           r = await fetchFn(finalUrl, {
             method: useGet ? "GET" : "POST",
             signal: ctrl.signal,
@@ -1672,14 +1722,24 @@ ${body}`,
         } catch (netErr) {
           const msg = String(netErr && netErr.message ? netErr.message : netErr);
           const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
-          const hint = (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " \u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u5728\u9152\u9986 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true\uFF08\u63A8\u8350\uFF0C\u5916\u7F51\u4E5F\u80FD\u7528\uFF09\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002";
+          const proxyReason = WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === "function" ? WM.ServerProxy.getDetectReason() : "";
+          const hint = (isCors ? "\u8BF7\u6C42\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u7591\u4F3C\u8DE8\u57DF/CORS\uFF09\u3002" : "\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF1A" + msg + "\u3002") + " ServerProxy \u72B6\u6001\uFF1A" + (WM.ServerProxy && WM.ServerProxy.isAvailable() ? "\u53EF\u7528" : "\u4E0D\u53EF\u7528") + (proxyReason ? "\uFF08" + proxyReason + "\uFF09" : "") + "\u3002\u89E3\u51B3\u65B9\u5F0F\uFF1A\u2460\u786E\u8BA4\u9152\u9986 config.yaml \u4E2D enableCorsProxy: true \u4E14\u5DF2\u91CD\u542F\u9152\u9986\uFF1B\u2461\u6216\u7528\u540C\u6E90\u4EE3\u7406\u5730\u5740\uFF08\u5982 http://localhost:8080/vec/v1/rerank\uFF09\u3002";
           if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, error: hint });
           throw new Error(hint);
         }
         const rawText = await r.text();
+        if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+          const reason = WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === "function" ? WM.ServerProxy.getDetectReason() : "";
+          const hint = "\u9152\u9986 /proxy/ \u7AEF\u70B9\u672A\u542F\u7528\uFF08\u8FD4\u56DE 404\uFF09\u3002" + (reason ? "\u63A2\u6D4B\u8BE6\u60C5\uFF1A" + reason + "\u3002" : "") + "\u8BF7\u5728 config.yaml \u4E2D\u8BBE\u7F6E enableCorsProxy: true \u5E76\u91CD\u542F\u9152\u9986\uFF0C\u6216\u914D\u7F6E\u540C\u6E90\u4EE3\u7406\u5730\u5740\u3002";
+          if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, httpStatus: 404, response: rawText.slice(0, 400) });
+          throw new Error(hint);
+        }
         if (!r.ok) {
           if (WM.DebugLog) WM.DebugLog.logError("rerank", { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
           throw new Error("rerank \u670D\u52A1\u8FD4\u56DE HTTP " + r.status + "\uFF1A" + rawText.slice(0, 200));
+        }
+        if (!useProxyFetch && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === "function") {
+          WM.ServerProxy.markAvailable();
         }
         let j;
         try {
@@ -6713,7 +6773,7 @@ ${p.summary || ""}`.trim() });
 
   // src/index.js
   window.WarmMemo = window.WarmMemo || {};
-  window.WarmMemo.version = "server-proxy-unified-v1";
+  window.WarmMemo.version = "server-proxy-v2-force";
   if (window.WarmMemo && window.WarmMemo.Launcher) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => window.WarmMemo.Launcher.init());
     else window.WarmMemo.Launcher.init();

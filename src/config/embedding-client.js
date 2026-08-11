@@ -133,18 +133,27 @@
     // OpenAI 兼容（支持本地反代/同源代理的 GET 模式）
     // 注意：info.url（即 base）已由 resolveEmbedUrl/buildEmbedUrl 处理为完整 embeddings 地址，
     // 此处绝不能再二次拼接，否则会出现 .../v1/embeddings/v1/embeddings 的 404。
-    // 优先走酒馆服务端代理（/proxy/:url），无 CORS 问题，外网也能直连本地服务
-    // 代理不可用时回退 applyVecProxy 同源改写
-    // 关键：必须 await detectProxy() 确保检测完成，否则 isAvailable() 在检测前返回 false
+    //
+    // 请求路由策略（v2 改进）：
+    //   1. ServerProxy 探测可用 → proxyFetch 自动改写 URL 为 /proxy/<url>（同源无 CORS）
+    //   2. ServerProxy 探测不可用 → 仍手动加 /proxy/ 前缀尝试（探测可能不准：时序、网络抖动等）
+    //      如果 /proxy/ 实际可用，请求成功并调用 markAvailable() 更新缓存
+    //      如果 /proxy/ 未启用，返回 404（同源，不会 CORS 失败），给出明确提示
+    //   3. 不再回退到 applyVecProxy（用户可能已取消同源代理，直连必 CORS 失败）
     if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
       await WM.ServerProxy.detectProxy();
     }
     const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
     let url;
+    let useProxyFetch = false;
     if (useServerProxy) {
       url = base; // 服务端代理：保持原始 URL，由 proxyRewrite 改写
+      useProxyFetch = true;
     } else {
-      url = applyVecProxy(base, s); // 回退：同源代理改写
+      // 探测不可用，但仍尝试走 /proxy/（探测可能不准确）
+      // 直接手动改写 URL 为 /proxy/ 格式，用普通 fetch 发送（同源，无 CORS）
+      url = '/proxy/' + base;
+      useProxyFetch = false;
     }
     const useGet = isGetMode(url);
     const headers = Object.assign({ 'Content-Type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {});
@@ -167,7 +176,8 @@
     let r;
     try {
       // 优先走服务端代理（proxyFetch 会自动改写 URL 为 /proxy/<url>）
-      const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+      // 探测不可用时 useProxyFetch=false，但 URL 已手动加了 /proxy/ 前缀，用普通 fetch 发送
+      const fetchFn = useProxyFetch ? WM.ServerProxy.proxyFetch : fetch;
       r = await fetchFn(finalUrl, {
         method: useGet ? 'GET' : 'POST',
         headers: useGet ? Object.assign({}, headers, { 'Content-Type': 'application/x-www-form-urlencoded' }) : headers,
@@ -176,18 +186,31 @@
     } catch (netErr) {
       // fetch 抛错只可能是「连接层面」失败（CORS / 地址不可达 / 证书等）。
       // 注意：若后端已返回 200，fetch 不会进这里，而是进下面 r.text() 分支。
+      // 走 /proxy/ 时是同源请求，不应该抛 CORS 错误；如果抛了，说明 /proxy/ 路径有问题
       const msg = String(netErr && netErr.message ? netErr.message : netErr);
       const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS|blocked by CORS/i.test(msg);
+      const proxyReason = (WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === 'function') ? WM.ServerProxy.getDetectReason() : '';
       const hint = isCors
-        ? '浏览器层面的跨域/CORS 拦截。解决方式：①在酒馆 config.yaml 中设置 enableCorsProxy: true（推荐，外网也能用）；②或用同源代理地址（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434。'
+        ? '浏览器层面的跨域/CORS 拦截。ServerProxy 状态：' + (WM.ServerProxy && WM.ServerProxy.isAvailable() ? '可用' : '不可用') + (proxyReason ? '（' + proxyReason + '）' : '') + '。解决方式：①确认酒馆 config.yaml 中 enableCorsProxy: true 且已重启酒馆；②或用同源代理地址（如 http://localhost:8080/vec/v1/embeddings）而非直连 127.0.0.1:11434。'
         : ('网络请求失败：' + msg + '。');
       if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, error: hint });
       throw new Error('[Embedding 请求失败] 实际请求地址：' + finalUrl + '｜' + hint);
     }
     const rawText = await r.text();
+    // 检查是否是 /proxy/ 未启用的 404
+    if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+      const reason = (WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === 'function') ? WM.ServerProxy.getDetectReason() : '';
+      const hint = '酒馆 /proxy/ 端点未启用（返回 404）。' + (reason ? '探测详情：' + reason + '。' : '') + '请在 config.yaml 中设置 enableCorsProxy: true 并重启酒馆，或配置同源代理地址。';
+      if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, httpStatus: 404, response: rawText.slice(0, 400) });
+      throw new Error('[Embedding 代理未启用] ' + hint);
+    }
     if (!r.ok) {
       if (WM.DebugLog) WM.DebugLog.logError('embedding', { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
       throw new Error('[Embedding HTTP ' + r.status + '] 请求地址：' + finalUrl + '｜响应：' + rawText.slice(0, 200));
+    }
+    // 手动走 /proxy/ 成功 → 更新缓存，后续请求自动走 proxyFetch
+    if (!useProxyFetch && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === 'function') {
+      WM.ServerProxy.markAvailable();
     }
     let j;
     try { j = JSON.parse(rawText); }

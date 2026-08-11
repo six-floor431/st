@@ -67,14 +67,24 @@
     if (!enabled) return null;
 
     // 优先走酒馆服务端代理（/proxy/<url>），无 CORS 问题，外网也能直连本地服务
-    // 代理不可用时回退 applyRerankProxy 同源改写
-    // 关键：必须 await detectProxy() 确保检测完成，否则 isAvailable() 在检测前返回 false
+    // v2 改进：探测不可用时仍手动加 /proxy/ 前缀尝试（探测可能不准）
+    // 如果 /proxy/ 实际可用，请求成功并调用 markAvailable() 更新缓存
+    // 如果 /proxy/ 未启用，返回 404（同源，不会 CORS 失败），给出明确提示
     if (WM.ServerProxy && typeof WM.ServerProxy.detectProxy === 'function') {
       await WM.ServerProxy.detectProxy();
     }
     const rawUrl = resolveRerankUrl(s);
     const useServerProxy = (WM.ServerProxy && WM.ServerProxy.isAvailable());
-    const url = useServerProxy ? rawUrl : applyRerankProxy(rawUrl, s);
+    let useProxyFetch = false;
+    let url;
+    if (useServerProxy) {
+      url = rawUrl; // proxyFetch 会改写
+      useProxyFetch = true;
+    } else {
+      // 探测不可用，但仍尝试走 /proxy/（探测可能不准确）
+      url = '/proxy/' + rawUrl;
+      useProxyFetch = false;
+    }
 
     const model = s.rerankModel || 'BAAI/bge-reranker-v2-m3';
     const key = s.rerankApiKey || '';
@@ -122,7 +132,8 @@
       }
       let r;
       try {
-        const fetchFn = useServerProxy ? WM.ServerProxy.proxyFetch : fetch;
+        // 探测不可用时 useProxyFetch=false，但 URL 已手动加了 /proxy/ 前缀
+        const fetchFn = useProxyFetch ? WM.ServerProxy.proxyFetch : fetch;
         r = await fetchFn(finalUrl, {
           method: useGet ? 'GET' : 'POST',
           signal: ctrl.signal,
@@ -132,18 +143,31 @@
       } catch (netErr) {
         const msg = String(netErr && netErr.message ? netErr.message : netErr);
         const isCors = /Failed to fetch|NetworkError|Cross-Origin|CORS/i.test(msg);
+        const proxyReason = (WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === 'function') ? WM.ServerProxy.getDetectReason() : '';
         const hint = (isCors ? '请求被浏览器拦截（疑似跨域/CORS）。' : '网络请求失败：' + msg + '。') +
-          ' 解决方式：①在酒馆 config.yaml 中设置 enableCorsProxy: true（推荐，外网也能用）；' +
+          ' ServerProxy 状态：' + (WM.ServerProxy && WM.ServerProxy.isAvailable() ? '可用' : '不可用') + (proxyReason ? '（' + proxyReason + '）' : '') +
+          '。解决方式：①确认酒馆 config.yaml 中 enableCorsProxy: true 且已重启酒馆；' +
           '②或用同源代理地址（如 http://localhost:8080/vec/v1/rerank）。';
         if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, error: hint });
         throw new Error(hint);
       }
       const rawText = await r.text();
-      if (!r.ok) {
-        if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
-        throw new Error('rerank 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+      // 检查是否是 /proxy/ 未启用的 404
+      if (r.status === 404 && /CORS proxy is disabled/i.test(rawText)) {
+        const reason = (WM.ServerProxy && typeof WM.ServerProxy.getDetectReason === 'function') ? WM.ServerProxy.getDetectReason() : '';
+        const hint = '酒馆 /proxy/ 端点未启用（返回 404）。' + (reason ? '探测详情：' + reason + '。' : '') + '请在 config.yaml 中设置 enableCorsProxy: true 并重启酒馆，或配置同源代理地址。';
+        if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, httpStatus: 404, response: rawText.slice(0, 400) });
+        throw new Error(hint);
       }
-      let j;
+      if (!r.ok) {
+          if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, httpStatus: r.status, response: rawText.slice(0, 400) });
+          throw new Error('rerank 服务返回 HTTP ' + r.status + '：' + rawText.slice(0, 200));
+        }
+        // 手动走 /proxy/ 成功 → 更新缓存，后续请求自动走 proxyFetch
+        if (!useProxyFetch && WM.ServerProxy && typeof WM.ServerProxy.markAvailable === 'function') {
+          WM.ServerProxy.markAvailable();
+        }
+        let j;
       try { j = JSON.parse(rawText); }
       catch (e) {
         if (WM.DebugLog) WM.DebugLog.logError('rerank', { url: finalUrl, error: '返回非 JSON', response: rawText.slice(0, 400) });
