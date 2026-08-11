@@ -992,5 +992,73 @@
     .wm-panel select, .wm-modal select {
       font-size: 16px !important;
     }
+    /* 自由生图弹窗 & 工作流编辑器弹窗：移动端同样放大字号 */
+    .wm-free-img-popup input:not([type="checkbox"]):not([type="radio"]),
+    .wm-free-img-popup textarea, .wm-free-img-popup select,
+    .wm-wf-editor-popup input:not([type="checkbox"]):not([type="radio"]),
+    .wm-wf-editor-popup textarea, .wm-wf-editor-popup select {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* ============================================================
+ * 自由生图弹窗 & 工作流编辑器弹窗（手机/电脑通用）
+ * 设计要点：
+ *   - 使用 .wm-modal-mask 同款视口尺寸策略，绕开酒馆 perspective 包含块问题
+ *   - 弹窗宽度自适应（桌面 680~900px，手机 100%）
+ *   - 内容区可滚动、隐藏滚动条、iOS 惯性划动
+ *   - 所有输入框 filter:none + box-shadow:none，避免移动端发糊
+ * ============================================================ */
+.wm-free-img-popup,
+.wm-wf-editor-popup {
+  max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+/* 自由生图弹窗：内容区隐藏滚动条 */
+.wm-free-img-body::-webkit-scrollbar { display: none; }
+
+/* 工作流编辑器弹窗：占位符状态区在手机端可折叠 */
+@media (max-width: 768px) {
+  .wm-wf-editor-popup {
+    width: 100% !important;
+    max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .wm-wf-editor-popup textarea {
+    min-height: 160px !important;
+    font-size: 12px !important;
+  }
+  /* 工作流管理按钮在手机端：两行排列 */
+  .wm-row .wm-btn.small {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .wm-free-img-popup {
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  /* 参数行在极小屏上每行只放 2 个 */
+  .wm-free-img-body > div > div[style*="flex-wrap"] > label {
+    flex: 1 1 calc(50% - 5px) !important;
+    min-width: 0 !important;
+  }
+}
+
+/* 触控设备：自由生图弹窗的按钮加大可点区域 */
+@media (pointer: coarse) {
+  .wm-free-img-popup button,
+  .wm-wf-editor-popup button {
+    min-height: 42px;
+  }
+  .wm-free-img-popup input:not([type="checkbox"]):not([type="radio"]),
+  .wm-free-img-popup select,
+  .wm-free-img-popup textarea,
+  .wm-wf-editor-popup input:not([type="checkbox"]):not([type="radio"]),
+  .wm-wf-editor-popup select,
+  .wm-wf-editor-popup textarea {
+    min-height: 40px;
   }
 }

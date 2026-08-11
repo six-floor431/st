@@ -4323,12 +4323,30 @@ ${p.summary || ""}`.trim() });
       _floorBtnObserver.observe(chatEl, { childList: true, subtree: true });
       console.log("[WarmMemo][image-gen] \u697C\u5C42\u751F\u56FE\u6309\u94AE\u5DF2\u542F\u7528");
     }
+    async function generateFreeImage(opts) {
+      opts = opts || {};
+      const settings = WM.Settings.load();
+      const ig = Object.assign({}, settings.imageGen || {}, opts.overrides || {});
+      const mergedSettings = Object.assign({}, settings, { imageGen: ig });
+      const userPrompt = (opts.prompt || "").trim();
+      if (!userPrompt) return { ok: false, error: "\u8BF7\u586B\u5199\u63D0\u793A\u8BCD" };
+      const fullPrompt = buildFullPrompt(userPrompt, mergedSettings);
+      let imageUrl;
+      try {
+        imageUrl = await generateImage(fullPrompt, mergedSettings);
+      } catch (e) {
+        if (WM.ErrLog) await WM.ErrLog.add("image-free", e, { stage: "free-gen", backend: ig.backendType, prompt: fullPrompt.slice(0, 300) });
+        return { ok: false, error: "\u751F\u56FE\u5931\u8D25\uFF1A" + (e.message || e), prompt: fullPrompt };
+      }
+      return { ok: true, prompt: fullPrompt, imageUrl };
+    }
     WM.ImageGen = {
       triggerImageGeneration,
       // 简写：面板按钮调用，强制立即生成（忽略 autoTrigger 开关），允许连点排队
       triggerUnlimited: (msgId) => triggerImageGeneration({ force: true, messageId: msgId, silent: false }),
       generateImage,
       generateImagePrompt,
+      generateFreeImage,
       buildFullPrompt,
       insertImage,
       testConnection,
@@ -6277,9 +6295,11 @@ ${p.summary || ""}`.trim() });
           title = "\u5185\u7F6E\u9ED8\u8BA4\u5DE5\u4F5C\u6D41\uFF08" + (useZ ? "UNet" : "Checkpoint") + "\uFF09";
         }
         const overlay = document.createElement("div");
-        overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px";
+        overlay.className = "wm-modal-mask wm-wf-editor-mask";
+        overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box;background:rgba(15,15,13,.4);isolation:isolate";
         const popup = document.createElement("div");
-        popup.style.cssText = "background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:90%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)";
+        popup.className = "wm-wf-editor-popup";
+        popup.style.cssText = "background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden";
         const phStatus = ig.PLACEHOLDER_DEFS.map(
           (p) => `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">\u274C <code>{{${p.key}}}</code> ${p.label}</span>`
         ).join("");
@@ -6293,15 +6313,15 @@ ${p.summary || ""}`.trim() });
           <div id="wf-ph-status">${phStatus}</div>
         </div>
         <div style="padding:12px 16px;flex:1;overflow:hidden;display:flex;flex-direction:column">
-          <textarea id="wf-editor" style="flex:1;width:100%;min-height:300px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical">${escapeHtml(workflowJson)}</textarea>
+          <textarea id="wf-editor" style="flex:1;width:100%;min-height:200px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical;filter:none!important;box-shadow:none!important">${escapeHtml(workflowJson)}</textarea>
           <div style="font-size:11px;color:var(--SmartThemeBodyColor,#888);margin-top:6px">
             \u{1F4A1} \u628A\u9700\u8981\u52A8\u6001\u66FF\u6362\u7684\u503C\u6539\u6210\u5360\u4F4D\u7B26\uFF0C\u5982 <code>"seed": "{{seed}}"</code> \u6216 <code>"text": "%prompt%"</code>\u3002\u4E24\u79CD\u683C\u5F0F\u7B49\u4EF7\u3002
           </div>
         </div>
-        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end">
-          <input id="wf-name" placeholder="\u6587\u4EF6\u540D\uFF08\u5982 my_workflow\uFF09" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, "") : "")}" style="flex:1;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px"/>
-          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">\u{1F4BE} \u4FDD\u5B58</button>
-          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px">\u53D6\u6D88</button>
+        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <input id="wf-name" placeholder="\u6587\u4EF6\u540D\uFF08\u5982 my_workflow\uFF09" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, "") : "")}" style="flex:1;min-width:120px;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px;filter:none!important;box-shadow:none!important"/>
+          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;min-height:36px">\u{1F4BE} \u4FDD\u5B58</button>
+          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px;min-height:36px">\u53D6\u6D88</button>
         </div>`;
         overlay.appendChild(popup);
         document.body.appendChild(overlay);
@@ -6352,6 +6372,158 @@ ${p.summary || ""}`.trim() });
             closePopup();
           } catch (e) {
             toast("\u{1F3A8} \u4FDD\u5B58\u5931\u8D25\uFF1A" + (e.message || String(e)));
+          }
+        };
+      }
+      function openFreeImagePanel(parentBody, settings) {
+        const ig = settings.imageGen || {};
+        const isComfy = ig.backendType === "comfyui";
+        const isCloud = ig.backendType === "cloud";
+        const styleOpts = [
+          { v: "general", label: "\u901A\u7528" },
+          { v: "anime", label: "\u52A8\u6F2B\u63D2\u753B" },
+          { v: "realistic", label: "\u5199\u5B9E\u6444\u5F71" },
+          { v: "ink", label: "\u4E1C\u65B9\u6C34\u58A8" }
+        ].map((o) => `<option value="${o.v}" ${ig.promptStyle === o.v ? "selected" : ""}>${o.label}</option>`).join("");
+        const overlay = document.createElement("div");
+        overlay.className = "wm-modal-mask wm-free-img-mask";
+        overlay.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;background:rgba(15,15,13,.4)";
+        const popup = document.createElement("div");
+        popup.className = "wm-free-img-popup";
+        popup.style.cssText = "background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17";
+        popup.innerHTML = `
+        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none">
+          <span style="font-weight:600;font-size:15px">\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE <span style="font-size:12px;color:#8a8a80;font-weight:400">\uFF08\u4E0D\u7ECF\u8FC7 LLM\uFF0C\u81EA\u5DF1\u5199\u63D0\u793A\u8BCD\u51FA\u56FE\uFF09</span></span>
+          <button id="fi-close" style="background:none;border:none;color:#1a1a17;font-size:18px;cursor:pointer;padding:4px 8px">\u2715</button>
+        </div>
+        <div style="padding:14px 16px;overflow-y:auto;flex:1 1 auto;-webkit-overflow-scrolling:touch;scrollbar-width:none" class="wm-free-img-body">
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-weight:600;font-size:14px;margin-bottom:5px">\u63D0\u793A\u8BCD <span style="font-weight:400;color:#8a8a80;font-size:12px">\uFF08\u82F1\u6587 tag \u5F0F\u6700\u4F73\uFF0C\u5982 1girl, long hair, red dress, ...\uFF09</span></label>
+            <textarea id="fi-prompt" rows="4" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;resize:vertical;line-height:1.6;min-height:80px" placeholder="1girl, long black hair, red hanfu, standing in bamboo forest, sunlight filtering through leaves, upper body"></textarea>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-weight:600;font-size:14px;margin-bottom:5px">\u8D1F\u9762\u63D0\u793A\u8BCD <span style="font-weight:400;color:#8a8a80;font-size:12px">\uFF08\u53EF\u9009\uFF09</span></label>
+            <textarea id="fi-neg" rows="2" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;resize:vertical;line-height:1.6" placeholder="lowres, bad anatomy, bad hands, missing fingers">${escapeHtml(ig.negativePrompt || "")}</textarea>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <label style="flex:1;min-width:100px;font-size:13px">\u98CE\u683C
+              <select id="fi-style" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px">${styleOpts}</select>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">\u5BBD (px)
+              <input id="fi-w" type="number" min="64" max="3072" step="8" value="${Number(ig.width) || 512}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">\u9AD8 (px)
+              <input id="fi-h" type="number" min="64" max="3072" step="8" value="${Number(ig.height) || 768}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <label style="flex:1;min-width:80px;font-size:13px">\u91C7\u6837\u6B65\u6570
+              <input id="fi-steps" type="number" min="1" max="150" value="${Number(ig.steps) || 20}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">CFG
+              <input id="fi-cfg" type="number" min="1" max="30" step="0.5" value="${Number(ig.cfgScale) || 7}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">\u53BB\u566A
+              <input id="fi-denoise" type="number" min="0" max="1" step="0.05" value="${Number(ig.denoisingStrength) || 1}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">\u79CD\u5B50 (-1=\u968F\u673A)
+              <input id="fi-seed" type="number" min="-1" step="1" value="${ig.seed == null ? -1 : Number(ig.seed)}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+          </div>
+          ${!isCloud ? `<label style="display:block;margin-bottom:12px;font-size:13px">\u91C7\u6837\u5668 (\u7559\u7A7A\u7528\u9ED8\u8BA4)
+            <input id="fi-sampler" value="${escapeHtml(ig.sampler || "")}" placeholder="Euler a / DPM++ 2M Karras / Euler" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+          </label>` : ""}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <button id="fi-gen" style="flex:1;min-width:120px;padding:10px 20px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;min-height:42px">\u{1F58C}\uFE0F \u751F\u6210\u56FE\u7247</button>
+            <button id="fi-insert" style="padding:10px 16px;background:rgba(76,175,80,.12);color:#2e7d32;border:1px solid rgba(76,175,80,.3);border-radius:8px;cursor:pointer;font-size:13px;min-height:42px;display:none">\u{1F4E5} \u63D2\u5165\u5230\u5BF9\u8BDD</button>
+          </div>
+          <div id="fi-status" style="font-size:13px;color:#8a8a80;margin-bottom:8px;display:none"></div>
+          <div id="fi-preview" style="display:none;text-align:center;border:1px solid var(--wm-line);border-radius:8px;padding:8px;background:rgba(255,255,255,.3)">
+            <a id="fi-img-link" href="#" target="_blank" rel="noopener noreferrer" style="display:block">
+              <img id="fi-img" src="" alt="\u751F\u56FE\u9884\u89C8" style="max-width:100%;height:auto;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)"/>
+            </a>
+            <div id="fi-prompt-show" style="font-size:11px;color:#8a8a80;margin-top:6px;text-align:left;word-break:break-all;line-height:1.5"></div>
+          </div>
+        </div>`;
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+        let lastImageUrl = null;
+        const closePopup = () => {
+          if (overlay.parentNode) document.body.removeChild(overlay);
+        };
+        popup.querySelector("#fi-close").onclick = closePopup;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) closePopup();
+        });
+        const genBtn = popup.querySelector("#fi-gen");
+        const statusEl = popup.querySelector("#fi-status");
+        const previewEl = popup.querySelector("#fi-preview");
+        const imgEl = popup.querySelector("#fi-img");
+        const imgLink = popup.querySelector("#fi-img-link");
+        const promptShow = popup.querySelector("#fi-prompt-show");
+        const insertBtn = popup.querySelector("#fi-insert");
+        genBtn.onclick = async () => {
+          const prompt2 = (popup.querySelector("#fi-prompt").value || "").trim();
+          if (!prompt2) {
+            toast("\u{1F58C}\uFE0F \u8BF7\u586B\u5199\u63D0\u793A\u8BCD");
+            return;
+          }
+          const overrides = {
+            promptStyle: popup.querySelector("#fi-style") ? popup.querySelector("#fi-style").value : "general",
+            width: parseInt(popup.querySelector("#fi-w").value, 10) || 512,
+            height: parseInt(popup.querySelector("#fi-h").value, 10) || 768,
+            steps: parseInt(popup.querySelector("#fi-steps").value, 10) || 20,
+            cfgScale: parseFloat(popup.querySelector("#fi-cfg").value) || 7,
+            denoisingStrength: parseFloat(popup.querySelector("#fi-denoise").value) || 1,
+            seed: parseInt(popup.querySelector("#fi-seed").value, 10) || -1,
+            negativePrompt: (popup.querySelector("#fi-neg").value || "").trim()
+          };
+          const samplerEl = popup.querySelector("#fi-sampler");
+          if (samplerEl) overrides.sampler = samplerEl.value.trim();
+          genBtn.disabled = true;
+          genBtn.textContent = "\u23F3 \u751F\u6210\u4E2D\u2026";
+          statusEl.style.display = "block";
+          statusEl.textContent = "\u6B63\u5728\u751F\u6210\u2026\uFF08\u540E\u7AEF\u6392\u961F\u4E2D\uFF09";
+          statusEl.style.color = "#6f5cff";
+          previewEl.style.display = "none";
+          insertBtn.style.display = "none";
+          try {
+            const r = await WM.ImageGen.generateFreeImage({ prompt: prompt2, overrides });
+            if (r.ok && r.imageUrl) {
+              lastImageUrl = r.imageUrl;
+              statusEl.textContent = "\u2705 \u751F\u6210\u5B8C\u6210";
+              statusEl.style.color = "#2e7d32";
+              imgEl.src = r.imageUrl;
+              imgLink.href = r.imageUrl;
+              promptShow.textContent = "\u63D0\u793A\u8BCD\uFF1A" + r.prompt.slice(0, 300) + (r.prompt.length > 300 ? "\u2026" : "");
+              previewEl.style.display = "block";
+              insertBtn.style.display = "inline-flex";
+              toast("\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE\u5B8C\u6210");
+            } else {
+              statusEl.textContent = "\u274C " + (r.error || "\u751F\u56FE\u5931\u8D25");
+              statusEl.style.color = "#c0392b";
+              toast("\u{1F58C}\uFE0F " + (r.error || "\u751F\u56FE\u5931\u8D25"));
+            }
+          } catch (e) {
+            statusEl.textContent = "\u274C " + (e.message || e);
+            statusEl.style.color = "#c0392b";
+            toast("\u{1F58C}\uFE0F \u751F\u56FE\u5F02\u5E38\uFF1A" + (e.message || e));
+          } finally {
+            genBtn.disabled = false;
+            genBtn.textContent = "\u{1F58C}\uFE0F \u751F\u6210\u56FE\u7247";
+          }
+        };
+        insertBtn.onclick = async () => {
+          if (!lastImageUrl) {
+            toast("\u{1F58C}\uFE0F \u6CA1\u6709\u53EF\u63D2\u5165\u7684\u56FE\u7247");
+            return;
+          }
+          try {
+            const settings2 = WM.Settings.load();
+            await WM.ImageGen.insertImage(lastImageUrl, null, settings2);
+            toast("\u{1F58C}\uFE0F \u5DF2\u63D2\u5165\u5230\u5BF9\u8BDD");
+          } catch (e) {
+            toast("\u{1F58C}\uFE0F \u63D2\u5165\u5931\u8D25\uFF1A" + (e.message || e));
           }
         };
       }
@@ -6459,6 +6631,8 @@ ${p.summary || ""}`.trim() });
       if (igUnlimitedFoot) igUnlimitedFoot.onclick = () => {
         handleUnlimitedImageGen();
       };
+      const igFreeBtn = body.querySelector("#ig-free-gen");
+      if (igFreeBtn) igFreeBtn.onclick = () => openFreeImagePanel(body, s);
       const saveBtn = body.querySelector("#c-save");
       if (saveBtn) saveBtn.onclick = async () => {
         const scope = WM._cfgTab || "llm";
@@ -6662,6 +6836,7 @@ ${p.summary || ""}`.trim() });
       <div class="wm-hint">AI \u6BCF\u6B21\u56DE\u590D\u540E\uFF0C\u81EA\u52A8\u8C03\u7528 LLM \u628A\u56DE\u590D\u6574\u5408\u6210\u753B\u9762\u63D0\u793A\u8BCD\uFF0C\u518D\u9001\u751F\u56FE\u540E\u7AEF\u51FA\u56FE\u3002<b>\u56FE\u7247\u4E0D\u8FDB\u5BF9\u8BDD\u4E0A\u4E0B\u6587</b>\uFF08\u7528\u6807\u8BB0\u5305\u88F9\uFF0C\u6CE8\u5165\u65F6\u5254\u9664\uFF09\u3002\u590D\u7528\u4E0A\u65B9\u300CLLM \u8C03\u7528\u300D\u914D\u7F6E\u505A\u63D0\u793A\u8BCD\u6574\u5408\uFF0C\u65E0\u9700\u989D\u5916\u914D LLM\u3002</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
         <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F3A8} \u65E0\u9650\u5236\u7ACB\u5373\u751F\u56FE\uFF08\u5BF9\u6700\u65B0 AI \u6D88\u606F\u51FA\u56FE\uFF0C\u8FDE\u70B9\u53EF\u6392\u961F\u591A\u5F20\uFF09</button>
+        <button id="ig-free-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">\u{1F58C}\uFE0F \u81EA\u7531\u751F\u56FE\uFF08\u81EA\u5DF1\u5199\u63D0\u793A\u8BCD\u51FA\u56FE\uFF0C\u4E0D\u5F71\u54CD\u5BF9\u8BDD\uFF09</button>
       </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled ? "checked" : ""}/> \u542F\u7528\u751F\u56FE\u529F\u80FD</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger ? "checked" : ""}/> \u81EA\u52A8\u89E6\u53D1\uFF08AI \u56DE\u590D\u843D\u5E93\u540E\u81EA\u52A8\u751F\u56FE\uFF1B\u5173\u95ED\u5219\u4EC5\u624B\u52A8\u70B9\u300C\u{1F3A8} \u7ACB\u5373\u751F\u56FE\u300D\u6309\u94AE\uFF09</label>

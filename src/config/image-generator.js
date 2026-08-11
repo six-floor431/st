@@ -1099,12 +1099,41 @@
     console.log('[WarmMemo][image-gen] 楼层生图按钮已启用');
   }
 
+  // ── 自由生图：用户自己填提示词和参数，直接出图，不经过 LLM 整合 ──
+  // 与 triggerImageGeneration 的区别：
+  //   1) 不调用 LLM 生成画面提示词（用户自己写）
+  //   2) 不插入图片到对话楼层（在面板内预览）
+  //   3) 参数完全独立于主设置（用 opts 覆盖）
+  // 返回 { ok, prompt, imageUrl, error }
+  async function generateFreeImage(opts) {
+    opts = opts || {};
+    const settings = WM.Settings.load();
+    const ig = Object.assign({}, settings.imageGen || {}, opts.overrides || {});
+    const mergedSettings = Object.assign({}, settings, { imageGen: ig });
+
+    const userPrompt = (opts.prompt || '').trim();
+    if (!userPrompt) return { ok: false, error: '请填写提示词' };
+
+    // 拼接完整提示词（跟 buildFullPrompt 一样：风格前缀 + 用户自定义前缀 + 用户提示词）
+    const fullPrompt = buildFullPrompt(userPrompt, mergedSettings);
+
+    let imageUrl;
+    try {
+      imageUrl = await generateImage(fullPrompt, mergedSettings);
+    } catch (e) {
+      if (WM.ErrLog) await WM.ErrLog.add('image-free', e, { stage: 'free-gen', backend: ig.backendType, prompt: fullPrompt.slice(0, 300) });
+      return { ok: false, error: '生图失败：' + (e.message || e), prompt: fullPrompt };
+    }
+    return { ok: true, prompt: fullPrompt, imageUrl };
+  }
+
   WM.ImageGen = {
     triggerImageGeneration,
     // 简写：面板按钮调用，强制立即生成（忽略 autoTrigger 开关），允许连点排队
     triggerUnlimited: (msgId) => triggerImageGeneration({ force: true, messageId: msgId, silent: false }),
     generateImage,
     generateImagePrompt,
+    generateFreeImage,
     buildFullPrompt,
     insertImage,
     testConnection,

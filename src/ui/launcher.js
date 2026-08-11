@@ -1586,11 +1586,13 @@
         workflowJson = JSON.stringify(useZ ? ig.defaultComfyWorkflowZImage() : ig.defaultComfyWorkflow(), null, 2);
         title = '内置默认工作流（' + (useZ ? 'UNet' : 'Checkpoint') + '）';
       }
-      // 构建弹窗 HTML
+      // 构建弹窗
       const overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.className = 'wm-modal-mask wm-wf-editor-mask';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));box-sizing:border-box;background:rgba(15,15,13,.4);isolation:isolate';
       const popup = document.createElement('div');
-      popup.style.cssText = 'background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:90%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+      popup.className = 'wm-wf-editor-popup';
+      popup.style.cssText = 'background:var(--SmartThemeBlurTintColor,#1a1a2e);border:1px solid var(--SmartThemeBorderColor,#333);border-radius:10px;width:min(900px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden';
       // 占位符检测 HTML
       const phStatus = ig.PLACEHOLDER_DEFS.map((p) =>
         `<span data-ph="${p.key}" style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.05);color:#888">❌ <code>{{${p.key}}}</code> ${p.label}</span>`
@@ -1605,15 +1607,15 @@
           <div id="wf-ph-status">${phStatus}</div>
         </div>
         <div style="padding:12px 16px;flex:1;overflow:hidden;display:flex;flex-direction:column">
-          <textarea id="wf-editor" style="flex:1;width:100%;min-height:300px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical">${escapeHtml(workflowJson)}</textarea>
+          <textarea id="wf-editor" style="flex:1;width:100%;min-height:200px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;padding:8px;resize:vertical;filter:none!important;box-shadow:none!important">${escapeHtml(workflowJson)}</textarea>
           <div style="font-size:11px;color:var(--SmartThemeBodyColor,#888);margin-top:6px">
             💡 把需要动态替换的值改成占位符，如 <code>"seed": "{{seed}}"</code> 或 <code>"text": "%prompt%"</code>。两种格式等价。
           </div>
         </div>
-        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end">
-          <input id="wf-name" placeholder="文件名（如 my_workflow）" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, '') : '')}" style="flex:1;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px"/>
-          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">💾 保存</button>
-          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px">取消</button>
+        <div style="padding:10px 16px;border-top:1px solid var(--SmartThemeBorderColor,#333);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <input id="wf-name" placeholder="文件名（如 my_workflow）" value="${escapeHtml(workflowName ? workflowName.replace(/\.json$/i, '') : '')}" style="flex:1;min-width:120px;padding:6px 10px;background:rgba(0,0,0,.3);color:var(--SmartThemeBodyColor,#eee);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:4px;font-size:12px;filter:none!important;box-shadow:none!important"/>
+          <button id="wf-save" style="padding:6px 16px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;min-height:36px">💾 保存</button>
+          <button id="wf-cancel" style="padding:6px 16px;background:rgba(255,255,255,.1);color:var(--SmartThemeBodyColor,#ccc);border:1px solid var(--SmartThemeBorderColor,#444);border-radius:6px;cursor:pointer;font-size:12px;min-height:36px">取消</button>
         </div>`;
       overlay.appendChild(popup);
       document.body.appendChild(overlay);
@@ -1662,6 +1664,169 @@
           closePopup();
         } catch (e) {
           toast('🎨 保存失败：' + (e.message || String(e)));
+        }
+      };
+    }
+
+    // ── 自由生图面板：独立弹窗，用户自己写提示词 + 调参数 + 出图预览 ──
+    // 不经过 LLM 整合、不插入对话楼层、不影响任何现有功能
+    function openFreeImagePanel(parentBody, settings) {
+      const ig = settings.imageGen || {};
+      const isComfy = ig.backendType === 'comfyui';
+      const isCloud = ig.backendType === 'cloud';
+      const styleOpts = [
+        { v: 'general', label: '通用' },
+        { v: 'anime', label: '动漫插画' },
+        { v: 'realistic', label: '写实摄影' },
+        { v: 'ink', label: '东方水墨' },
+      ].map((o) => `<option value="${o.v}" ${ig.promptStyle===o.v?'selected':''}>${o.label}</option>`).join('');
+
+      // 构建弹窗（使用 .wm-modal-mask 类，手机端兼容）
+      const overlay = document.createElement('div');
+      overlay.className = 'wm-modal-mask wm-free-img-mask';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:100001;display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;background:rgba(15,15,13,.4)';
+      const popup = document.createElement('div');
+      popup.className = 'wm-free-img-popup';
+      popup.style.cssText = 'background:#fbfaf7;border:1px solid #d8d2c4;border-radius:12px;width:min(680px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;font-family:var(--wm-font-ui);color:#1a1a17';
+      popup.innerHTML = `
+        <div style="padding:12px 16px;border-bottom:1px solid #e4ded2;background:#f3f0e8;display:flex;justify-content:space-between;align-items:center;flex:none">
+          <span style="font-weight:600;font-size:15px">🖌️ 自由生图 <span style="font-size:12px;color:#8a8a80;font-weight:400">（不经过 LLM，自己写提示词出图）</span></span>
+          <button id="fi-close" style="background:none;border:none;color:#1a1a17;font-size:18px;cursor:pointer;padding:4px 8px">✕</button>
+        </div>
+        <div style="padding:14px 16px;overflow-y:auto;flex:1 1 auto;-webkit-overflow-scrolling:touch;scrollbar-width:none" class="wm-free-img-body">
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-weight:600;font-size:14px;margin-bottom:5px">提示词 <span style="font-weight:400;color:#8a8a80;font-size:12px">（英文 tag 式最佳，如 1girl, long hair, red dress, ...）</span></label>
+            <textarea id="fi-prompt" rows="4" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;resize:vertical;line-height:1.6;min-height:80px" placeholder="1girl, long black hair, red hanfu, standing in bamboo forest, sunlight filtering through leaves, upper body"></textarea>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-weight:600;font-size:14px;margin-bottom:5px">负面提示词 <span style="font-weight:400;color:#8a8a80;font-size:12px">（可选）</span></label>
+            <textarea id="fi-neg" rows="2" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;resize:vertical;line-height:1.6" placeholder="lowres, bad anatomy, bad hands, missing fingers">${escapeHtml(ig.negativePrompt || '')}</textarea>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <label style="flex:1;min-width:100px;font-size:13px">风格
+              <select id="fi-style" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px">${styleOpts}</select>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">宽 (px)
+              <input id="fi-w" type="number" min="64" max="3072" step="8" value="${Number(ig.width)||512}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">高 (px)
+              <input id="fi-h" type="number" min="64" max="3072" step="8" value="${Number(ig.height)||768}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <label style="flex:1;min-width:80px;font-size:13px">采样步数
+              <input id="fi-steps" type="number" min="1" max="150" value="${Number(ig.steps)||20}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">CFG
+              <input id="fi-cfg" type="number" min="1" max="30" step="0.5" value="${Number(ig.cfgScale)||7}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">去噪
+              <input id="fi-denoise" type="number" min="0" max="1" step="0.05" value="${Number(ig.denoisingStrength)||1}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+            <label style="flex:1;min-width:80px;font-size:13px">种子 (-1=随机)
+              <input id="fi-seed" type="number" min="-1" step="1" value="${ig.seed==null?-1:Number(ig.seed)}" style="width:100%;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+            </label>
+          </div>
+          ${!isCloud ? `<label style="display:block;margin-bottom:12px;font-size:13px">采样器 (留空用默认)
+            <input id="fi-sampler" value="${escapeHtml(ig.sampler||'')}" placeholder="Euler a / DPM++ 2M Karras / Euler" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cfc9bb;border-radius:8px;background:#fff;color:#000!important;font-size:14px!important;font-family:var(--wm-font-ui)!important;filter:none!important;box-shadow:none!important;margin-top:3px"/>
+          </label>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <button id="fi-gen" style="flex:1;min-width:120px;padding:10px 20px;background:linear-gradient(135deg,#6f5cff,#b347ff);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;min-height:42px">🖌️ 生成图片</button>
+            <button id="fi-insert" style="padding:10px 16px;background:rgba(76,175,80,.12);color:#2e7d32;border:1px solid rgba(76,175,80,.3);border-radius:8px;cursor:pointer;font-size:13px;min-height:42px;display:none">📥 插入到对话</button>
+          </div>
+          <div id="fi-status" style="font-size:13px;color:#8a8a80;margin-bottom:8px;display:none"></div>
+          <div id="fi-preview" style="display:none;text-align:center;border:1px solid var(--wm-line);border-radius:8px;padding:8px;background:rgba(255,255,255,.3)">
+            <a id="fi-img-link" href="#" target="_blank" rel="noopener noreferrer" style="display:block">
+              <img id="fi-img" src="" alt="生图预览" style="max-width:100%;height:auto;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)"/>
+            </a>
+            <div id="fi-prompt-show" style="font-size:11px;color:#8a8a80;margin-top:6px;text-align:left;word-break:break-all;line-height:1.5"></div>
+          </div>
+        </div>`;
+      overlay.appendChild(popup);
+      document.body.appendChild(overlay);
+
+      // 状态变量
+      let lastImageUrl = null;
+
+      // 关闭
+      const closePopup = () => {
+        if (overlay.parentNode) document.body.removeChild(overlay);
+      };
+      popup.querySelector('#fi-close').onclick = closePopup;
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopup(); });
+
+      // 生成按钮
+      const genBtn = popup.querySelector('#fi-gen');
+      const statusEl = popup.querySelector('#fi-status');
+      const previewEl = popup.querySelector('#fi-preview');
+      const imgEl = popup.querySelector('#fi-img');
+      const imgLink = popup.querySelector('#fi-img-link');
+      const promptShow = popup.querySelector('#fi-prompt-show');
+      const insertBtn = popup.querySelector('#fi-insert');
+
+      genBtn.onclick = async () => {
+        const prompt = (popup.querySelector('#fi-prompt').value || '').trim();
+        if (!prompt) { toast('🖌️ 请填写提示词'); return; }
+        // 收集参数
+        const overrides = {
+          promptStyle: popup.querySelector('#fi-style') ? popup.querySelector('#fi-style').value : 'general',
+          width: parseInt(popup.querySelector('#fi-w').value, 10) || 512,
+          height: parseInt(popup.querySelector('#fi-h').value, 10) || 768,
+          steps: parseInt(popup.querySelector('#fi-steps').value, 10) || 20,
+          cfgScale: parseFloat(popup.querySelector('#fi-cfg').value) || 7,
+          denoisingStrength: parseFloat(popup.querySelector('#fi-denoise').value) || 1,
+          seed: parseInt(popup.querySelector('#fi-seed').value, 10) || -1,
+          negativePrompt: (popup.querySelector('#fi-neg').value || '').trim(),
+        };
+        const samplerEl = popup.querySelector('#fi-sampler');
+        if (samplerEl) overrides.sampler = samplerEl.value.trim();
+
+        // UI 反馈
+        genBtn.disabled = true;
+        genBtn.textContent = '⏳ 生成中…';
+        statusEl.style.display = 'block';
+        statusEl.textContent = '正在生成…（后端排队中）';
+        statusEl.style.color = '#6f5cff';
+        previewEl.style.display = 'none';
+        insertBtn.style.display = 'none';
+
+        try {
+          const r = await WM.ImageGen.generateFreeImage({ prompt, overrides });
+          if (r.ok && r.imageUrl) {
+            lastImageUrl = r.imageUrl;
+            statusEl.textContent = '✅ 生成完成';
+            statusEl.style.color = '#2e7d32';
+            // 显示预览
+            imgEl.src = r.imageUrl;
+            imgLink.href = r.imageUrl;
+            promptShow.textContent = '提示词：' + r.prompt.slice(0, 300) + (r.prompt.length > 300 ? '…' : '');
+            previewEl.style.display = 'block';
+            insertBtn.style.display = 'inline-flex';
+            toast('🖌️ 自由生图完成');
+          } else {
+            statusEl.textContent = '❌ ' + (r.error || '生图失败');
+            statusEl.style.color = '#c0392b';
+            toast('🖌️ ' + (r.error || '生图失败'));
+          }
+        } catch (e) {
+          statusEl.textContent = '❌ ' + (e.message || e);
+          statusEl.style.color = '#c0392b';
+          toast('🖌️ 生图异常：' + (e.message || e));
+        } finally {
+          genBtn.disabled = false;
+          genBtn.textContent = '🖌️ 生成图片';
+        }
+      };
+
+      // 插入到对话按钮
+      insertBtn.onclick = async () => {
+        if (!lastImageUrl) { toast('🖌️ 没有可插入的图片'); return; }
+        try {
+          const settings = WM.Settings.load();
+          await WM.ImageGen.insertImage(lastImageUrl, null, settings);
+          toast('🖌️ 已插入到对话');
+        } catch (e) {
+          toast('🖌️ 插入失败：' + (e.message || e));
         }
       };
     }
@@ -1781,6 +1946,10 @@
     if (igUnlimitedTop) igUnlimitedTop.onclick = () => { handleUnlimitedImageGen(); };
     const igUnlimitedFoot = body.querySelector('#c-img-gen');
     if (igUnlimitedFoot) igUnlimitedFoot.onclick = () => { handleUnlimitedImageGen(); };
+
+    // ── 自由生图面板：用户自己写提示词 + 调参数 + 出图预览，不影响对话 ──
+    const igFreeBtn = body.querySelector('#ig-free-gen');
+    if (igFreeBtn) igFreeBtn.onclick = () => openFreeImagePanel(body, s);
 
     // 保存：只把「当前二级标签」面板的值同步进 s 后保存，不影响其它未改动的分组
     const saveBtn = body.querySelector('#c-save');
@@ -1989,6 +2158,7 @@
       <div class="wm-hint">AI 每次回复后，自动调用 LLM 把回复整合成画面提示词，再送生图后端出图。<b>图片不进对话上下文</b>（用标记包裹，注入时剔除）。复用上方「LLM 调用」配置做提示词整合，无需额外配 LLM。</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px 0">
         <button id="ig-unlimited-top" class="wm-btn" style="background:linear-gradient(135deg,#ff7a59 0%,#ff4e87 100%);color:white;font-weight:700;padding:10px 18px;border:none">🎨 无限制立即生图（对最新 AI 消息出图，连点可排队多张）</button>
+        <button id="ig-free-gen" class="wm-btn" style="background:linear-gradient(135deg,#6f5cff 0%,#b347ff 100%);color:white;font-weight:700;padding:10px 18px;border:none">🖌️ 自由生图（自己写提示词出图，不影响对话）</button>
       </div>
       <label class="wm-row"><input type="checkbox" id="ig-on" ${ig.enabled?'checked':''}/> 启用生图功能</label>
       <label class="wm-row"><input type="checkbox" id="ig-auto" ${ig.autoTrigger?'checked':''}/> 自动触发（AI 回复落库后自动生图；关闭则仅手动点「🎨 立即生图」按钮）</label>
